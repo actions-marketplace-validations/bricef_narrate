@@ -73,6 +73,13 @@ you pass `--keep-work DIR`.
 Synthesised audio is cached under `~/.cache/narrate/tts/`, so a rebuild only
 synthesises paragraphs that changed. That matters for ElevenLabs credits.
 
+The cache is never pruned automatically:
+- `narrate cache` shows its size per engine.
+- `narrate cache --prune --max-size 500M` and/or `--older-than 90` (days)
+  remove the least recently used entries.
+- Entries used in the last hour (`--keep-recent`) are never removed, so a
+  build in progress keeps what it needs.
+
 ### Parallelism
 
 Builds overlap their stages. Speech is synthesised in the background in

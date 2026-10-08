@@ -1,4 +1,4 @@
-"""Command line: narrate build | check | voices | models | doctor."""
+"""Command line: narrate build | check | voices | models | doctor | cache."""
 
 from __future__ import annotations
 
@@ -89,6 +89,30 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return 1 if failed else 0
 
 
+def cmd_cache(args: argparse.Namespace) -> int:
+    from . import cache
+    from .tts import cache_dir
+
+    found = cache.entries()
+    if args.prune:
+        if args.max_size is None and args.older_than is None:
+            print("error: --prune needs --max-size and/or --older-than", file=sys.stderr)
+            return 2
+        removed = cache.prune(
+            found,
+            max_size=cache.parse_size(args.max_size) if args.max_size else None,
+            older_than=args.older_than * 86400 if args.older_than is not None else None,
+            protect=args.keep_recent * 60,
+        )
+        print(f"removed {len(removed)} entries ({cache.human(sum(e.size for e in removed))})")
+        found = cache.entries()
+    print(f"speech cache: {cache_dir() / 'tts'}")
+    for engine, (count, size) in sorted(cache.summary(found).items()):
+        print(f"  {engine:11} {count:6} entries  {cache.human(size):>9}")
+    print(f"  {'total':11} {len(found):6} entries  {cache.human(sum(e.size for e in found)):>9}")
+    return 0
+
+
 def cmd_models(args: argparse.Namespace) -> int:
     print(ensure_models())
     return 0
@@ -117,6 +141,14 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("voices", help="list voices").set_defaults(func=cmd_voices)
     sub.add_parser("models", help="download the Kokoro model files").set_defaults(func=cmd_models)
     sub.add_parser("doctor", help="check ffmpeg, Chromium, fonts, models and keys").set_defaults(func=cmd_doctor)
+
+    cache_cmd = sub.add_parser("cache", help="show the speech cache, or prune it")
+    cache_cmd.add_argument("--prune", action="store_true", help="delete least-recently-used entries")
+    cache_cmd.add_argument("--max-size", metavar="SIZE", help="prune down to SIZE, e.g. 500M or 2G")
+    cache_cmd.add_argument("--older-than", type=float, metavar="DAYS", help="prune entries unused for DAYS")
+    cache_cmd.add_argument("--keep-recent", type=float, default=60, metavar="MINUTES",
+                           help="never prune entries used in the last MINUTES (default 60; protects running builds)")
+    cache_cmd.set_defaults(func=cmd_cache)
 
     args = parser.parse_args(argv)
     load_dotenv(Path.cwd(), *([Path(args.script).resolve().parent] if getattr(args, "script", None) else []))
