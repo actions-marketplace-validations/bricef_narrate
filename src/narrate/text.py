@@ -27,32 +27,51 @@ _EMPHASIS_RE = re.compile(
 )
 _ELLIPSIS_RE = re.compile(r"…|\.{3}")
 
-_LETTERS = {
-    "a": "ay", "b": "bee", "c": "see", "d": "dee", "e": "ee", "f": "eff", "g": "jee",
-    "h": "aitch", "i": "eye", "j": "jay", "k": "kay", "l": "el", "m": "em", "n": "en",
-    "o": "oh", "p": "pee", "q": "cue", "r": "ar", "s": "ess", "t": "tee", "u": "you",
-    "v": "vee", "w": "double you", "x": "ex", "y": "why", "z": "zee",
+def _letters(names: str) -> dict[str, str]:
+    """'a b c …' style tables: 26 names for a-z, separated by '|'."""
+    return dict(zip("abcdefghijklmnopqrstuvwxyz", (n.strip() for n in names.split("|")), strict=True))
+
+
+# Letter names by language, for spelling words out (backticks, {literal})
+LETTERS = {
+    "en": _letters("ay|bee|see|dee|ee|eff|jee|aitch|eye|jay|kay|el|em|en|oh|pee|cue|ar|ess|tee|you|vee|"
+                   "double you|ex|why|zee"),
+    "es": _letters("a|be|ce|de|e|efe|ge|hache|i|jota|ka|ele|eme|ene|o|pe|cu|erre|ese|te|u|uve|uve doble|"
+                   "equis|i griega|zeta") | {"ñ": "eñe"},
+    "fr": _letters("a|bé|cé|dé|e|effe|gé|ache|i|ji|ka|elle|emme|enne|o|pé|ku|erre|esse|té|u|vé|"
+                   "double vé|ixe|i grec|zède") | {"é": "e accent aigu", "è": "e accent grave", "ç": "cé cédille"},
+    "de": _letters("a|be|ce|de|e|ef|ge|ha|i|jot|ka|el|em|en|o|pe|ku|er|es|te|u|fau|we|ix|ypsilon|zett")
+          | {"ä": "ä", "ö": "ö", "ü": "ü", "ß": "eszett"},
+    "it": _letters("a|bi|ci|di|e|effe|gi|acca|i|i lunga|cappa|elle|emme|enne|o|pi|cu|erre|esse|ti|u|vu|"
+                   "doppia vu|ics|ipsilon|zeta"),
+    "pt": _letters("á|bê|cê|dê|é|efe|gê|agá|i|jota|cá|ele|eme|ene|ó|pê|quê|erre|esse|tê|u|vê|dáblio|"
+                   "xis|ípsilon|zê") | {"ç": "cê cedilha"},
 }
-_SYMBOLS = {
-    "?": "question mark", "!": "exclamation mark", ".": "dot", ",": "comma",
-    "-": "dash", "_": "underscore", "/": "slash", "\\": "backslash", ":": "colon",
-    ";": "semicolon", "@": "at", "#": "hash", "&": "ampersand", "+": "plus",
-    "=": "equals", "*": "star", "%": "percent", "$": "dollar", "'": "apostrophe",
-    '"': "quote", "(": "open bracket", ")": "close bracket",
+SYMBOLS = {
+    "en": {"?": "question mark", "!": "exclamation mark", ".": "dot", ",": "comma", "-": "dash",
+           "_": "underscore", "/": "slash", "\\": "backslash", ":": "colon", ";": "semicolon", "@": "at",
+           "#": "hash", "&": "ampersand", "+": "plus", "=": "equals", "*": "star", "%": "percent",
+           "$": "dollar", "'": "apostrophe", '"': "quote", "(": "open bracket", ")": "close bracket"},
+    "es": {"?": "signo de interrogación", "!": "signo de exclamación", ".": "punto", ",": "coma",
+           "-": "guion", "/": "barra", "@": "arroba", "+": "más", "=": "igual", "%": "por ciento"},
+    "fr": {"?": "point d'interrogation", "!": "point d'exclamation", ".": "point", ",": "virgule",
+           "-": "tiret", "/": "barre oblique", "@": "arobase", "+": "plus", "=": "égal", "%": "pour cent"},
+    "de": {"?": "Fragezeichen", "!": "Ausrufezeichen", ".": "Punkt", ",": "Komma", "-": "Bindestrich",
+           "/": "Schrägstrich", "@": "at", "+": "plus", "=": "gleich", "%": "Prozent"},
+    "it": {"?": "punto interrogativo", "!": "punto esclamativo", ".": "punto", ",": "virgola",
+           "-": "trattino", "/": "barra", "@": "chiocciola", "+": "più", "=": "uguale", "%": "per cento"},
+    "pt": {"?": "ponto de interrogação", "!": "ponto de exclamação", ".": "ponto", ",": "vírgula",
+           "-": "hífen", "/": "barra", "@": "arroba", "+": "mais", "=": "igual", "%": "por cento"},
 }
 
 
 def spell(text: str, lang: str) -> str:
-    """Letter-by-letter reading; letter names are English-only for now."""
-    if not lang.startswith("en"):
+    """Read text letter by letter, with letter names in the voice's language when known."""
+    base = (lang or "en").lower().split("-")[0]
+    letters, symbols = LETTERS.get(base), SYMBOLS.get(base, {})
+    if letters is None:
         return ", ".join(ch for ch in text if not ch.isspace())
-    words = []
-    for ch in text:
-        low = ch.lower()
-        if ch.isspace():
-            continue
-        words.append(_LETTERS.get(low) or _SYMBOLS.get(ch) or ch)
-    return ", ".join(words)
+    return ", ".join(letters.get(ch.lower()) or symbols.get(ch) or ch for ch in text if not ch.isspace())
 
 
 def _strip_emphasis(text: str) -> str:
