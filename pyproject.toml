@@ -16,6 +16,7 @@ dependencies = [
 
 [project.scripts]
 narrate = "narrate.cli:main"
+narakeet-api-client = "narrate.narakeet_cli:main"
 
 [dependency-groups]
 dev = ["pytest>=8"]
