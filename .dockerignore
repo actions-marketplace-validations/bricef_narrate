@@ -1,0 +1,9 @@
+# Only what the image needs: never the .env with API keys, the venv or the reference renders
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!src
+!tests
+!examples
+**/__pycache__

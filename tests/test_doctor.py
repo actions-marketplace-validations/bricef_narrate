@@ -31,6 +31,7 @@ def test_renderer_turns_launch_failures_into_setup_errors(monkeypatch, tmp_path)
     assert Error  # the real exception type the helper wraps
 
 
+@pytest.mark.kokoro  # a fully set-up machine, models included
 def test_doctor_passes_here(capsys):
     assert main(["doctor"]) == 0
     out = capsys.readouterr().out

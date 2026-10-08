@@ -53,6 +53,35 @@ uv run playwright install chromium   # slides and frames are rendered by headles
 - **ElevenLabs:** put `ELEVENLABS_API_KEY=…` in a `.env` file (git-ignored),
   either in the directory you run from or next to the script.
 
+### In a container
+
+The image `ghcr.io/bricef/narrate` carries narrate with all of its
+dependencies, so nothing but Docker is needed:
+
+```sh
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -v narrate-cache:/cache \
+    ghcr.io/bricef/narrate build script.md -o video.mp4
+```
+
+- Paths are relative to `/work`, the mounted directory. Run as your own user
+  (`--user`) so the video belongs to you.
+- The Kokoro model, music and synthesised speech land in `/cache` on first
+  use. A volume there keeps them between runs; use the same `--user` with it
+  each time.
+- Pass `-e ELEVENLABS_API_KEY` to use ElevenLabs, or keep the key in a `.env`
+  in the mounted directory.
+- `just image` builds it locally (`narrate:local`); `just image-test` runs the
+  test suite inside it.
+- It weighs about 1.2 GB unpacked (420 MB to download):
+  - the Python environment, 670 MB;
+  - Playwright's headless Chromium, 280 MB;
+  - the Debian base, 135 MB, and libraries and fonts, 75 MB;
+  - ffmpeg 9.0, built with only the external libraries narrate uses, 30 MB
+    (the static build is 173 MB).
+- Fonts cover Latin, Greek and Cyrillic, plus emoji. For other scripts, add
+  fonts in an image built on this one (`USER root`, then `apt-get install
+  fonts-noto-cjk` for example).
+
 ## Usage
 
 ```sh
@@ -86,10 +115,10 @@ as the whole repository. The extra `--tts` flag chooses narrate's engine.
 
 ### GitHub Action
 
-The repository is a composite action that builds a video on the runner, with
-the same outputs as Narakeet's `build-video-github-action`: `video-file`,
-`poster-file`, and `srt-file` and `vtt-file` when the script asks for
-subtitle files.
+The repository is a composite action that builds a video on the runner in the
+narrate image, with the same outputs as Narakeet's
+`build-video-github-action`: `video-file`, `poster-file`, and `srt-file` and
+`vtt-file` when the script asks for subtitle files.
 
 ```yaml
 - id: video
@@ -106,12 +135,18 @@ subtitle files.
 
 - `tts` picks the engine as `--tts` does. The default `auto` uses ElevenLabs
   when a key is given, Kokoro otherwise.
-- Models, ffmpeg and synthesised speech are cached between runs.
-- While the repository is private, only workflows in repositories that it
-  [grants access](https://docs.github.com/en/actions/sharing-automations/sharing-actions-and-workflows-from-your-private-repository)
-  can use it.
-- `.github/workflows/demo.yml` renders `examples/demo` this way and keeps the
-  video as an artifact.
+- `image` picks the image (default `ghcr.io/bricef/narrate:latest`).
+- Models and synthesised speech are cached between runs.
+- While the repository and its package are private, only workflows in
+  repositories that they grant access to can use them: the repository's
+  [Actions access](https://docs.github.com/en/actions/sharing-automations/sharing-actions-and-workflows-from-your-private-repository),
+  and the package's "Manage Actions access" setting. The workflow's token
+  needs `packages: read`.
+
+`.github/workflows/image.yml` builds the image, runs the test suite inside it
+and renders `examples/demo` through the action with it, keeping the video as
+an artifact. On main it then publishes the image as `latest` (and `sha-…`);
+a `v1.2.3` tag publishes `1.2.3` and `1.2`.
 
 ### Speech engines (`--tts`)
 
@@ -314,3 +349,7 @@ the renders show:
   `make_assets.py`.
 - `scripts/fetch-narakeet-reference.sh`: the local, git-ignored Narakeet
   reference snapshot. See `reference/SOURCES.md`.
+- `Dockerfile`: the container image (ffmpeg, Python environment and runtime
+  stages, plus a `test` stage).
+- `action.yml`: the GitHub Action; `.github/workflows/image.yml` builds,
+  tests and publishes the image.
