@@ -59,14 +59,27 @@ def test_elevenlabs_request_body_speed_clamp_and_cache(eleven):
     assert len(calls) == 1  # second call served from the cache
 
 
-def test_elevenlabs_language_code_only_for_models_that_take_it(eleven, monkeypatch):
+def test_elevenlabs_sends_language_hints(eleven):
     synth, calls = eleven
-    notes: set[str] = set()
-    synth.synth("Hallo", Voice("x" * 20, "de"), 1.0, notes)
-    assert "language_code" not in calls[-1][1]
-    synth.model = "eleven_flash_v2_5"
-    synth.synth("Hallo", Voice("x" * 20, "de"), 1.0, notes)
+    synth.synth("Hallo", Voice("x" * 20, "de"), 1.0, set())
     assert calls[-1][1]["language_code"] == "de"
+
+
+def test_elevenlabs_drops_the_hint_for_models_that_refuse_it(eleven, monkeypatch):
+    synth, calls = eleven
+    accepted = synth._post
+
+    def picky(voice_id, body):
+        if "language_code" in body:
+            raise tts.LanguageRejected("language_code is not supported for this model")
+        return accepted(voice_id, body)
+
+    monkeypatch.setattr(synth, "_post", picky)
+    notes: set[str] = set()
+    assert len(synth.synth("Hallo", Voice("x" * 20, "de"), 1.0, notes)) == 2400
+    assert synth.model in synth._ignores_language and any("language hints" in n for n in notes)
+    synth.synth("Tschüss", Voice("x" * 20, "de"), 1.0, notes)  # remembered: no second refusal
+    assert "language_code" not in calls[-1][1]
 
 
 def test_auto_picks_elevenlabs_only_with_a_key(monkeypatch):
