@@ -30,14 +30,17 @@ from .config import (
 )
 from .doctor import find_font
 from .frames import FrameRenderer, FrameSpec, SlideSpec
-from .script import ANIMATED_SIZES, POSITIONS, SIZES, Directive, Media, Narration, Quote, Script, Slide
+from .script import ANIMATED_SIZES, POSITIONS, SIZES, Directive, Media, Narration, Quote, Scene, Script, Slide
 from .subtitles import Cue
 from .ssml import ssml_runs
 from .text import Run, speech_runs, ssml_text, subtitle_text
 from .tts import SAMPLE_RATE, Prefetching, Synth, Voice
 
 SR = SAMPLE_RATE
-PARAGRAPH_PAUSE = {"normal": 0.4, "fragment": 0.1}
+PARAGRAPH_PAUSE = {"normal": 0.4, "fragment": 0.1, "merge": 0.4}
+# Directives that shape the narration (applied in order when scenes merge)
+NARRATION_KEYS = {"voice", "voice-speed", "voice-volume", "voice-pitch", "voice-emphasis",
+                  "narration-language", "narration-mode", "pause", "pause-until"}
 DEFAULT_STILL_SECONDS = 1.0
 MAX_PAUSE_UNTIL = 600.0
 TARGETS = {  # x264 preset, crf, faststart
@@ -216,7 +219,34 @@ class Builder:
 
     # -- planning ------------------------------------------------------------
 
-    def plan_scene(self, scene, workdir: Path) -> ScenePlan:
+    def plans(self, scenes: list[Scene], workdir: Path):
+        """Scene plans in order, merging scenes that share one narration (narration-mode: merge)."""
+        for group in merge_groups(scenes):
+            if len(group) == 1:
+                yield self.plan_scene(group[0], workdir)
+            else:
+                yield from self._plan_merged(group, workdir)
+
+    def _plan_merged(self, group: list[Scene], workdir: Path):
+        """One continuous narration across the group; the scenes share its time equally (spec §4.4)."""
+        voiced = self.plan_scene(Scene(group[0].index, group[0].line,
+                                       [b for scene in group for b in scene.blocks if _is_narration(b)]), workdir)
+        # Whole-frame shares (800 samples each), so the narration slices back together exactly
+        shares = allocate_frames(max(len(group), round(voiced.duration * FPS)), [1.0] * len(group))
+        at = 0
+        for scene, frames in zip(group, shares):
+            plan = self.plan_scene(Scene(scene.index, scene.line, [b for b in scene.blocks if not _is_narration(b)]),
+                                   workdir, force_duration=frames / FPS)
+            lo, hi = at * SR // FPS, (at + frames) * SR // FPS
+            plan.audio = fit_length(plan.audio, hi - lo) + fit_length(voiced.audio[lo:hi], hi - lo)
+            if not plan.cues:
+                start, end = at / FPS, (at + frames) / FPS
+                plan.cues = [Cue(max(c.start, start) - start, min(c.end, end) - start, c.text)
+                             for c in voiced.cues if min(c.end, end) > max(c.start, start)]
+            at += frames
+            yield plan
+
+    def plan_scene(self, scene, workdir: Path, force_duration: float | None = None) -> ScenePlan:
         s = self.settings
         voice_name, lang = s.voice, s.narration_language
         speed, volume, pitch = s.voice_speed, s.voice_volume, s.voice_pitch
@@ -250,9 +280,6 @@ class Builder:
                         lang = None if str(value).lower() == "default" else str(value)
                     elif key == "narration-mode":
                         mode = str(value).lower()
-                        if mode == "merge":
-                            self.notes.add("narration-mode: merge (treated as normal)")
-                            mode = "normal"
                         if mode not in PARAGRAPH_PAUSE:
                             raise ConfigError(f"invalid narration-mode {value!r}")
                         self.mode = mode
@@ -322,6 +349,8 @@ class Builder:
 
 
         visuals = [self._visual(m, workdir) for m in sources]
+        if force_duration is not None:
+            duration = force_duration
         narration = track.samples()
         d, layout = layout_visuals(visuals, track.seconds, duration)
 
@@ -427,9 +456,8 @@ class Builder:
         frame = 0
         # Scene k's segments encode in the pool while scene k+1 is narrated
         with ThreadPoolExecutor(self.jobs) as pool, FrameRenderer(s.width, s.height, work) as renderer:
-            for scene in scenes:
-                self.log(f"scene {scene.index}/{len(scenes)}")
-                plan = self.plan_scene(scene, work)
+            for plan in self.plans(scenes, work):
+                self.log(f"scene {plan.index}/{len(scenes)}")
                 plans.append(plan)
                 start_f = frame
                 end_f = max(start_f + 1, int(round(start_f + plan.duration * FPS)))
@@ -578,8 +606,8 @@ class Builder:
                 return np.zeros(1, dtype=np.float32)
 
         shadow = Builder(dataclasses.replace(self.script, warnings=[]), Recorder(), log=lambda _: None, jobs=1)
-        for scene in self.script.scenes:
-            shadow.plan_scene(scene, work)
+        for _ in shadow.plans(self.script.scenes, work):
+            pass
         self.log(f"speech: {len(set(requests))} paragraphs, {real.concurrency} at a time")
         return Prefetching(real, requests, self.notes)
 
@@ -689,6 +717,33 @@ def _choice(value: Any, allowed: set[str], what: str) -> str:
     if text not in allowed:
         raise ConfigError(f"invalid {what} {value!r}")
     return text
+
+
+def _is_narration(block) -> bool:
+    return (isinstance(block, Narration) or (isinstance(block, Media) and block.kind == "audio")
+            or (isinstance(block, Directive) and block.key in NARRATION_KEYS))
+
+
+def merge_groups(scenes: list[Scene]) -> list[list[Scene]]:
+    """Runs of scenes narrated as one: from a scene that sets narration-mode: merge
+    to the scene that switches it back (spec §4.4); every other scene stands alone."""
+    groups: list[list[Scene]] = []
+    current: list[Scene] = []
+    merging = False
+    for scene in scenes:
+        modes = [str(b.value).lower() for b in scene.blocks if isinstance(b, Directive) and b.key == "narration-mode"]
+        if merging or "merge" in modes:
+            current.append(scene)
+            for mode in modes:
+                merging = mode == "merge"
+            if not merging:
+                groups.append(current)
+                current = []
+        else:
+            groups.append([scene])
+    if current:
+        groups.append(current)
+    return groups
 
 
 def layout_visuals(visuals: list[Visual], a: float, duration: float | None) -> tuple[float, Layout]:

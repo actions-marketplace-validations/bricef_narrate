@@ -944,6 +944,11 @@ examples disagree. The proposals favour what the official examples imply.
     "white" contradicts its own description).
 16. **`fragment` scope.** Make it scene-scoped like the voice directions (the
     examples repeat it in every scene). `merge` persists until `normal`.
+    *`merge` implemented (narrate #10):*
+    - The narration of the run of scenes from the one that sets `merge` to the
+      one that sets `normal` is synthesised as one track.
+    - The scenes share its time equally, in whole frames, and each keeps its
+      own visuals, slides, quotes and callouts within its share.
 17. **Span combining a style and a language** (`[x]{ipa de}`). Reject with a
     clear error until it's needed.
 18. **Audio file in image syntax** (`![](a.mp3)`). Treat it as `(audio: a.mp3)`.
