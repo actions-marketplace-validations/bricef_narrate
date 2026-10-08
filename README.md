@@ -98,7 +98,7 @@ subtitle files.
     source-path: videos/intro.md              # or a .zip project
     output: out/intro.mp4                     # default narrate/result.mp4
     elevenlabs-api-key: ${{ secrets.ELEVENLABS_API_KEY }}  # optional
-- uses: actions/upload-artifact@v4
+- uses: actions/upload-artifact@v7
   with:
     name: intro
     path: ${{ steps.video.outputs.video-file }}

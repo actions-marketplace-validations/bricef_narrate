@@ -35,7 +35,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: astral-sh/setup-uv@v6
+    - uses: astral-sh/setup-uv@v10
 
     # hashFiles() can't read the action's own directory when another repository
     # uses it, so the key comes from a shell step: the files pinning ffmpeg, the
@@ -48,7 +48,7 @@ runs:
         echo "tools=$(cat uv.lock src/narrate/{media,tts,stt,music}.py | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
 
     - name: Cache tools (ffmpeg, models, music, Chromium)
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: |
           ~/.cache/narrate-tools
@@ -57,7 +57,7 @@ runs:
 
     # Speech grows with every script, so each run saves a new entry seeded from the last
     - name: Cache synthesised speech
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ~/.cache/narrate-speech
         key: narrate-speech-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
