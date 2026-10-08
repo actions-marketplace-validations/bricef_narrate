@@ -221,8 +221,11 @@ Brian:
 ### Checked against Narakeet's own renders
 
 `just reference` fetches Narakeet's example projects together with the
-`result.mp4` that Narakeet rendered from each script. `tests/test_build.py`
-compares timing against them. What they show so far:
+`result.mp4` that Narakeet rendered from each script. `tests/test_conformance.py`
+builds every example without narration and compares it with Narakeet's
+render. Lengths match within 0.1 s, and frames, once each scene has settled,
+within a few grey levels. Skip it with `just test -m "not conformance"`. What
+the renders show:
 
 - **Matches exactly:** where a script has no narration (the `slides` example
   is 14.0 s in both).

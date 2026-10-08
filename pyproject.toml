@@ -31,4 +31,5 @@ addopts = "-m 'not elevenlabs'"
 markers = [
     "kokoro: needs the Kokoro model files (slow; deselect with -m 'not kokoro')",
     "elevenlabs: calls the live ElevenLabs API with ELEVENLABS_API_KEY (spends a few credits)",
+    "conformance: compares against Narakeet's renders (needs `just reference`; skip with -m 'not conformance')",
 ]
