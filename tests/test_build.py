@@ -238,3 +238,13 @@ def test_overlay_windows_are_in_piece_time():
 
     overlays = [(Path("a.png"), 0.0, 1.0), (Path("b.png"), 1.0, 2.0)]
     assert _windows(overlays, 15, 45) == [(Path("a.png"), 0.0, 0.5), (Path("b.png"), 0.5, 1.0)]
+
+
+def test_segment_range_is_honoured_at_both_ends(project, tmp_path):
+    """Narakeet's own video-segments render ignores the end of a T-T range; narrate follows the spec."""
+    import numpy as np
+
+    result = build(project, "---\nsize: 320x180\n---\n\n![00:00.5-00:01.5](clip.mp4)\n", name="segment")
+    assert result.duration == pytest.approx(1.0, abs=1 / FPS)
+    first, source = frame_at(result.video, 0.0, tmp_path), frame_at(project / "clip.mp4", 0.5, tmp_path)
+    assert np.abs(first - source).mean() < 6  # starts on the source frame at 0.5 s
