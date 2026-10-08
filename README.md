@@ -69,6 +69,18 @@ just test -m elevenlabs                       # live API check (spends a few cre
 it also writes `.srt` and `.vtt` files. Intermediate files are deleted unless
 you pass `--keep-work DIR`.
 
+### Narakeet-compatible command
+
+`narakeet-api-client` takes Narakeet's own flags, so existing build scripts can
+point at narrate unchanged:
+- `--repository-type local-dir|local-zip|zip-url|github`, `--repository`,
+  `--source`, and `--output` (default `result.mp4`).
+- `--github-token` and `--github-sha`.
+- `--api-key` is accepted and ignored.
+
+GitHub projects are fetched file by file under the script's folder rather than
+as the whole repository. The extra `--tts` flag chooses narrate's engine.
+
 ### Speech engines (`--tts`)
 
 | Engine | Notes |
