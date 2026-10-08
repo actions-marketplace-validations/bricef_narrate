@@ -9,7 +9,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from . import media, project
+from . import media, project, render
 from .build import Builder, BuildError
 from .config import ConfigError, settings_from_header
 from .doctor import SetupError, run_checks
@@ -111,18 +111,18 @@ def cmd_check(args: argparse.Namespace) -> int:
 def _check(path: Path) -> int:
     script = parse_file(path)
     settings_from_header(script.header, script.warnings)
-    missing = [
-        f"line {b.line}: file not found: {b.path}"
-        for scene in script.scenes for b in scene.blocks
-        if isinstance(b, Media) and not (script.base_dir / b.path).is_file()
-    ]
+    media_blocks = [b for scene in script.scenes for b in scene.blocks if isinstance(b, Media)]
+    missing = [f"line {b.line}: file not found: {b.path}"
+               for b in media_blocks if not b.render and not (script.base_dir / b.path).is_file()]
+    problems = [f"line {b.line}: {p}" for b in media_blocks if b.render for p in render.check(b)]
     _report(script, [])
-    for m in missing:
+    for m in missing + problems:
         print(f"error: {script.path}: {m}", file=sys.stderr)
     blocks = sum(len(s.blocks) for s in script.scenes)
     print(f"{script.path}: {len(script.scenes)} scenes, {blocks} blocks, "
-          f"{len(script.warnings)} warnings, {len(missing)} missing files")
-    return 1 if missing else 0
+          f"{len(script.warnings)} warnings, {len(missing)} missing files"
+          + (f", {len(problems)} render block problems" if problems else ""))
+    return 1 if missing or problems else 0
 
 
 def cmd_voices(args: argparse.Namespace) -> int:
@@ -173,10 +173,10 @@ def cmd_cache(args: argparse.Namespace) -> int:
         )
         print(f"removed {len(removed)} entries ({cache.human(sum(e.size for e in removed))})")
         found = cache.entries()
-    print(f"speech cache: {cache_dir() / 'tts'}")
+    print(f"cache: {cache_dir()} (speech in tts/, render blocks in render/)")
     for engine, (count, size) in sorted(cache.summary(found).items()):
-        print(f"  {engine:11} {count:6} entries  {cache.human(size):>9}")
-    print(f"  {'total':11} {len(found):6} entries  {cache.human(sum(e.size for e in found)):>9}")
+        print(f"  {engine:18} {count:6} entries  {cache.human(size):>9}")
+    print(f"  {'total':18} {len(found):6} entries  {cache.human(sum(e.size for e in found)):>9}")
     return 0
 
 
@@ -249,7 +249,7 @@ def main(argv: list[str] | None = None) -> int:
                    "instead of on first use").set_defaults(func=cmd_models)
     sub.add_parser("doctor", help="check ffmpeg, Chromium, fonts, models and keys").set_defaults(func=cmd_doctor)
 
-    cache_cmd = sub.add_parser("cache", help="show the speech cache, or prune it")
+    cache_cmd = sub.add_parser("cache", help="show the speech and render caches, or prune them")
     cache_cmd.add_argument("--prune", action="store_true", help="delete least-recently-used entries")
     cache_cmd.add_argument("--max-size", metavar="SIZE", help="prune down to SIZE, e.g. 500M or 2G")
     cache_cmd.add_argument("--older-than", type=float, metavar="DAYS", help="prune entries unused for DAYS")

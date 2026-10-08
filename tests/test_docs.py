@@ -48,6 +48,11 @@ def assets(tmp_path_factory):
     return d
 
 
+@pytest.fixture(autouse=True)
+def own_cache(monkeypatch, tmp_path):
+    monkeypatch.setenv("NARRATE_CACHE", str(tmp_path / "cache"))  # render blocks draw into it
+
+
 def test_the_docs_have_examples():
     assert len(list(examples())) >= 15
 
