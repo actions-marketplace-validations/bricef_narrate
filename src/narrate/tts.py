@@ -25,6 +25,10 @@ from typing import Protocol
 
 import numpy as np
 
+from .text import Speech, speech_text
+
+JOIN_SECONDS = 0.06  # between segments synthesised as separate requests
+
 SAMPLE_RATE = 24000
 
 
@@ -206,8 +210,12 @@ class Synth(Protocol):
     def resolve(self, name: str | None, lang: str | None, notes: set[str]) -> Voice:
         """Pick this backend's voice for a script voice name and optional language override."""
 
-    def synth(self, text: str, voice: Voice, speed: float, notes: set[str]) -> np.ndarray:
-        """Mono float32 samples at SAMPLE_RATE."""
+    def synth(self, text: "Speech", voice: Voice, speed: float, notes: set[str]) -> np.ndarray:
+        """Mono float32 samples at SAMPLE_RATE.
+
+        `text` is a string, or (text, language) segments when part of a sentence
+        is in another language (`[See]{de}`); the voice stays the same.
+        """
 
 
 # -- Kokoro backend -------------------------------------------------------------
@@ -284,8 +292,8 @@ class SilentSynth:
     def resolve(self, name: str | None, lang: str | None, notes: set[str]) -> Voice:
         return kokoro_resolve(name, lang, set())
 
-    def synth(self, text: str, voice: Voice, speed: float, notes: set[str]) -> np.ndarray:
-        seconds = max(0.3, len(text) * self.seconds_per_char / speed)
+    def synth(self, text, voice: Voice, speed: float, notes: set[str]) -> np.ndarray:
+        seconds = max(0.3, len(speech_text(text)) * self.seconds_per_char / speed)
         return np.zeros(int(seconds * SAMPLE_RATE), dtype=np.float32)
 
 
@@ -336,8 +344,12 @@ class KokoroSynth:
         if (hit := self._cache.load(cached)) is not None:
             return hit
         kokoro = self._engine()
+        segments = [(text, None)] if isinstance(text, str) else text
         with self._phonemize:
-            phonemes = kokoro.tokenizer.phonemize(text, voice.lang)
+            # Each segment in its own language, spliced into one utterance so
+            # the voice and its prosody carry straight through the foreign words
+            phonemes = " ".join(kokoro.tokenizer.phonemize(part, espeak_code(lang) if lang else voice.lang)
+                                for part, lang in segments)
         audio, sr = kokoro.create(phonemes, voice=voice.id, speed=clamped, lang=voice.lang, is_phonemes=True)
         assert sr == SAMPLE_RATE
         audio = np.asarray(audio, dtype=np.float32)
@@ -407,6 +419,12 @@ class ElevenLabsSynth:
         return Voice(voice_id or ELEVENLABS_VOICES[voice_name][0], code)
 
     def synth(self, text: str, voice: Voice, speed: float, notes: set[str]) -> np.ndarray:
+        if not isinstance(text, str):
+            # One request per segment, each with its own language hint
+            parts = [self.synth(part, Voice(voice.id, lang.split("-")[0] if lang else voice.lang), speed, notes)
+                     for part, lang in text]
+            gap = np.zeros(int(JOIN_SECONDS * SAMPLE_RATE), dtype=np.float32)
+            return np.concatenate([p for part in parts for p in (part, gap)][:-1])
         lo, hi = ELEVENLABS_SPEED
         clamped = min(hi, max(lo, speed))
         if clamped != speed:
