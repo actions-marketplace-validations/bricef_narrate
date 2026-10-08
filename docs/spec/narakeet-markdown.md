@@ -925,8 +925,14 @@ examples disagree. The proposals favour what the official examples imply.
    - The names map onto ffmpeg `xfade` transitions.
 10. **Poster default.** 50% of the duration (explicitly stated, and the later
     of the two statements).
-11. **`voice-pitch` numbers.** Read −150…150 as percent of the base pitch, as
-    in SSML `prosody pitch="+N%"`, clamped.
+11. **`voice-pitch` numbers.** *Implemented (narrate #6):* N is read as
+    N/100 octaves.
+    - 100 is an octave up and −100 an octave down.
+    - ±10 is subtle, and Narakeet's "squeaky" example, 130, is very high.
+    - Presets: `x-low` −4, `low` −2, `high` +2 and `x-high` +4 semitones.
+    - The shift is applied after synthesis (rubberband), keeping duration.
+
+    (Percent would make −150 meaningless.)
 12. **Subtitle cue timing within a paragraph.** Split proportionally to
     character count (this reads as "equal" per character).
 13. **Timing of several block quotes in one scene.** Split the scene duration

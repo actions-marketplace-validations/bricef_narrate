@@ -235,6 +235,14 @@ def time_stretch(samples: np.ndarray, sample_rate: int, tempo: float) -> np.ndar
     return np.frombuffer(out, dtype=np.float32).copy()
 
 
+def pitch_shift(samples: np.ndarray, sample_rate: int, ratio: float) -> np.ndarray:
+    """Raise (ratio > 1) or lower mono float32 audio's pitch, keeping its duration (rubberband)."""
+    out = run(["-f", "f32le", "-ar", str(sample_rate), "-ac", "1", "-i", "-",
+               "-filter:a", f"rubberband=pitch={ratio:.6f}", "-f", "f32le", "-"],
+              input=np.asarray(samples, dtype="<f4").tobytes())
+    return np.frombuffer(out, dtype=np.float32).copy()
+
+
 def extract_frame(path: Path, at: float, out_png: Path) -> Path:
     run(["-ss", f"{max(0.0, at):.3f}", "-i", str(path), "-frames:v", "1", str(out_png)])
     if not out_png.exists():
