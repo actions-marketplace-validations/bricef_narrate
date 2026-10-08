@@ -22,7 +22,7 @@ import numpy as np
 
 from . import media, motion, subtitles
 from .config import (
-    BUILTIN_MUSIC, FPS, ConfigError, Settings, SubtitleConfig, parse_color, parse_number, parse_speed,
+    BUILTIN_MUSIC, FPS, TRANSITIONS, ConfigError, Settings, SubtitleConfig, parse_transition, parse_color, parse_number, parse_speed,
     parse_time, parse_volume, settings_from_header,
 )
 from .doctor import find_font
@@ -87,6 +87,7 @@ class ScenePlan:
     cues: list[Cue] = field(default_factory=list)
     layout: Layout = field(default_factory=lambda: Layout([], []))
     slides: list[SlideSpec] = field(default_factory=list)  # share the scene's time equally
+    transition: tuple[str, float] | None = None  # incoming: Narakeet type, seconds
 
 
 @dataclass
@@ -152,8 +153,10 @@ class Builder:
         self.mode = "normal"  # narration-mode persists across scenes
         if self.settings.voice_pitch:
             self.notes.add(UNSUPPORTED["voice-pitch"])
-        if self.settings.transition and self.settings.transition.split()[0].lower() != "none":
-            self.notes.add("transitions (scenes cut instead)")
+        try:
+            self.transition = parse_transition(self.settings.transition) if self.settings.transition else None
+        except ConfigError as e:
+            raise BuildError(f"header transition: {e}") from None
         self._voices: dict[tuple[str | None, str | None], Voice] = {}
 
     # -- helpers -------------------------------------------------------------
@@ -186,6 +189,7 @@ class Builder:
         image_size: str | None = None
         image_position: str | None = None
         duration: float | None = None
+        transition = self.transition if scene.index > 1 else None
         spec = FrameSpec(canvas=s.canvas, theme=self._theme(s.theme, 0) if s.theme else "default")
         track = AudioTrack()
         sources: list[Media] = []
@@ -234,8 +238,10 @@ class Builder:
                             raise ConfigError("callout needs properties such as cx/cy")
                         spec.callouts.append(dict(value))
                     elif key == "transition":
-                        if str(value).split()[0].lower() != "none":
-                            self.notes.add("transitions (scenes cut instead)")
+                        if scene.index == 1:
+                            self.script.warnings.append(f"line {block.line}: no transition into the first scene; ignored")
+                        else:
+                            transition = parse_transition(value, self.transition[0] if self.transition else "crossfade")
                     elif key in UNSUPPORTED:
                         self.notes.add(UNSUPPORTED[key])
                 elif isinstance(block, Media):
@@ -291,7 +297,7 @@ class Builder:
         else:
             cues = []
         return ScenePlan(scene.index, visuals, spec, audio, d, cues, layout,
-                         [SlideSpec(lang=sl.lang, text=sl.text) for sl in slides])
+                         [SlideSpec(lang=sl.lang, text=sl.text) for sl in slides], transition)
 
     def _visual(self, m: Media, workdir: Path) -> Visual:
         path = self._path(m.path, m.line)
@@ -361,7 +367,8 @@ class Builder:
             self.log(f"scene {scene.index}/{len(scenes)}: narration")
             plans.append(self.plan_scene(scene, work))
 
-        segments: list[Path] = []
+        scene_segments: list[list[Path]] = []
+        scene_frames: list[int] = []
         audio_parts: list[np.ndarray] = []
         cues: list[Cue] = []
         scene_samples: list[int] = []
@@ -377,7 +384,8 @@ class Builder:
                 scene_samples.append(samples)
                 offset = start_f / FPS
                 cues += [Cue(c.start + offset, min(c.end, frames / FPS) + offset, c.text) for c in plan.cues]
-                segments += self._render_scene(plan, frames, renderer, work)
+                scene_segments.append(self._render_scene(plan, frames, renderer, work))
+                scene_frames.append(frames)
                 frame = end_f
 
         total = frame / FPS
@@ -392,7 +400,8 @@ class Builder:
 
         self.log("muxing")
         out.parent.mkdir(parents=True, exist_ok=True)
-        subtitle_files = self._mux(out, segments, wav, cues, work)
+        transitions = [plan.transition for plan in plans]
+        subtitle_files = self._mux(out, scene_segments, scene_frames, transitions, wav, cues, work)
         poster = out.with_suffix(".jpg")
         media.extract_frame(out, _poster_time(s.poster_time, total), poster)
         return BuildResult(out, poster, subtitle_files, total, sorted(self.notes))
@@ -524,34 +533,43 @@ class Builder:
             music[total - n:] *= np.linspace(1.0, 0.0, n, dtype=np.float32)
         return music
 
-    def _mux(self, out: Path, segments: list[Path], wav: Path, cues: list[Cue], work: Path) -> list[Path]:
+    def _mux(self, out: Path, scene_segments: list[list[Path]], scene_frames: list[int],
+             transitions: list[tuple[str, float] | None], wav: Path, cues: list[Cue], work: Path) -> list[Path]:
         s = self.settings
-        listing = work / "segments.txt"
-        listing.write_text("".join(f"file '{p.as_posix()}'\n" for p in segments))
+        if any(transitions):
+            files = [_join(segs, work / f"scene-{i:03d}-all.mp4") for i, segs in enumerate(scene_segments, 1)]
+            args = [a for f in files for a in ("-i", str(f))]
+            graph = transition_graph(scene_frames, transitions)
+        else:
+            listing = work / "segments.txt"
+            listing.write_text("".join(f"file '{p.as_posix()}'\n" for segs in scene_segments for p in segs))
+            files = [listing]
+            args = ["-f", "concat", "-safe", "0", "-i", str(listing)]
+            graph = "[0:v]null[vx]"
+        # Block-quote captions are explicit content: burn them in unless the
+        # mode writes them to files instead
+        burn = cues and (s.subtitles.burned or s.subtitles.mode == "none")
+        graph += f";[vx]{self._subtitle_filter(cues, work)}[v]" if burn else ";[vx]null[v]"
+        audio_index = len(files)
+        args += ["-i", str(wav)]
+        maps = ["-map", "[v]", "-map", f"{audio_index}:a"]
         preset, crf, faststart = TARGETS[s.target]
-        args = ["-f", "concat", "-safe", "0", "-i", str(listing), "-i", str(wav)]
-        maps = ["-map", "0:v", "-map", "1:a"]
         codecs = ["-c:v", "libx264", "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p",
                   "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2"]
-        files: list[Path] = []
+        subtitle_files: list[Path] = []
         if s.subtitles.files and cues:
             srt, vtt = out.with_suffix(".srt"), out.with_suffix(".vtt")
             srt.write_text(subtitles.to_srt(cues), encoding="utf-8")
             vtt.write_text(subtitles.to_vtt(cues), encoding="utf-8")
-            files = [srt, vtt]
+            subtitle_files = [srt, vtt]
             if s.subtitles.mode == "embed":
                 args += ["-i", str(srt)]
-                maps += ["-map", "2:s"]
+                maps += ["-map", f"{audio_index + 1}:s"]
                 codecs += ["-c:s", "mov_text", "-metadata:s:s:0", "language=eng"]
-        # Block-quote captions are explicit content: burn them in unless the
-        # mode writes them to files instead
-        burn = cues and (s.subtitles.burned or s.subtitles.mode == "none")
-        if burn:
-            codecs += ["-vf", self._subtitle_filter(cues, work)]
         if faststart:
             codecs += ["-movflags", "+faststart"]
-        media.run([*args, *maps, *codecs, str(out)])
-        return files
+        media.run([*args, "-filter_complex", graph, *maps, *codecs, str(out)])
+        return subtitle_files
 
     def _subtitle_filter(self, cues: list[Cue], work: Path) -> str:
         s = self.settings
@@ -649,6 +667,60 @@ def _overlay_graph(base: str, overlays: list[tuple[Path, float, float]]) -> tupl
         enable = "" if len(overlays) == 1 else f":enable='gte(t,{a:.4f})*lt(t,{b:.4f})'"
         graph += f";[v{k - 1}][{k}:v]overlay=0:0:format=auto{enable}[v{k}]"
     return inputs, graph + f";[v{len(overlays)}]null[v]"
+
+
+def transition_graph(frames: list[int], transitions: list[tuple[str, float] | None]) -> str:
+    """Filter graph joining scene inputs 0..n-1 with xfade transitions, output [vx].
+
+    Each transition is centred on its cut. The outgoing scene holds its last
+    frame for the half after the cut and the incoming scene its first frame
+    for the half before, so the joined video is exactly as long as the scenes
+    (as in Narakeet's renders) and the audio timeline is untouched. A
+    transition is clamped to half the shorter neighbouring scene.
+    """
+    n = len(frames)
+    span = [0] * n  # frames of the transition into scene k
+    for k in range(1, n):
+        if transitions[k]:
+            span[k] = min(round(transitions[k][1] * FPS), frames[k - 1] // 2, frames[k] // 2)
+
+    def before(k: int) -> int:  # held first frames of scene k
+        return span[k] // 2 if k else 0
+
+    def after(k: int) -> int:  # held last frames of scene k
+        return span[k + 1] - span[k + 1] // 2 if k + 1 < n else 0
+
+    parts = []
+    for k in range(n):
+        pads = []
+        if before(k):
+            pads.append(f"tpad=start_mode=clone:start_duration={before(k) / FPS:.6f}")
+        if after(k):
+            pads.append(f"tpad=stop_mode=clone:stop_duration={after(k) / FPS:.6f}")
+        parts.append(f"[{k}:v]" + ",".join([f"settb=AVTB,fps={FPS}", *pads]) + f"[p{k}]")
+    current, length = "p0", frames[0] + after(0)
+    for k in range(1, n):
+        padded = frames[k] + before(k) + after(k)
+        if span[k]:
+            kind = TRANSITIONS[transitions[k][0]]
+            parts.append(f"[{current}][p{k}]xfade=transition={kind}:duration={span[k] / FPS:.6f}"
+                         f":offset={(length - span[k]) / FPS:.6f}[x{k}]")
+            length += padded - span[k]
+        else:
+            parts.append(f"[{current}][p{k}]concat=n=2:v=1:a=0[x{k}]")
+            length += padded
+        current = f"x{k}"
+    return ";".join([*parts, f"[{current}]null[vx]"])
+
+
+def _join(segments: list[Path], out: Path) -> Path:
+    """One file from a scene's segments (stream copy)."""
+    if len(segments) == 1:
+        return segments[0]
+    listing = out.with_suffix(".txt")
+    listing.write_text("".join(f"file '{p.as_posix()}'\n" for p in segments))
+    media.run(["-f", "concat", "-safe", "0", "-i", str(listing), "-c", "copy", str(out)])
+    return out
 
 
 def allocate_frames(frames: int, pieces: list[float]) -> list[int]:
