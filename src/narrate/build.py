@@ -136,10 +136,18 @@ def fit_length(samples: np.ndarray, n: int, *, tile: bool = False) -> np.ndarray
     return np.concatenate([samples, np.zeros(n - len(samples), dtype=np.float32)])
 
 
+LOUDNESS_TARGET = -23.0  # LUFS, the EBU R 128 programme level
+
+
 def apply_gain(samples: np.ndarray, volume: float | str) -> np.ndarray:
     if volume == "normalized":
+        # EBU R 128: bring each voice sample to the same integrated loudness;
+        # clips too short to gate fall back to matching RMS
+        measured = media.loudness(samples, SR)
+        if measured is not None:
+            return samples * (10 ** ((LOUDNESS_TARGET - measured) / 20))
         rms = float(np.sqrt(np.mean(samples**2))) if len(samples) else 0.0
-        return samples * (0.1 / rms) if rms > 1e-6 else samples
+        return samples * (10 ** (LOUDNESS_TARGET / 20) / rms) if rms > 1e-6 else samples
     return samples * (10 ** (float(volume) / 20)) if volume else samples
 
 

@@ -212,6 +212,21 @@ def decode_audio(
     return np.frombuffer(out, dtype=np.float32).copy()
 
 
+def loudness(samples: np.ndarray, sample_rate: int) -> float | None:
+    """Integrated loudness in LUFS (ITU-R BS.1770 via ffmpeg's ebur128), or None if too short to gate."""
+    if len(samples) < int(0.4 * sample_rate):
+        return None  # shorter than one 400 ms gating block
+    proc = subprocess.run(
+        [ffmpeg(), "-hide_banner", "-nostats", "-f", "f32le", "-ar", str(sample_rate), "-ac", "1", "-i", "-",
+         "-af", "ebur128=framelog=quiet", "-f", "null", "-"],
+        input=np.asarray(samples, dtype="<f4").tobytes(), capture_output=True,
+    )
+    m = re.search(r"Integrated loudness:\s*I:\s*(-?[\d.]+|-inf) LUFS", proc.stderr.decode(errors="replace"))
+    if proc.returncode != 0 or not m or m.group(1) == "-inf" or float(m.group(1)) <= -70:
+        return None
+    return float(m.group(1))
+
+
 def time_stretch(samples: np.ndarray, sample_rate: int, tempo: float) -> np.ndarray:
     """Speed mono float32 audio up (tempo > 1) or slow it down without changing its pitch."""
     out = run(["-f", "f32le", "-ar", str(sample_rate), "-ac", "1", "-i", "-",
