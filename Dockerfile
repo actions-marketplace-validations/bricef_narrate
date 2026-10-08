@@ -95,6 +95,7 @@ COPY tests /src/tests
 COPY examples /src/examples
 USER narrate
 WORKDIR /src
-# test_action.py checks the repository's CI files, which aren't in the image
-RUN python -m pytest -q -p no:cacheprovider --ignore=tests/test_action.py \
+# test_action.py and test_docs.py check the repository's CI files and docs,
+# which aren't in the image
+RUN python -m pytest -q -p no:cacheprovider --ignore=tests/test_action.py --ignore=tests/test_docs.py \
         -m "not kokoro and not elevenlabs and not conformance and not stt"
