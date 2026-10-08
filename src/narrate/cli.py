@@ -42,7 +42,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     started = time.monotonic()
     synth = make_synth(args.tts, args.tts_model)
     log(f"speech: {synth.name}" + (f" ({synth.model})" if hasattr(synth, "model") else ""))
-    builder = Builder(script, synth, log=log)
+    builder = Builder(script, synth, log=log, jobs=args.jobs)
     result = builder.build(out, workdir=Path(args.keep_work) if args.keep_work else None)
     _report(script, result.notes)
     extras = ", ".join(str(p) for p in [result.poster, *result.subtitle_files])
@@ -106,6 +106,7 @@ def main(argv: list[str] | None = None) -> int:
                             "else Kokoro); 'silent' renders timing-only silence for quick previews")
     build.add_argument("--tts-model", help="ElevenLabs model id (default eleven_multilingual_v2)")
     build.add_argument("--keep-work", metavar="DIR", help="keep intermediate files in DIR")
+    build.add_argument("-j", "--jobs", type=int, help="parallel encodes (default: up to 4, or $NARRATE_JOBS)")
     build.add_argument("-q", "--quiet", action="store_true")
     build.set_defaults(func=cmd_build)
 
