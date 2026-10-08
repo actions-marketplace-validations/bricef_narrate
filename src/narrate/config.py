@@ -27,6 +27,19 @@ SUBTITLE_MODES = {"none", "external", "embed", "overlay", "overlay-background", 
 TARGETS = {"offline", "online", "self-hosted"}
 BUILTIN_MUSIC = {"ukulele-1", "ukulele-2", "uplifting-1", "uplifting-2", "corporate-1"}
 
+# Narakeet transition names -> ffmpeg xfade transitions (spec §10)
+TRANSITIONS = {
+    "crossfade": "fade", "wipe": "wiperight", "wipe-right": "wiperight", "wipe-left": "wipeleft",
+    "wipe-up": "wipeup", "wipe-down": "wipedown", "slide-right": "slideright", "slide-left": "slideleft",
+    "slide-up": "slideup", "slide-down": "slidedown", "fade-right": "smoothright",
+    "fade-left": "smoothleft", "fade-up": "smoothup", "fade-down": "smoothdown",
+    "fade-circle": "circleopen", "slice-right": "hrslice", "slice-left": "hlslice",
+    "slice-up": "vuslice", "slice-down": "vdslice", "dissolve": "dissolve", "pixelize": "pixelize",
+    "pixelise": "pixelize", "radial": "radial", "circle": "circlecrop", "rect": "rectcrop",
+    "reveal": "revealright",
+}
+DEFAULT_TRANSITION_SECONDS = 0.2
+
 
 class ConfigError(Exception):
     pass
@@ -61,6 +74,23 @@ def parse_color(value: Any, what: str = "colour") -> str:
         raise ConfigError(f"invalid {what} {text!r}") from None
     r, g, b, a = rgba
     return f"#{r:02x}{g:02x}{b:02x}" + (f"{a:02x}" if a != 255 else "")
+
+
+def parse_transition(value: Any, default_type: str = "crossfade") -> tuple[str, float] | None:
+    """`wipe 0.5` -> ("wipe", 0.5); `none` -> None; a bare duration takes `default_type`."""
+    tokens = str(value).strip().lower().split()
+    if not tokens or tokens[0] == "none":
+        return None
+    if re.fullmatch(r"\d+(?:\.\d+)?", tokens[0]):
+        kind, rest = default_type, tokens
+    else:
+        kind, rest = tokens[0], tokens[1:]
+    if kind not in TRANSITIONS:
+        raise ConfigError(f"unknown transition {kind!r}")
+    seconds = parse_number(rest[0], "transition duration") if rest else DEFAULT_TRANSITION_SECONDS
+    if seconds <= 0:
+        raise ConfigError("transition duration must be positive")
+    return kind, seconds
 
 
 def parse_size(value: Any) -> tuple[int, int]:
