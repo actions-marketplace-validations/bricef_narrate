@@ -114,7 +114,8 @@ def _check(path: Path) -> int:
     media_blocks = [b for scene in script.scenes for b in scene.blocks if isinstance(b, Media)]
     missing = [f"line {b.line}: file not found: {b.path}"
                for b in media_blocks if not b.render and not (script.base_dir / b.path).is_file()]
-    problems = [f"line {b.line}: {p}" for b in media_blocks if b.render for p in render.check(b)]
+    rendered = [b for b in media_blocks if b.render]
+    problems = [f"line {b.line}: {p}" for b, found in zip(rendered, render.check(rendered)) for p in found]
     _report(script, [])
     for m in missing + problems:
         print(f"error: {script.path}: {m}", file=sys.stderr)
@@ -184,9 +185,10 @@ def cmd_models(args: argparse.Namespace) -> int:
     print(ensure_models())
     if not os.environ.get("NARRATE_FFMPEG"):  # the container image brings its own
         print(media.ensure_ffmpeg())
-    from . import stt
+    from . import mermaid, stt
 
     print(stt.ensure_model())
+    print(mermaid.ensure())
     return 0
 
 
@@ -245,7 +247,7 @@ def main(argv: list[str] | None = None) -> int:
     voices = sub.add_parser("voices", help="list voices, and any voices.yaml pins")
     voices.add_argument("script", nargs="?", help="also show the voices.yaml next to this script")
     voices.set_defaults(func=cmd_voices)
-    sub.add_parser("models", help="download the Kokoro, speech-to-text and ffmpeg files now, "
+    sub.add_parser("models", help="download the Kokoro, speech-to-text, ffmpeg and mermaid.js files now, "
                    "instead of on first use").set_defaults(func=cmd_models)
     sub.add_parser("doctor", help="check ffmpeg, Chromium, fonts, models and keys").set_defaults(func=cmd_doctor)
 

@@ -48,6 +48,9 @@ COPY README.md ./
 COPY src ./src
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev --no-editable
 RUN PLAYWRIGHT_BROWSERS_PATH=/opt/playwright /opt/narrate/bin/playwright install --only-shell chromium
+# mermaid.js for render:mermaid, checked against narrate's pinned SHA-256
+RUN NARRATE_TOOLS=/tmp/tools /opt/narrate/bin/python -c \
+        "import shutil; from narrate import mermaid; shutil.copy(mermaid.ensure(), '/opt/mermaid.min.js')"
 
 FROM python:${PYTHON}-slim-${DEBIAN} AS runtime
 # Headless Chromium's libraries (Playwright's list for Debian 13), fonts that
@@ -69,11 +72,13 @@ RUN --mount=type=bind,from=ffmpeg,source=/opt/ffmpeg/packages,target=/tmp/ffmpeg
 COPY --from=ffmpeg /opt/ffmpeg/bin/ffmpeg /usr/local/bin/ffmpeg
 COPY --from=python /opt/playwright /opt/playwright
 COPY --from=python /opt/narrate /opt/narrate
+COPY --from=python /opt/mermaid.min.js /opt/mermaid.min.js
 # Everything narrate writes at run time goes under /cache (or /tmp), so any
 # user id works: pass --user to own the files it writes in /work
 ENV PATH=/opt/narrate/bin:$PATH \
     PLAYWRIGHT_BROWSERS_PATH=/opt/playwright \
     NARRATE_FFMPEG=/usr/local/bin/ffmpeg \
+    NARRATE_MERMAID_JS=/opt/mermaid.min.js \
     NARRATE_CACHE=/cache \
     NARRATE_TOOLS=/cache/tools \
     XDG_CACHE_HOME=/cache/xdg \

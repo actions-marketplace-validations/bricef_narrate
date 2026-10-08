@@ -70,7 +70,8 @@ The `Dockerfile` has four stages:
    only the external libraries narrate uses: x264, libass, rubberband, LAME,
    Opus and dav1d. The result is 30 MB, against 173 MB for a static build.
 2. **`python`:** installs narrate into `/opt/narrate` with uv from `uv.lock`,
-   and Playwright's headless Chromium shell into `/opt/playwright`.
+   Playwright's headless Chromium shell into `/opt/playwright`, and mermaid.js
+   (checked against narrate's pinned SHA-256) as `/opt/mermaid.min.js`.
 3. **`runtime`:** the published image. It holds the two stages' output, Chromium's
    libraries and the fonts. `libgbm` comes without its Debian package's Mesa
    drivers (about 200 MB of LLVM), which only load when a GPU is used and
@@ -96,6 +97,15 @@ image runs as any user ID.
 
 The managed ffmpeg for source checkouts is pinned separately, in
 `src/narrate/media.py`.
+
+**Updating mermaid.js:**
+1. Take the version from the npm registry
+   (`https://registry.npmjs.org/mermaid/latest`).
+2. Check the package tarball against the registry's `integrity` value.
+3. Take the SHA-256 of its `dist/mermaid.min.js`, and confirm the jsDelivr copy
+   matches it.
+4. Set `MERMAID_VERSION` and `MERMAID_SHA256` in `src/narrate/mermaid.py`.
+5. Run `just test tests/test_mermaid.py tests/test_docs.py`.
 
 ## CI and releases
 
@@ -168,8 +178,8 @@ Some choices worth knowing when changing behaviour:
     phonetic alphabets.
   - `tts.py` and `voicemap.py`: speech engines, voices and `voices.yaml`.
   - `frames.py` and `motion.py`: Chromium frames, and pan and zoom.
-  - `render.py`: render blocks, their cache, and the renderers
-    (`render:placeholder`).
+  - `render.py`: render blocks, their cache, and `render:placeholder`.
+  - `mermaid.py`: `render:mermaid`, and the pinned mermaid.js.
   - `subtitles.py` and `stt.py`: subtitle cues, and speech-to-text for
     recordings.
   - `media.py`: ffmpeg.

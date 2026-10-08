@@ -127,6 +127,19 @@ def check_stt() -> Check:
     return Check("speech-to-text", True, detail)
 
 
+def check_mermaid() -> Check:
+    from . import mermaid
+
+    if env := os.environ.get("NARRATE_MERMAID_JS"):
+        found = Path(env).is_file()
+        return Check("mermaid.js", found, env if found else f"{env} (NARRATE_MERMAID_JS) doesn't exist",
+                     "" if found else "point NARRATE_MERMAID_JS at mermaid.min.js, or unset it")
+    if mermaid.managed_script().exists():
+        return Check("mermaid.js", True, f"{mermaid.MERMAID_VERSION} ({mermaid.managed_script()})")
+    return Check("mermaid.js", True, f"{mermaid.MERMAID_VERSION} downloads the first time a script uses "
+                 "render:mermaid (about 5 MB), or now with `narrate models`")
+
+
 def check_elevenlabs() -> Check:
     key = os.environ.get("ELEVENLABS_API_KEY", "")
     if not key:
@@ -138,4 +151,5 @@ def check_elevenlabs() -> Check:
 
 
 def run_checks() -> list[Check]:
-    return [*check_ffmpeg(), check_chromium(), check_fonts(), check_kokoro(), check_stt(), check_elevenlabs()]
+    return [*check_ffmpeg(), check_chromium(), check_fonts(), check_kokoro(), check_stt(), check_mermaid(),
+            check_elevenlabs()]
