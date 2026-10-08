@@ -5,7 +5,6 @@ description = "Local Markdown-to-video tool compatible with Narakeet's script fo
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "imageio-ffmpeg>=0.5",
     "kokoro-onnx>=0.4",
     "markdown-it-py>=4.2.0",
     "numpy>=1.26",

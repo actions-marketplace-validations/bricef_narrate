@@ -54,19 +54,22 @@ class Check:
 
 
 def check_ffmpeg() -> list[Check]:
+    if not os.environ.get("NARRATE_FFMPEG") and not media.managed_ffmpeg().exists():
+        return [Check("ffmpeg", False, f"ffmpeg {media.FFMPEG_SERIES} not downloaded yet "
+                      "(the first build downloads it, about 150 MB)", "uv run narrate models")]
     try:
         exe = media.ffmpeg()
         version = subprocess.run([exe, "-hide_banner", "-version"], capture_output=True, text=True).stdout
         filters = subprocess.run([exe, "-hide_banner", "-filters"], capture_output=True, text=True).stdout
         encoders = subprocess.run([exe, "-hide_banner", "-encoders"], capture_output=True, text=True).stdout
     except OSError as e:
-        return [Check("ffmpeg", False, str(e), "uv sync (installs imageio-ffmpeg), or set NARRATE_FFMPEG")]
+        return [Check("ffmpeg", False, str(e), "uv run narrate models, or set NARRATE_FFMPEG")]
     checks = [Check("ffmpeg", True, f"{version.splitlines()[0]} ({exe})")]
     needs = {"libx264 encoder": " libx264 " in encoders, "subtitles filter (libass)": " subtitles " in filters,
              "xfade filter": " xfade " in filters}
     for name, ok in needs.items():
         checks.append(Check(f"ffmpeg {name}", ok, "present" if ok else "missing",
-                            "" if ok else "use a full ffmpeg build (unset NARRATE_FFMPEG to use the bundled one)"))
+                            "" if ok else "use a full ffmpeg build (unset NARRATE_FFMPEG to use narrate's own)"))
     return checks
 
 
