@@ -162,6 +162,15 @@ engine renders the same subset:
 Other tags keep their text, with a note. Malformed XML is read as plain text,
 with a warning.
 
+### Subtitles for recorded audio
+
+With subtitles on, scenes narrated by a recording (`(audio: talk.mp3)`, with no
+block quotes) are transcribed with faster-whisper on the CPU, and each cue is
+timed to its words.
+- The model (`small`, or `$NARRATE_STT_MODEL`) downloads once into the tools
+  cache.
+- Transcripts are cached by file content.
+
 ### Slide look
 
 Default slides follow measurements of Narakeet's own renders:
@@ -231,7 +240,7 @@ Brian:
 | Videos | segments, still frames, all six sync modes, volume/mute, animated GIFs, several clips and images in one scene | |
 | Narration | paragraphs, pauses, `pause-until`, recorded audio, voices, speed (any 0.3–2), volume (presets, or `normalized` to EBU R 128), pitch, emphasis (markup and `voice-emphasis`), language spans (`[See]{de}`), phonetic spans (IPA, X-SAMPA, Pinyin, Jyutping), SSML paragraphs, ellipsis pauses, spelling (backticks and `{literal}`, with letter names in English, Spanish, French, German, Italian and Portuguese), `narration-mode` (`fragment`, and `merge` across scenes) | |
 | Visuals | plain, Markdown and syntax-highlighted slides (several per scene take turns), themes and custom CSS, callouts (circle, rectangle, mask), transitions between scenes | |
-| Subtitles | cues from narration or block quotes, SRT/VTT, embedded track, burned-in styles, custom fonts | |
+| Subtitles | cues from narration, block quotes or speech-to-text on recorded audio, SRT/VTT, embedded track, burned-in styles, custom fonts | |
 
 ### Checked against Narakeet's own renders
 

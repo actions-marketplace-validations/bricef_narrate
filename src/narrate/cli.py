@@ -164,6 +164,9 @@ def cmd_cache(args: argparse.Namespace) -> int:
 def cmd_models(args: argparse.Namespace) -> int:
     print(ensure_models())
     print(media.ensure_ffmpeg())
+    from . import stt
+
+    print(stt.ensure_model())
     return 0
 
 
@@ -202,7 +205,7 @@ def main(argv: list[str] | None = None) -> int:
     voices = sub.add_parser("voices", help="list voices, and any voices.yaml pins")
     voices.add_argument("script", nargs="?", help="also show the voices.yaml next to this script")
     voices.set_defaults(func=cmd_voices)
-    sub.add_parser("models", help="download the Kokoro model files and ffmpeg").set_defaults(func=cmd_models)
+    sub.add_parser("models", help="download the Kokoro, speech-to-text and ffmpeg files").set_defaults(func=cmd_models)
     sub.add_parser("doctor", help="check ffmpeg, Chromium, fonts, models and keys").set_defaults(func=cmd_doctor)
 
     cache_cmd = sub.add_parser("cache", help="show the speech cache, or prune it")

@@ -5,6 +5,7 @@ description = "Local Markdown-to-video tool compatible with Narakeet's script fo
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "faster-whisper>=1.2",
     "kokoro-onnx>=0.4",
     "markdown-it-py>=4.2.0",
     "numpy>=1.26",
@@ -33,4 +34,5 @@ markers = [
     "kokoro: needs the Kokoro model files (slow; deselect with -m 'not kokoro')",
     "elevenlabs: calls the live ElevenLabs API with ELEVENLABS_API_KEY (spends a few credits)",
     "conformance: compares against Narakeet's renders (needs `just reference`; skip with -m 'not conformance')",
+    "stt: transcribes speech with faster-whisper (downloads its model on first use)",
 ]
