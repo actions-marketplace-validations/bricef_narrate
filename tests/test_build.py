@@ -138,16 +138,6 @@ def test_burned_captions_and_custom_font_render(project):
     assert not (project / "burn.srt").exists()
 
 
-@pytest.mark.skipif(not (EXAMPLES / "slides" / "result.mp4").exists(),
-                    reason="run scripts/fetch-narakeet-reference.sh --media first")
-def test_matches_narakeet_timing_for_the_slides_example(tmp_path):
-    """No narration in this example, so timing depends only on the format rules."""
-    script = parse_file(EXAMPLES / "slides" / "script" / "source.md")
-    result = Builder(script, SilentSynth(), log=lambda _: None).build(tmp_path / "slides.mp4")
-    narakeet = media.probe(EXAMPLES / "slides" / "result.mp4").duration
-    assert result.duration == pytest.approx(narakeet, abs=0.1)
-
-
 LOOP_PROBE = """
 import resource, sys
 import numpy as np
@@ -184,9 +174,10 @@ def test_looping_a_long_clip_keeps_memory_flat(tmp_path):
     a, b = tmp_path / "a.png", tmp_path / "b.png"
     media.extract_frame(out, 2.0, a)
     media.extract_frame(out, 22.0, b)
-    pa, pb = Image.open(a).convert("L"), Image.open(b).convert("L")
-    diff = sum(abs(x - y) for x, y in zip(pa.getdata(), pb.getdata())) / (pa.width * pa.height)
-    assert diff < 3
+    import numpy as np
+
+    pa, pb = (np.asarray(Image.open(p).convert("L"), dtype=float) for p in (a, b))
+    assert np.abs(pa - pb).mean() < 3
 
 
 def test_mixed_sequence_end_to_end(project):

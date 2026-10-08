@@ -977,10 +977,21 @@ scene-change detection (2026-10-08):
 | Example | Narakeet | What it shows |
 | --- | --- | --- |
 | `slides` | 14.04 s | Text slide without audio = 1 s; `duration: 2` = 2 s exactly; a video with no narration plays in full (5 s). This matches §4.2. |
-| `transition-types` | 25.08 s | 25 scenes of `duration: 1` with 24 transitions of 0.5 s. Transitions do **not** shorten the video (gap 9). |
+| `transition-types` | 25.08 s | 25 scenes of `duration: 1` with 24 transitions of 0.5 s. Transitions do **not** shorten the video (gap 9). Frame by frame, each wipe runs from the cut to cut + 0.5 s (narrate #35). |
+| `video-sizing`, `video-volume` | 16.03 s, 23.52 s | Clips with `cover`/`contain`/`fit`, segments, `volume` and `mute`: lengths match the rules within 0.05 s and frames match. |
+| `slide-css-theming` | 8.97 s | Themes, fonts and the custom backdrop match narrate's frames (narrate #20, #35). Narakeet's default backdrop is `backdrop-filter: brightness(0.45)` (measured), which a theme's `backdrop-filter` replaces. The render runs 0.47 s longer than the rules, around its slides. |
+| `transitions` | 8.05 s | Departs from the rules: the clip segments `1 - 2` and `4 - 5` play for about 1.4 s and 2 s, and the header's 2 s wipe isn't visible. The same segment-range fault as `video-segments`. |
 | `image-sizing` | 12.60 s | Scene cuts every 2.52 s for scenes of an image, a text slide and `(pause: 2)`. |
 | `image-panzoom` | 9.96 s | The first scene, an image and `(pause: 1)` with no slide, cuts at exactly 1.0 s: no padding. |
 | `video-segments` | 11.71 s | The first three scenes match the rules: the full 5 s clip under short narration (`freeze`), then two 2.0 s stills (cuts at 4.97, 6.97 and 8.97 s). The last scene, `![00:02-00:04](stopwatch.mp4)`, runs 2.76 s instead of 2.0 s (narrate #18). Its frames do start at source 2.00 s, but play past 4.0 s (source 4.60 s at 11.6 s) until the render ends. The clip has a single keyframe, so this isn't keyframe snapping: Narakeet ignored the segment's end, against its own documentation. narrate follows the documented range. |
+
+**Automated checks (narrate #35).** `tests/test_conformance.py` builds every
+example without narration and compares it with Narakeet's render:
+- Lengths are compared for `slides`, `transition-types`, `video-sizing` and
+  `video-volume`.
+- Frames are compared once each scene has settled, for all of those plus
+  `image-sizing` (at Narakeet's own pace) and `slide-css-theming`.
+- The differences above are pinned, so a change on either side shows up.
 
 **Pauses (narrate #19).** The extra 0.5 s in `image-sizing` is not a pause
 rule: an unpadded `(pause: 1)` scene in `image-panzoom` shows that. The extra
