@@ -99,3 +99,43 @@ def test_matches_narakeet_timing_for_the_slides_example(tmp_path):
     result = Builder(script, SilentSynth(), log=lambda _: None).build(tmp_path / "slides.mp4")
     narakeet = media.probe(EXAMPLES / "slides" / "result.mp4").duration
     assert result.duration == pytest.approx(narakeet, abs=0.1)
+
+
+LOOP_PROBE = """
+import resource, sys
+import numpy as np
+from pathlib import Path
+from narrate import media
+from narrate.build import Builder, ScenePlan, Visual
+from narrate.frames import FrameSpec
+from narrate.script import parse
+from narrate.tts import SilentSynth
+
+d = Path(sys.argv[1])
+b = Builder(parse("---\\nsize: 640x360\\n---\\nx\\n", d / "s.md"), SilentSynth(), log=lambda _: None)
+v = Visual("video", d / "clip.mp4", sync="loop", start=0.0, length=20.0)
+plan = ScenePlan(1, [v], FrameSpec(), np.zeros(1, dtype=np.float32), 30.0)
+b._encode_video(v, plan, 900, None, d / "out.mp4")
+print(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss // 1024)
+"""
+
+
+def test_looping_a_long_clip_keeps_memory_flat(tmp_path):
+    """The loop filter buffered the whole segment in memory (~300 MB here); looping from disk doesn't."""
+    import subprocess
+    import sys
+
+    media.run(["-f", "lavfi", "-i", "testsrc2=size=640x360:rate=30", "-t", "20", "-c:v", "libx264",
+               "-preset", "ultrafast", "-pix_fmt", "yuv420p", str(tmp_path / "clip.mp4")])
+    peak_mb = int(subprocess.run([sys.executable, "-c", LOOP_PROBE, str(tmp_path)], check=True,
+                                 capture_output=True, text=True).stdout.split()[-1])
+    assert peak_mb < 200
+    out = tmp_path / "out.mp4"
+    assert round(media.probe(out).duration * FPS) == 900
+    # The second pass repeats the first: frames 20 s apart match
+    a, b = tmp_path / "a.png", tmp_path / "b.png"
+    media.extract_frame(out, 2.0, a)
+    media.extract_frame(out, 22.0, b)
+    pa, pb = Image.open(a).convert("L"), Image.open(b).convert("L")
+    diff = sum(abs(x - y) for x, y in zip(pa.getdata(), pb.getdata())) / (pa.width * pa.height)
+    assert diff < 3
