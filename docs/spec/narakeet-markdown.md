@@ -955,8 +955,10 @@ examples disagree. The proposals favour what the official examples imply.
     royalty-free tracks, or fail with "track not available locally".
 23. **Unknown voice names.** Fail by default, with an option to fall back to a
     configured default voice.
-24. **SSML.** Accept the subset the local engine supports. Strip unknown tags
-    with a warning.
+24. **SSML.** *Implemented (narrate #9):* narrate interprets a subset
+    itself, the same on every engine: break, prosody, emphasis, say-as
+    (spelling), phoneme, lang, sub, p and s. Unknown tags keep their text and
+    are noted; malformed XML is read as plain text.
 25. **Callout mask colour.** Opaque black. `alpha` doesn't apply to masks.
 
 ---

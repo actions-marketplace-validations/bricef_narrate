@@ -102,6 +102,9 @@ class Run:
     text: Speech
     emphasis: str = "none"  # none | moderate | strong | reduced
     pause: float = 0.0  # silence before it
+    rate: float = 1.0  # SSML prosody on top of the paragraph's voice settings
+    pitch: float = 1.0  # frequency ratio
+    gain: float = 0.0  # dB
 
 
 def speech_runs(text: str, lang: str, notes: set[str]) -> list[Run]:

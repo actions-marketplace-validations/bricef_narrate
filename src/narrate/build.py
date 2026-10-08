@@ -32,6 +32,7 @@ from .doctor import find_font
 from .frames import FrameRenderer, FrameSpec, SlideSpec
 from .script import ANIMATED_SIZES, POSITIONS, SIZES, Directive, Media, Narration, Quote, Script, Slide
 from .subtitles import Cue
+from .ssml import ssml_runs
 from .text import Run, speech_runs, ssml_text, subtitle_text
 from .tts import SAMPLE_RATE, Prefetching, Synth, Voice
 
@@ -299,16 +300,19 @@ class Builder:
                 elif isinstance(block, Narration):
                     voice = self._voice(voice_name, lang)
                     if block.ssml:
-                        self.notes.add("SSML (tags stripped, text read plainly)")
-                        runs = [Run(ssml_text(block.text))]
+                        runs = ssml_runs(block.text, voice.lang or "en", self.notes)
+                        if runs is None:
+                            self.script.warnings.append(f"line {block.line}: SSML is not well-formed XML; read as plain text")
+                            runs = [Run(ssml_text(block.text))]
                     else:
                         runs = speech_runs(block.text, voice.lang or "en", self.notes)
                     start = track.seconds
                     for run in runs:
                         track.silence(run.pause)
                         rate, semitones, gain = EMPHASIS[run.emphasis if run.emphasis != "none" else emphasis]
-                        audio = self._speak(run.text, voice, speed * rate, pitch * 2 ** (semitones / 12))
-                        track.add(apply_gain(apply_gain(audio, volume), gain))
+                        audio = self._speak(run.text, voice, speed * rate * run.rate,
+                                            pitch * 2 ** (semitones / 12) * run.pitch)
+                        track.add(apply_gain(apply_gain(audio, volume), gain + run.gain))
                     if runs:
                         caption = subtitle_text(ssml_text(block.text) if block.ssml else block.text)
                         narration_spans.append((start, track.seconds, caption))
