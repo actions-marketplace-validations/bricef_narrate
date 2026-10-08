@@ -35,7 +35,8 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: astral-sh/setup-uv@v10
+    # setup-uv publishes exact version tags only, no moving major
+    - uses: astral-sh/setup-uv@v10.2.0
 
     # hashFiles() can't read the action's own directory when another repository
     # uses it, so the key comes from a shell step: the files pinning ffmpeg, the
