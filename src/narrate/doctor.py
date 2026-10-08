@@ -15,8 +15,8 @@ class SetupError(Exception):
 
 
 BROWSER_INSTALL = "uv run playwright install chromium"
-BROWSER_DEPS = ("uv run playwright install-deps (needs root); without root, extract the libraries "
-                "and add them to LD_LIBRARY_PATH (README, Setup)")
+BROWSER_DEPS = ("uv run playwright install-deps chromium (needs root); without root, see "
+                "docs/building.md, Troubleshoot")
 
 FONT_DIRS = [Path("/usr/share/fonts"), Path("/usr/local/share/fonts"), Path.home() / ".fonts",
              Path.home() / ".local/share/fonts", Path("/Library/Fonts"), Path("/System/Library/Fonts"),
@@ -55,8 +55,9 @@ class Check:
 
 def check_ffmpeg() -> list[Check]:
     if not os.environ.get("NARRATE_FFMPEG") and not media.managed_ffmpeg().exists():
-        return [Check("ffmpeg", False, f"ffmpeg {media.FFMPEG_SERIES} not downloaded yet "
-                      "(the first build downloads it, about 150 MB)", "uv run narrate models")]
+        # Not a fault: like the models, it downloads on the first build
+        return [Check("ffmpeg", True, f"ffmpeg {media.FFMPEG_SERIES} downloads on the first build "
+                      "(about 150 MB), or now with `narrate models`")]
     try:
         exe = media.ffmpeg()
         version = subprocess.run([exe, "-hide_banner", "-version"], capture_output=True, text=True).stdout
@@ -66,7 +67,7 @@ def check_ffmpeg() -> list[Check]:
         return [Check("ffmpeg", False, str(e), "uv run narrate models, or set NARRATE_FFMPEG")]
     checks = [Check("ffmpeg", True, f"{version.splitlines()[0]} ({exe})")]
     needs = {"libx264 encoder": " libx264 " in encoders, "subtitles filter (libass)": " subtitles " in filters,
-             "xfade filter": " xfade " in filters}
+             "xfade filter": " xfade " in filters, "rubberband filter (pitch)": " rubberband " in filters}
     for name, ok in needs.items():
         checks.append(Check(f"ffmpeg {name}", ok, "present" if ok else "missing",
                             "" if ok else "use a full ffmpeg build (unset NARRATE_FFMPEG to use narrate's own)"))
@@ -111,8 +112,8 @@ def check_kokoro() -> Check:
 
     missing = [f for f in MODEL_FILES if not (model_dir() / f).exists()]
     if missing:
-        return Check("kokoro models", False, f"not downloaded ({', '.join(missing)}); "
-                     "the first Kokoro build downloads them (about 350 MB)", "uv run narrate models")
+        return Check("kokoro models", True, "download on the first Kokoro build (about 350 MB), "
+                     "or now with `narrate models`")
     size = sum((model_dir() / f).stat().st_size for f in MODEL_FILES) / 1e6
     return Check("kokoro models", True, f"{model_dir()} ({size:.0f} MB)")
 

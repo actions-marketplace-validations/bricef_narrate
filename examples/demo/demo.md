@@ -4,7 +4,7 @@ voice: George
 subtitles: overlay-background
 ---
 
-<!-- A tour of what the proof of concept renders today. -->
+<!-- A short tour of what narrate renders. -->
 
 ```md
 # narrate

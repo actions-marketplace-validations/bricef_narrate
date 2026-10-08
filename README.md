@@ -1,357 +1,139 @@
 # narrate
 
-A local tool that turns a Markdown script and its assets into a narrated video.
-It accepts the script format of Narakeet's "Markdown to Video" service, which is
-specified in `docs/spec/narakeet-markdown.md`.
+narrate turns a Markdown script and a folder of pictures and clips into a
+narrated video, on your own computer. You write the scenes and the words; it
+generates the voice-over, lays out the pictures, slides and subtitles, and
+times every scene to its narration.
 
-Status: proof of concept. It renders real videos with narration, slides, images,
-clips, callouts and subtitles. The features not built yet are listed below;
-scripts that use them still render, and narrate prints a note for each one.
+It reads the script format of Narakeet's "Markdown to Video" service, so
+Narakeet projects build unchanged, without uploading anything.
 
-````markdown
----
-voice: George
-subtitles: overlay-background
----
+- **Speech:** Kokoro, free and running on your computer, or ElevenLabs with
+  your own account.
+- **Visuals:** pictures with pan and zoom, video clips, text and code slides,
+  themes, callouts and 24 kinds of transition.
+- **Sound and text:** recorded audio, background music, and subtitles, burned
+  in or as files.
+- **Ways to run it:** a command line, a Docker image and a GitHub Action.
 
-![cover](sunrise.png)
+## Install
 
-This paragraph is read aloud, and the scene lasts as long as the narration.
+### With Docker
 
----
-
-```md
-# A text slide
-* rendered from Markdown
-```
-
-(pause: 1)
-````
-
-## Setup
+Docker is the only requirement. The image holds narrate, ffmpeg, Chromium and
+fonts:
 
 ```sh
-uv sync
-uv run playwright install chromium   # slides and frames are rendered by headless Chromium
+docker pull ghcr.io/bricef/narrate
 ```
 
-- **Chromium's system libraries:** install them with
-  `uv run playwright install-deps` (needs root). Without root, extract them
-  under `~/.cache/chromium-libs/root`; the justfile adds that directory to
-  `LD_LIBRARY_PATH` when it exists.
-- **ffmpeg:** narrate downloads its own static ffmpeg 9.0 build on first use
-  (about 150 MB, checked against the release's SHA-256), or ahead of time
-  with `uv run narrate models`.
-  - It doesn't use an installed ffmpeg, because ffmpeg 7.0 crashes
-    intermittently on narrate's transition graphs (#37).
-  - `$NARRATE_FFMPEG` overrides it.
-  - Downloaded tools live under `~/.cache/narrate` (`$NARRATE_TOOLS`); speech
-    audio is cached apart from them (`$NARRATE_CACHE`).
-  - `uv run narrate doctor` checks the whole setup.
-- **Kokoro:** the model (about 350 MB) downloads on first use, or ahead of time
-  with `uv run narrate models`.
-- **ElevenLabs:** put `ELEVENLABS_API_KEY=…` in a `.env` file (git-ignored),
-  either in the directory you run from or next to the script.
+While the image is private, log in to `ghcr.io` first
+([Build in Docker](docs/building.md#build-in-docker)).
 
-### In a container
+### From source
 
-The image `ghcr.io/bricef/narrate` carries narrate with all of its
-dependencies, so nothing but Docker is needed:
+On Linux (tested on Ubuntu 24.04 and Debian 13), with
+[uv](https://docs.astral.sh/uv/getting-started/installation/) installed. The
+repository is private, so cloning needs a GitHub account with access to it:
 
 ```sh
-docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -v narrate-cache:/cache \
-    ghcr.io/bricef/narrate build script.md -o video.mp4
+git clone git@github.com:bricef/narrate.git
+cd narrate
+uv sync                                          # Python and narrate's packages
+uv run playwright install --with-deps chromium   # headless Chromium; asks for sudo for its libraries
+sudo apt-get install -y fonts-dejavu-core        # the subtitle font
+uv run narrate doctor                            # checks the setup
 ```
 
-- Paths are relative to `/work`, the mounted directory. Run as your own user
-  (`--user`) so the video belongs to you.
-- The Kokoro model, music and synthesised speech land in `/cache` on first
-  use. A volume there keeps them between runs; use the same `--user` with it
-  each time.
-- Pass `-e ELEVENLABS_API_KEY` to use ElevenLabs, or keep the key in a `.env`
-  in the mounted directory.
-- `just image` builds it locally (`narrate:local`); `just image-test` runs the
-  test suite inside it.
-- It weighs about 1.2 GB unpacked (420 MB to download):
-  - the Python environment, 670 MB;
-  - Playwright's headless Chromium, 280 MB;
-  - the Debian base, 135 MB, and libraries and fonts, 75 MB;
-  - ffmpeg 9.0, built with only the external libraries narrate uses, 30 MB
-    (the static build is 173 MB).
-- Fonts cover Latin, Greek and Cyrillic, plus emoji. For other scripts, add
-  fonts in an image built on this one (`USER root`, then `apt-get install
-  fonts-noto-cjk` for example).
+Without sudo, see [Troubleshoot](docs/building.md#troubleshoot) for Chromium's
+libraries. narrate downloads its own ffmpeg and the Kokoro voice model on the
+first build.
 
-## Usage
+narrate runs inside the checkout's environment. To use it in your own folders,
+as the rest of the docs do, add aliases to your shell profile (`~/.bashrc` or
+`~/.zshrc`), with the path to your checkout:
 
 ```sh
-uv run narrate build script.md -o video.mp4   # or: just build script.md
-uv run narrate build project.zip              # a .zip of the script and its assets (--source picks the script)
-uv run narrate audio script.md -o out.mp3     # narration only: .mp3, .m4a, .ogg, .opus, .flac or .wav
-uv run narrate callouts pic.png --fit contain # a page for drawing callouts (prints its URL; --open)
-uv run narrate check script.md                # parse and check files, no rendering
-uv run narrate voices                         # voices per engine
-just demo                                     # examples/demo rendered with both engines into out/
-just test
-just test -m elevenlabs                       # live API check (spends a few credits)
+alias narrate='uv run --project ~/path/to/narrate narrate'
+alias narakeet-api-client='uv run --project ~/path/to/narrate narakeet-api-client'
 ```
 
-`build` writes the MP4 and a poster JPG. With `subtitles: external` or `embed`
-it also writes `.srt` and `.vtt` files. Intermediate files are deleted unless
-you pass `--keep-work DIR`.
+### Update
 
-### Narakeet-compatible command
+- **Docker:** `docker pull ghcr.io/bricef/narrate`.
+- **From source:** `git pull && uv sync` in the checkout, then
+  `uv run narrate doctor`. If it reports that Chromium is missing, run
+  `uv run playwright install chromium` again.
 
-`narakeet-api-client` takes Narakeet's own flags, so existing build scripts can
-point at narrate unchanged:
-- `--repository-type local-dir|local-zip|zip-url|github`, `--repository`,
-  `--source`, and `--output` (default `result.mp4`).
-- `--github-token` and `--github-sha`.
-- `--project-type audio` (writes `result.mp3`).
-- `--api-key` is accepted and ignored.
+## Make your first video
 
-GitHub projects are fetched file by file under the script's folder rather than
-as the whole repository. The extra `--tts` flag chooses narrate's engine.
+1. Make a folder with a picture in it, named `photo.jpg`.
+2. Save this next to it as `script.md`:
 
-### GitHub Action
+   ````markdown
+   ---
+   voice: Amy
+   subtitles: overlay
+   ---
 
-The repository is a composite action that builds a video on the runner in the
-narrate image, with the same outputs as Narakeet's
-`build-video-github-action`: `video-file`, `poster-file`, and `srt-file` and
-`vtt-file` when the script asks for subtitle files.
+   ![](photo.jpg)
 
-```yaml
-- id: video
-  uses: bricef/narrate@main
-  with:
-    source-path: videos/intro.md              # or a .zip project
-    output: out/intro.mp4                     # default narrate/result.mp4
-    elevenlabs-api-key: ${{ secrets.ELEVENLABS_API_KEY }}  # optional
-- uses: actions/upload-artifact@v7
-  with:
-    name: intro
-    path: ${{ steps.video.outputs.video-file }}
-```
+   Hello! This video was made from a short Markdown file.
 
-- `tts` picks the engine as `--tts` does. The default `auto` uses ElevenLabs
-  when a key is given, Kokoro otherwise.
-- `image` picks the image (default `ghcr.io/bricef/narrate:latest`).
-- Models and synthesised speech are cached between runs.
-- While the repository and its package are private, only workflows in
-  repositories that they grant access to can use them: the repository's
-  [Actions access](https://docs.github.com/en/actions/sharing-automations/sharing-actions-and-workflows-from-your-private-repository),
-  and the package's "Manage Actions access" setting. The workflow's token
-  needs `packages: read`.
+   ---
 
-`.github/workflows/image.yml` builds the image, runs the test suite inside it
-and renders `examples/demo` through the action with it, keeping the video as
-an artifact. On main it then publishes the image as `latest` (and `sha-…`);
-a `v1.2.3` tag publishes `1.2.3` and `1.2`. A second job renders the demo
-again with the published image, pulled from ghcr.io the way other
-repositories pull it.
+   ```md
+   # How it works
+   * three dashes start a new scene
+   * paragraphs are read aloud
+   ```
 
-### Speech engines (`--tts`)
+   (pause: 1)
+   ````
 
-| Engine | Notes |
-| --- | --- |
-| `auto` (default) | ElevenLabs when `ELEVENLABS_API_KEY` is set, otherwise Kokoro |
-| `elevenlabs` | `eleven_multilingual_v2` by default (change it with `--tts-model`); renders speeds 0.7–1.2 natively |
-| `kokoro` | Kokoro-82M on the CPU (about 7× real time here); 54 voices across 9 languages; renders speeds 0.5–2 natively |
-| `silent` | silence timed like speech, for fast layout previews |
+3. Build it, in that folder:
 
-Speeds beyond an engine's native range (Narakeet allows 0.3–2) are synthesised at the
-nearest native speed and time-stretched the rest of the way, preserving pitch.
-Measured: Kokoro within 5% of the requested length; ElevenLabs within 6% at 1.8×,
-because its own speed setting is slightly non-linear.
+   ```sh
+   narrate build script.md
+   ```
 
-Synthesised audio is cached under `~/.cache/narrate/tts/`, so a rebuild only
-synthesises paragraphs that changed. That matters for ElevenLabs credits.
+   With Docker:
 
-The cache is never pruned automatically:
-- `narrate cache` shows its size per engine.
-- `narrate cache --prune --max-size 500M` and/or `--older-than 90` (days)
-  remove the least recently used entries.
-- Entries used in the last hour (`--keep-recent`) are never removed, so a
-  build in progress keeps what it needs.
+   ```sh
+   docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -v narrate-cache:/cache \
+       ghcr.io/bricef/narrate build script.md
+   ```
 
-### Parallelism
+   The first build downloads the voice model (about 350 MB).
+4. Open `script.mp4`. narrate also wrote `script.jpg`, a poster frame.
 
-Builds overlap their stages. Speech is synthesised in the background in
-script order while earlier scenes render, and video segments encode in a
-thread pool. The output is byte-identical to a sequential build.
+For a longer example, build the demo in a checkout:
+`uv run narrate build examples/demo/demo.md -o out/demo.mp4`. Its script
+shows voices, pauses, slides, a clip with a callout, and code.
 
-| Setting | Default |
-| --- | --- |
-| `--jobs N` (or `NARRATE_JOBS`) | up to 4 parallel encodes |
-| `NARRATE_KOKORO_WORKERS` | up to 4 Kokoro sessions |
-| `NARRATE_ELEVENLABS_CONCURRENCY` | 2, the free plan's limit |
+## Documentation
 
-### Emphasis
+- **[Writing scripts](docs/writing-scripts.md):** how to narrate, show
+  pictures and clips, add slides, subtitles, music, transitions and callouts.
+- **[Building videos](docs/building.md):** speech engines and voices,
+  ElevenLabs, Docker, GitHub Actions, Narakeet's command line, caches and
+  troubleshooting.
+- **[Format specification](docs/spec/narakeet-markdown.md):** every rule and
+  default of the script format, and how narrate settles what Narakeet leaves
+  open.
+- **[Development](docs/development.md):** tests, the container image, CI and
+  the code's layout.
 
-Neither engine exposes an emphasis control, so emphasis is a prosody bundle
-applied on any engine. The speed change is rendered by the engine itself.
+## Status
 
-| Level | Markup | Speed | Pitch | Gain |
-| --- | --- | --- | --- | --- |
-| `moderate` | `*x*`, `_x_` | 0.96× | +0.75 semitones | +1.5 dB |
-| `strong` | `**x**`, `__x__` | 0.92× | +1.5 semitones | +3 dB |
-| `reduced` | `~~x~~` | 1.06× | −1 semitone | −4 dB |
+narrate covers the whole Markdown format: every header property, stage
+direction, media option, narration markup, subtitle style and transition.
+Built from Narakeet's own example projects, its videos match Narakeet's
+renders within 0.1 s in length, for the examples without narration (the voices
+themselves differ;
+[Development](docs/development.md#conformance-with-narakeet)).
 
-Inline markup splits a paragraph into runs. Narakeet advises wrapping whole
-sentences, and mid-sentence emphasis adds a short join. `voice-emphasis` sets
-the level for the paragraphs that follow.
-
-### Phonetic spans
-
-`[təˈmeɪ.toʊ]{ipa}`, `{x-sampa}`, `{pinyin}` and `{jyutping}` give a word's
-pronunciation.
-- X-SAMPA is converted to IPA.
-- Pinyin can use tone marks or tone numbers, and is phonemised by espeak's
-  Mandarin.
-- Jyutping is converted to IPA from tables of initials and finals; tones are
-  dropped.
-- Kokoro speaks the IPA directly as phonemes, inside the same utterance.
-- ElevenLabs only reads IPA in `<phoneme>` tags on its flash/turbo v2 models,
-  so phonetic words are voiced by `eleven_flash_v2` with the same voice.
-
-### SSML
-
-A paragraph wrapped in `<speak>…</speak>` is interpreted by narrate, so every
-engine renders the same subset:
-- `<break>` (time or strength) is silence.
-- `<prosody rate pitch volume>` sets speed, pitch and gain.
-- `<emphasis>` uses the emphasis levels above.
-- `<say-as interpret-as="characters">` spells the text out.
-- `<phoneme>` and `<lang>` become phonetic and language spans.
-- `<sub alias>` reads the alias.
-- `<p>` and `<s>` add sentence breaks.
-
-Other tags keep their text, with a note. Malformed XML is read as plain text,
-with a warning.
-
-### Subtitles for recorded audio
-
-With subtitles on, scenes narrated by a recording (`(audio: talk.mp3)`, with no
-block quotes) are transcribed with faster-whisper on the CPU, and each cue is
-timed to its words.
-- The model (`small`, or `$NARRATE_STT_MODEL`) downloads once into the tools
-  cache.
-- Transcripts are cached by file content.
-
-### Callout designer
-
-Callout coordinates are output-frame pixels, which depend on the frame size and
-on how the image is fitted.
-- `narrate callouts image.png --size 720p --fit cover --position left` (or a
-  video with `--at 3.5`) renders the frame exactly as a build would, and
-  writes a self-contained HTML page.
-- Drag on the frame to draw a circle or rectangle, drag inside it to move it,
-  switch to a mask or change the shading, then copy the `(callout: …)`
-  direction it prints.
-
-### Slide look
-
-Default slides follow measurements of Narakeet's own renders:
-- A 50 px base set on the slide itself, so a theme's `body` font size doesn't
-  shrink slide text, while colour still inherits.
-- Plain slides in bold at 2em.
-- Browser-default heading sizes and margins (`h1` 2em, `h2` 1.5em).
-- Sans-serif headings, with body and list text in the default serif (as
-  Narakeet renders them).
-- Code at 1em in a Courier-style font, in Narakeet's dark-red and bold-black
-  palette.
-
-The base rules have zero specificity, so a custom `.css` theme overrides any
-of them.
-
-### Background music
-
-The built-in track names (`ukulele-1`, `ukulele-2`, `uplifting-1`,
-`uplifting-2`, `corporate-1`) play narrate's own synthesised loops, since
-Narakeet's tracks can't be redistributed.
-- They're licence-free, rendered once into the tools cache, and mastered to
-  sit about 10 dB under narration; `background: ukulele-1 2` doubles the
-  level.
-- Put real recordings with the same names in `$NARRATE_MUSIC_DIR` to use
-  those instead.
-
-### Russian stress marks
-
-Narakeet's `^` before a Russian vowel (`гвозд^ики`) becomes the standard
-written stress mark, a combining acute accent (`гвозди́ки`).
-- ElevenLabs sees it as ordinary Russian text.
-- Kokoro has no Russian voice, and espeak (its phonemiser) honours the mark
-  in some words but not all.
-
-### Voice names
-
-A script's voice can be named in any of three ways:
-
-- **A Kokoro ID**, such as `bf_emma`.
-- **An ElevenLabs voice:** one of its default voices (`George`) or a raw voice
-  ID from your own library.
-- **A Narakeet voice name**, such as `Brian`.
-
-Each engine uses the name directly when it's one of its own voices.
-ElevenLabs also tries your account's library, if the key may list voices.
-Otherwise the engine picks its voice of the same language and gender, so
-scripts carry across engines. Australian, Indian, Irish, Scottish and South
-African English fall back to British, then American.
-
-To choose exactly, pin names per engine in `voices.yaml`, either next to the
-script or in `~/.config/narrate/voices.yaml` (the project file wins):
-
-```yaml
-Brian:
-  kokoro: bm_lewis
-  elevenlabs: George      # a default voice name, or a voice id
-```
-
-`narrate voices [script]` lists each engine's voices and the pins in effect.
-
-## Feature status
-
-| Area | Works | Not yet (noted when used) |
-| --- | --- | --- |
-| Header | `size`, `voice`, `voice-speed`, `voice-volume`, `narration-language`, `canvas`, `theme` (default, light, `.css`), `asset-resize`, `subtitles` (every mode and style property), `background` (project file or built-in track, volume, fades), `poster-time`, `target`, `transition` (all 26 types), `voice-pitch`, built-in background tracks | |
-| Images | fit/contain/cover, positions, several images per scene, pan/zoom animation (`zoom`, `zoomout`, `pan`, `panzoom`, `panzoomout`) | |
-| Videos | segments, still frames, all six sync modes, volume/mute, animated GIFs, several clips and images in one scene | |
-| Narration | paragraphs, pauses, `pause-until`, recorded audio, voices, speed (any 0.3–2), volume (presets, or `normalized` to EBU R 128), pitch, emphasis (markup and `voice-emphasis`), language spans (`[See]{de}`), phonetic spans (IPA, X-SAMPA, Pinyin, Jyutping), SSML paragraphs, ellipsis pauses, spelling (backticks and `{literal}`, with letter names in English, Spanish, French, German, Italian and Portuguese), `narration-mode` (`fragment`, and `merge` across scenes) | |
-| Visuals | plain, Markdown and syntax-highlighted slides (several per scene take turns), themes and custom CSS, callouts (circle, rectangle, mask), transitions between scenes | |
-| Subtitles | cues from narration, block quotes or speech-to-text on recorded audio, SRT/VTT, embedded track, burned-in styles, custom fonts | |
-
-### Checked against Narakeet's own renders
-
-`just reference` fetches Narakeet's example projects together with the
-`result.mp4` that Narakeet rendered from each script. `tests/test_conformance.py`
-builds every example without narration and compares it with Narakeet's
-render. Lengths match within 0.1 s, and frames, once each scene has settled,
-within a few grey levels. Skip it with `just test -m "not conformance"`. What
-the renders show:
-
-- **Matches exactly:** where a script has no narration (the `slides` example
-  is 14.0 s in both).
-- **Transitions** don't change a video's length in Narakeet, and narrate matches that (the `transition-types` example is 25.0 s in both).
-- **Pauses:** Narakeet adds about 0.5 s to some scenes that hold a text slide and a pause, but not to a plain `(pause: 1)` scene. That's no consistent rule, so narrate keeps pauses exact (spec §17).
-
-## Layout
-
-- `src/narrate/`
-  - `script.py`: parser (spec §2, §5, §7).
-  - `config.py`: header settings.
-  - `text.py`: narration markup.
-  - `tts.py`: speech engines and voices.
-  - `frames.py`: Chromium frames.
-  - `subtitles.py`: subtitle cues and files.
-  - `build.py`: timing, rendering and muxing.
-  - `cli.py`: the command line.
-- `docs/spec/narakeet-markdown.md`: the input format. §16 lists open questions
-  and the answers used here.
-- `examples/demo/`: the demo script. Its images and clip are generated by
-  `make_assets.py`.
-- `scripts/fetch-narakeet-reference.sh`: the local, git-ignored Narakeet
-  reference snapshot. See `reference/SOURCES.md`.
-- `Dockerfile`: the container image (ffmpeg, Python environment and runtime
-  stages, plus a `test` stage).
-- `action.yml`: the GitHub Action; `.github/workflows/image.yml` builds,
-  tests and publishes the image.
+It does not take PowerPoint, Google Slides or Keynote input, or offer
+Narakeet's REST API or web editor. It runs on Linux; elsewhere, use Docker.
+The image is built for x86-64, so on Apple Silicon Docker runs it under
+emulation, more slowly.

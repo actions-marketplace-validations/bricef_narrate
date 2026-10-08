@@ -23,7 +23,7 @@ Every rule is documented by Narakeet unless tagged:
 | --- | --- |
 | **[obs]** | Not in the docs, but used in Narakeet's official example scripts (which build), so a compatible parser must accept it. |
 | **[inf]** | Inferred from the docs or examples; strongly implied but never stated. |
-| **[gap]** | Undocumented or contradictory. A reimplementation has to choose; §16 lists every gap with a proposed resolution. |
+| **[gap]** | Undocumented or contradictory. A reimplementation has to choose; §16 lists every gap with narrate's choice. |
 
 Source keys used in the `Sources:` lines:
 
@@ -849,8 +849,9 @@ gracefully, never fail silently:
 its assets. They are the closest thing to a test suite.
 
 **The repository has no licence.** Fetch it at test time; don't vendor it into
-this repo. `scripts/fetch-narakeet-reference.sh` copies the scripts (not the
-media) into `reference/examples/`.
+this repo. `scripts/fetch-narakeet-reference.sh` copies the scripts into
+`reference/examples/`; with `--media` (`just reference`) it also fetches their
+media and the `result.mp4` Narakeet rendered from each.
 
 | Project | Exercises |
 | --- | --- |
@@ -880,22 +881,26 @@ media) into `reference/examples/`.
 
 ---
 
-## 16. Gaps and proposed resolutions
+## 16. Gaps and how narrate resolves them
 
 Each item below is something the docs leave open, or where the docs and the
-examples disagree. The proposals favour what the official examples imply.
+examples disagree, with what narrate does about it. The choices favour what
+the official examples imply.
 
-1. **Directive recognition.** Treat any whole line `(key: value)`, and any
-   paragraph that begins with `(` and ends with `)`, as a directive. This
-   covers the stacked and fence-adjacent forms in the examples.
+1. **Directive recognition.** Any whole line `(key: value)` is a directive,
+   which covers the stacked and fence-adjacent forms in the examples. A
+   multi-line directive opens with `(key:` alone on its line and ends on a line
+   ending in `)`; its content is a one-key YAML map. A parenthesis that isn't
+   shaped like that (capitals, spaces or no colon in the key) stays narration,
+   and an unknown lowercase key is dropped with a warning.
 2. **Separator recognition.** Outside fenced code, any line of 3 or more `-`
    ends the scene, with or without blank lines around it. Never read it as a
    CommonMark setext heading underline.
 3. **Empty scenes** (for example from a trailing `---`) are dropped.
-4. **An image with no audio and no `duration`.** Use 1 s (the documented
-   script default for slides); offer a configurable default.
-5. **`duration` together with audio.** The scene lasts max(`duration`, audio).
-   Warn when `duration` is shorter than the audio.
+4. **An image with no audio and no `duration`.** 1 s, the documented script
+   default for slides. It is fixed, and several such images share it.
+5. **`duration` together with audio.** The scene lasts max(`duration`, audio),
+   with no warning when `duration` is the shorter.
 6. **Several videos, or videos plus images, in one scene.** *Implemented
    (narrate #4).* The visuals play in order as one sequence:
    - Clips count at their own length, and images at 1 s each.
@@ -940,26 +945,32 @@ examples disagree. The proposals favour what the official examples imply.
 14. **Block quotes with `subtitles: none` or no header.** Burn them in with
     the `overlay` style. They are explicit content, so `none` only suppresses
     **automatic** cues.
-15. **Subtitle `outline` and `background` defaults.** Black (the reference's
-    "white" contradicts its own description).
-16. **`fragment` scope.** Make it scene-scoped like the voice directions (the
-    examples repeat it in every scene). `merge` persists until `normal`.
-    *`merge` implemented (narrate #10):*
+15. **Subtitle `outline` and `background` defaults.** The outline is black
+    (the reference's "white" contradicts its own description). There is no box
+    unless `background` is set, which then replaces the outline;
+    `overlay-background` uses semi-transparent black.
+16. **`fragment` scope.** Like every `narration-mode`, `fragment` persists
+    across scenes until another `narration-mode` changes it; the examples
+    repeat it in every scene, which does no harm. *`merge` implemented
+    (narrate #10)*, ended by the next scene that sets any other mode:
     - The narration of the run of scenes from the one that sets `merge` to the
       one that sets `normal` is synthesised as one track.
     - The scenes share its time equally, in whole frames, and each keeps its
       own visuals, slides, quotes and callouts within its share.
-17. **Span combining a style and a language** (`[x]{ipa de}`). Reject with a
-    clear error until it's needed.
+17. **Span combining a style and a language** (`[x]{ipa de}`). Not
+    supported: the span is read as plain text, with a note.
 18. **Audio file in image syntax** (`![](a.mp3)`). Treat it as `(audio: a.mp3)`.
 19. **Position on videos.** Accept the image position tokens for `cover` crops.
 20. **Missing positions** (`top-right`, `bottom-left`, `bottom-right`).
-    Accepting them is a harmless extension; mark it non-portable.
+    Not accepted, as in Narakeet: in alt text or an `(image:)` map they are
+    dropped with a warning, and `(image-position: top-right)` is an error.
 21. **`1080p-portait` spelling.** Accept both spellings.
-22. **Built-in background track names.** Map them to locally bundled
-    royalty-free tracks, or fail with "track not available locally".
-23. **Unknown voice names.** Fail by default, with an option to fall back to a
-    configured default voice.
+22. **Built-in background track names.** A project file with that name wins;
+    otherwise a recording of that name in `$NARRATE_MUSIC_DIR`, otherwise
+    narrate's own synthesised stand-in, rendered once into the tools cache.
+23. **Unknown voice names.** They never fail. `voices.yaml` pins apply first;
+    otherwise each engine picks a voice of the same language and gender (with
+    an accent fallback), or its default voice, and notes the substitution.
 24. **SSML.** *Implemented (narrate #9):* narrate interprets a subset
     itself, the same on every engine: break, prosody, emphasis, say-as
     (spelling), phoneme, lang, sub, p and s. Unknown tags keep their text and
