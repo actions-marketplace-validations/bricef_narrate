@@ -119,6 +119,14 @@ Inline markup splits a paragraph into runs. Narakeet advises wrapping whole
 sentences, and mid-sentence emphasis adds a short join. `voice-emphasis` sets
 the level for the paragraphs that follow.
 
+### Russian stress marks
+
+Narakeet's `^` before a Russian vowel (`гвозд^ики`) becomes the standard
+written stress mark, a combining acute accent (`гвозди́ки`).
+- ElevenLabs sees it as ordinary Russian text.
+- Kokoro has no Russian voice, and espeak (its phonemiser) honours the mark
+  in some words but not all.
+
 ### Voice names
 
 A script's voice can be named in any of three ways:

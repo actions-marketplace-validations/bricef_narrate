@@ -26,6 +26,9 @@ _EMPHASIS_RE = re.compile(
     r"|\*(?P<moderate>.+?)\*|(?<!\w)_(?P<moderate2>.+?)_(?!\w)"
 )
 _ELLIPSIS_RE = re.compile(r"…|\.{3}")
+# Narakeet marks Russian stress with a caret before the vowel (гвозд^ики); the
+# standard written form is a combining acute accent after it (гвозди́ки)
+_STRESS_RE = re.compile(r"\^([аеёиоуыэюяАЕЁИОУЫЭЮЯ])")
 
 def _letters(names: str) -> dict[str, str]:
     """'a b c …' style tables: 26 names for a-z, separated by '|'."""
@@ -120,7 +123,7 @@ def speech_runs(text: str, lang: str, notes: set[str]) -> list[Run]:
 
     runs: list[Run] = []
     for chunk, emphasis in pieces:
-        for i, part in enumerate(_ELLIPSIS_RE.split(_TAG_RE.sub(" ", chunk).replace("^", ""))):
+        for i, part in enumerate(_ELLIPSIS_RE.split(stress_marks(_TAG_RE.sub(" ", chunk)))):
             part = " ".join(part.split())
             if not any(ch.isalnum() for ch in part):
                 continue
@@ -132,6 +135,11 @@ def speech_runs(text: str, lang: str, notes: set[str]) -> list[Run]:
                 pause = 0.0
             runs.append(Run(part, emphasis, pause))
     return runs
+
+
+def stress_marks(text: str) -> str:
+    """Caret stress marks before Cyrillic vowels become combining acute accents; other carets go."""
+    return _STRESS_RE.sub(lambda m: m.group(1) + "\u0301", text).replace("^", "")
 
 
 def ssml_text(ssml: str) -> str:
