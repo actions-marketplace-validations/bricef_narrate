@@ -167,6 +167,16 @@ class SynthCache:
     def path(self, *key: object) -> Path:
         return self.dir / (hashlib.sha256(json.dumps(key).encode()).hexdigest() + ".npy")
 
+    @staticmethod
+    def load(path: Path) -> np.ndarray | None:
+        """The cached audio, refreshing its timestamp so pruning sees it as recently used."""
+        try:
+            audio = np.load(path)
+        except (FileNotFoundError, ValueError, OSError):
+            return None
+        os.utime(path)
+        return audio
+
 
 class Synth(Protocol):
     name: str
@@ -290,8 +300,8 @@ class KokoroSynth:
         if clamped != speed:
             notes.add(f"voice-speed {speed} (Kokoro accepts 0.5–2; clamped)")
         cached = self._cache.path(MODEL_FILES[0], text, voice.id, voice.lang, round(clamped, 3))
-        if cached.exists():
-            return np.load(cached)
+        if (hit := self._cache.load(cached)) is not None:
+            return hit
         kokoro = self._engine()
         with self._phonemize:
             phonemes = kokoro.tokenizer.phonemize(text, voice.lang)
@@ -346,8 +356,8 @@ class ElevenLabsSynth:
         if clamped != speed:
             notes.add(f"voice-speed {speed} (ElevenLabs accepts {lo}–{hi}; clamped)")
         cached = self._cache.path(self.model, text, voice.id, voice.lang, round(clamped, 3))
-        if cached.exists():
-            return np.load(cached)
+        if (hit := self._cache.load(cached)) is not None:
+            return hit
         body: dict = {"text": text, "model_id": self.model}
         if clamped != 1.0:
             body["voice_settings"] = {"speed": clamped}
