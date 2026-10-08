@@ -84,6 +84,25 @@ def cmd_audio(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_callouts(args: argparse.Namespace) -> int:
+    from .config import parse_size
+    from .designer import designer_page
+
+    source = Path(args.file)
+    if not source.is_file():
+        print(f"error: {source} not found", file=sys.stderr)
+        return 2
+    width, height = parse_size(args.size)
+    out = Path(args.output or f"{source.stem}-callouts.html")
+    designer_page(source, out, width=width, height=height, fit=args.fit, position=args.position, at=args.at)
+    print(out.resolve().as_uri())
+    if args.open:
+        import webbrowser
+
+        webbrowser.open(out.resolve().as_uri())
+    return 0
+
+
 def cmd_check(args: argparse.Namespace) -> int:
     with script_path(args) as path:
         return _check(path)
@@ -196,6 +215,16 @@ def main(argv: list[str] | None = None) -> int:
     audio.add_argument("-j", "--jobs", type=int)
     audio.add_argument("-q", "--quiet", action="store_true")
     audio.set_defaults(func=cmd_audio)
+
+    callouts = sub.add_parser("callouts", help="write a page for placing callouts on an image or video frame")
+    callouts.add_argument("file", help="the image or video the callout goes on")
+    callouts.add_argument("--size", default="720p", help="the script's video size (default 720p)")
+    callouts.add_argument("--fit", choices=["cover", "contain", "fit"], default="cover")
+    callouts.add_argument("--position", default="center", choices=["center", "top-left", "left", "right", "top", "bottom"])
+    callouts.add_argument("--at", type=float, default=0.0, help="for a video: the moment to show, in seconds")
+    callouts.add_argument("-o", "--output", help="the page to write (default: <file>-callouts.html here)")
+    callouts.add_argument("--open", action="store_true", help="open the page in a browser")
+    callouts.set_defaults(func=cmd_callouts)
 
     check = sub.add_parser("check", help="parse a script and check its files, without rendering")
     check.add_argument("script")

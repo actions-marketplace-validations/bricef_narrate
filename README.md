@@ -59,6 +59,7 @@ uv run playwright install chromium   # slides and frames are rendered by headles
 uv run narrate build script.md -o video.mp4   # or: just build script.md
 uv run narrate build project.zip              # a .zip of the script and its assets (--source picks the script)
 uv run narrate audio script.md -o out.mp3     # narration only: .mp3, .m4a, .ogg, .opus, .flac or .wav
+uv run narrate callouts pic.png --fit contain # a page for drawing callouts (prints its URL; --open)
 uv run narrate check script.md                # parse and check files, no rendering
 uv run narrate voices                         # voices per engine
 just demo                                     # examples/demo rendered with both engines into out/
@@ -170,6 +171,17 @@ timed to its words.
 - The model (`small`, or `$NARRATE_STT_MODEL`) downloads once into the tools
   cache.
 - Transcripts are cached by file content.
+
+### Callout designer
+
+Callout coordinates are output-frame pixels, which depend on the frame size and
+on how the image is fitted.
+- `narrate callouts image.png --size 720p --fit cover --position left` (or a
+  video with `--at 3.5`) renders the frame exactly as a build would, and
+  writes a self-contained HTML page.
+- Drag on the frame to draw a circle or rectangle, drag inside it to move it,
+  switch to a mask or change the shading, then copy the `(callout: …)`
+  direction it prints.
 
 ### Slide look
 
