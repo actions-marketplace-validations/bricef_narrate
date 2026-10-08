@@ -37,12 +37,31 @@ runs:
   steps:
     - uses: astral-sh/setup-uv@v6
 
-    - name: Cache narrate's models, ffmpeg and speech
+    # hashFiles() can't read the action's own directory when another repository
+    # uses it, so the key comes from a shell step: the files pinning ffmpeg, the
+    # models and the music, and uv.lock for Playwright's Chromium.
+    - name: Cache keys
+      id: keys
+      shell: bash
+      run: |
+        cd "$GITHUB_ACTION_PATH"
+        echo "tools=$(cat uv.lock src/narrate/{media,tts,stt,music}.py | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+    - name: Cache tools (ffmpeg, models, music, Chromium)
       uses: actions/cache@v4
       with:
-        path: ~/.cache/narrate
-        key: narrate-${{ runner.os }}-${{ hashFiles(format('{0}/uv.lock', github.action_path)) }}
-        restore-keys: narrate-${{ runner.os }}-
+        path: |
+          ~/.cache/narrate-tools
+          ~/.cache/ms-playwright
+        key: narrate-tools-${{ runner.os }}-${{ steps.keys.outputs.tools }}
+
+    # Speech grows with every script, so each run saves a new entry seeded from the last
+    - name: Cache synthesised speech
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/narrate-speech
+        key: narrate-speech-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+        restore-keys: narrate-speech-${{ runner.os }}-
 
     - name: Install narrate and headless Chromium
       shell: bash
@@ -59,6 +78,7 @@ runs:
         OUTPUT: ${{ inputs.output }}
         TTS: ${{ inputs.tts }}
       run: |
+        export NARRATE_TOOLS="$HOME/.cache/narrate-tools" NARRATE_CACHE="$HOME/.cache/narrate-speech"
         mkdir -p "$(dirname "$OUTPUT")"
         uv run --project "$GITHUB_ACTION_PATH" narrate build "$SOURCE" -o "$OUTPUT" --tts "$TTS"
         base="${OUTPUT%.*}"
