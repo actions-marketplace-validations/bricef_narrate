@@ -70,6 +70,20 @@ def _build(args: argparse.Namespace, path: Path) -> int:
     return 0
 
 
+def cmd_audio(args: argparse.Namespace) -> int:
+    with script_path(args) as path:
+        script = parse_file(path)
+        out = Path(args.output or path.with_suffix(".mp3").name)
+        log = (lambda msg: None) if args.quiet else (lambda msg: print(msg, file=sys.stderr))
+        started = time.monotonic()
+        synth = make_synth(args.tts, args.tts_model)
+        result = Builder(script, synth, log=log, jobs=args.jobs).build_audio(out)
+        _report(script, result.notes)
+        extras = "".join(f", {p}" for p in result.subtitle_files)
+        print(f"{result.video} ({result.duration:.1f}s audio, built in {time.monotonic() - started:.1f}s){extras}")
+    return 0
+
+
 def cmd_check(args: argparse.Namespace) -> int:
     with script_path(args) as path:
         return _check(path)
@@ -169,6 +183,16 @@ def main(argv: list[str] | None = None) -> int:
     build.add_argument("-j", "--jobs", type=int, help="parallel encodes (default: up to 4, or $NARRATE_JOBS)")
     build.add_argument("-q", "--quiet", action="store_true")
     build.set_defaults(func=cmd_build)
+
+    audio = sub.add_parser("audio", help="render only the narration, as an audio file")
+    audio.add_argument("script", help="a .md/.txt script, or a .zip project")
+    audio.add_argument("--source", help="the script's path inside a .zip project")
+    audio.add_argument("-o", "--output", help="output file: .mp3 (default), .m4a, .ogg, .opus, .flac or .wav")
+    audio.add_argument("--tts", choices=["auto", "kokoro", "elevenlabs", "silent"], default="auto")
+    audio.add_argument("--tts-model", help="ElevenLabs model id")
+    audio.add_argument("-j", "--jobs", type=int)
+    audio.add_argument("-q", "--quiet", action="store_true")
+    audio.set_defaults(func=cmd_audio)
 
     check = sub.add_parser("check", help="parse a script and check its files, without rendering")
     check.add_argument("script")

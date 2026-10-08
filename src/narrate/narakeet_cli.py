@@ -61,7 +61,7 @@ def main(argv: list[str] | None = None, get=_get) -> int:
     parser.add_argument("--repository-type", required=True, choices=["local-dir", "local-zip", "zip-url", "github"])
     parser.add_argument("--repository", required=True)
     parser.add_argument("--source", required=True, help="path of the main script inside the repository")
-    parser.add_argument("--output", default="result.mp4")
+    parser.add_argument("--output", help="default: result.mp4, or result.mp3 for audio projects")
     parser.add_argument("--project-type", choices=["video", "audio"], default="video")
     parser.add_argument("--api-key", help="accepted for compatibility; narrate builds locally")
     parser.add_argument("--github-token")
@@ -70,11 +70,9 @@ def main(argv: list[str] | None = None, get=_get) -> int:
     parser.add_argument("--tts", choices=["auto", "kokoro", "elevenlabs", "silent"], default="auto",
                         help="narrate's speech engine (not a Narakeet option)")
     args = parser.parse_args(argv)
-    if args.project_type == "audio":
-        print("error: --project-type audio is not supported yet", file=sys.stderr)
-        return 2
-
-    build = ["build", "--tts", args.tts, "-o", str(Path(args.output).resolve())] + ([] if args.verbose else ["-q"])
+    output = args.output or ("result.mp3" if args.project_type == "audio" else "result.mp4")
+    command = "audio" if args.project_type == "audio" else "build"
+    build = [command, "--tts", args.tts, "-o", str(Path(output).resolve())] + ([] if args.verbose else ["-q"])
     kind, repo = args.repository_type, args.repository
     if kind == "local-dir":
         return cli.main([*build, str(Path(repo) / args.source)])
