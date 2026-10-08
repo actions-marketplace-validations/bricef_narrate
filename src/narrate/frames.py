@@ -83,6 +83,7 @@ class FrameSpec:
     font_size: int | None = None
     callouts: list[dict[str, Any]] = field(default_factory=list)
     over_video: bool = False  # transparent overlay for ffmpeg to composite
+    backdrop: bool = False  # in an overlay, keep the theme backdrop (over an animated image)
 
 
 def slide_html(slide: SlideSpec, dark: bool) -> str:
@@ -153,7 +154,7 @@ def frame_html(spec: FrameSpec, width: int, height: int) -> str:
         slide = f'<div class="slide">{slide_html(spec.slide, dark)}</div>'
         # Over a still image the slide sits inside the backdrop, which custom
         # themes restyle; Narakeet has no backdrop over videos
-        parts.append(f'<div class="backdrop">{slide}</div>' if spec.image is not None else slide)
+        parts.append(f'<div class="backdrop">{slide}</div>' if spec.image is not None or spec.backdrop else slide)
     for i, props in enumerate(spec.callouts):
         parts.append(callout_svg(i, props, width, height))
     return (f"<!doctype html><html><head><meta charset='utf-8'>{head}</head>"
