@@ -25,7 +25,7 @@ import numpy as np
 
 from . import media, motion, subtitles, voicemap
 from .config import (
-    BUILTIN_MUSIC, FPS, TRANSITIONS, ConfigError, Settings, SubtitleConfig, parse_transition, parse_color, parse_number, parse_speed,
+    BUILTIN_MUSIC, FPS, TRANSITIONS, ConfigError, Settings, SubtitleConfig, parse_pitch, parse_transition, parse_color, parse_number, parse_speed,
     parse_time, parse_volume, settings_from_header,
 )
 from .doctor import find_font
@@ -45,7 +45,6 @@ TARGETS = {  # x264 preset, crf, faststart
     "self-hosted": ("slow", 23, True),
 }
 UNSUPPORTED = {
-    "voice-pitch": "voice-pitch (ignored)",
     "voice-emphasis": "voice-emphasis (ignored)",
 }
 
@@ -169,8 +168,6 @@ class Builder:
         except voicemap.VoiceMapError as e:
             raise BuildError(str(e)) from None
         self.mode = "normal"  # narration-mode persists across scenes
-        if self.settings.voice_pitch:
-            self.notes.add(UNSUPPORTED["voice-pitch"])
         try:
             self.transition = parse_transition(self.settings.transition) if self.settings.transition else None
         except ConfigError as e:
@@ -192,13 +189,15 @@ class Builder:
             self._voices[key] = self.synth.resolve(mapped, lang.lower() if lang else None, self.notes)
         return self._voices[key]
 
-    def _speak(self, text: str, voice: Voice, speed: float) -> np.ndarray:
-        """Synthesise at the nearest speed the engine supports, then stretch the remainder."""
+    def _speak(self, text: str, voice: Voice, speed: float, pitch: float = 1.0) -> np.ndarray:
+        """Synthesise at the nearest speed the engine supports, stretch the remainder, shift pitch."""
         lo, hi = self.synth.speed_range
         native = min(hi, max(lo, speed))
         audio = self.synth.synth(text, voice, native, self.notes)
         if abs(speed / native - 1.0) > 1e-3 and len(audio):
             audio = media.time_stretch(audio, SR, speed / native)
+        if abs(pitch - 1.0) > 1e-3 and len(audio):
+            audio = media.pitch_shift(audio, SR, pitch)
         return audio
 
     def _theme(self, value: str, line: int) -> str:
@@ -213,7 +212,7 @@ class Builder:
     def plan_scene(self, scene, workdir: Path) -> ScenePlan:
         s = self.settings
         voice_name, lang = s.voice, s.narration_language
-        speed, volume = s.voice_speed, s.voice_volume
+        speed, volume, pitch = s.voice_speed, s.voice_volume, s.voice_pitch
         image_size: str | None = None
         image_position: str | None = None
         duration: float | None = None
@@ -235,6 +234,8 @@ class Builder:
                         speed = parse_speed(value)
                     elif key == "voice-volume":
                         volume = parse_volume(value)
+                    elif key == "voice-pitch":
+                        pitch = parse_pitch(value)
                     elif key == "narration-language":
                         lang = None if str(value).lower() == "default" else str(value)
                     elif key == "narration-mode":
@@ -297,7 +298,7 @@ class Builder:
                     for i, part in enumerate(parts):
                         if i:
                             track.silence(ELLIPSIS_PAUSE)
-                        track.add(apply_gain(self._speak(part, voice, speed), volume))
+                        track.add(apply_gain(self._speak(part, voice, speed, pitch), volume))
                     if parts:
                         caption = subtitle_text(ssml_text(block.text) if block.ssml else block.text)
                         narration_spans.append((start, track.seconds, caption))

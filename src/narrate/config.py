@@ -115,6 +115,22 @@ def parse_speed(value: Any) -> float:
     return speed
 
 
+# voice-pitch presets in semitones; numbers (-150..150) are read as hundredths
+# of an octave, so 100 is an octave up and Narakeet's "squeaky" 130 is very high
+PITCH_PRESETS = {"x-low": -4.0, "low": -2.0, "normal": 0.0, "medium": 0.0, "high": 2.0, "x-high": 4.0}
+
+
+def parse_pitch(value: Any) -> float:
+    """A frequency ratio: 1.0 leaves the voice unchanged."""
+    text = str(value).strip().lower()
+    if text in PITCH_PRESETS:
+        return 2 ** (PITCH_PRESETS[text] / 12)
+    amount = parse_number(text, "voice-pitch")
+    if not -150 <= amount <= 150:
+        raise ConfigError(f"voice-pitch {amount} is outside -150–150")
+    return 2 ** (amount / 100)
+
+
 def parse_volume(value: Any) -> float | str:
     """Gain in dB, or "normalized"."""
     text = str(value).strip().lower()
@@ -161,7 +177,7 @@ class Settings:
     voice: str | None = None
     voice_speed: float = 1.0
     voice_volume: float | str = 0.0
-    voice_pitch: str | None = None
+    voice_pitch: float = 1.0
     narration_language: str | None = None
     canvas: str | None = None
     theme: str = "default"
@@ -235,7 +251,7 @@ def settings_from_header(header: dict[str, Any], warnings: list[str]) -> Setting
         "voice": lambda v: setattr(s, "voice", str(v).strip()),
         "voice-speed": lambda v: setattr(s, "voice_speed", parse_speed(v)),
         "voice-volume": lambda v: setattr(s, "voice_volume", parse_volume(v)),
-        "voice-pitch": lambda v: setattr(s, "voice_pitch", str(v).strip()),
+        "voice-pitch": lambda v: setattr(s, "voice_pitch", parse_pitch(v)),
         "narration-language": lambda v: setattr(s, "narration_language", str(v).strip()),
         "canvas": lambda v: setattr(s, "canvas", parse_color(v, "canvas")),
         "theme": lambda v: setattr(s, "theme", str(v).strip()),
