@@ -67,7 +67,7 @@ def check_ffmpeg() -> list[Check]:
         return [Check("ffmpeg", False, str(e), "uv run narrate models, or set NARRATE_FFMPEG")]
     checks = [Check("ffmpeg", True, f"{version.splitlines()[0]} ({exe})")]
     needs = {"libx264 encoder": " libx264 " in encoders, "subtitles filter (libass)": " subtitles " in filters,
-             "xfade filter": " xfade " in filters}
+             "xfade filter": " xfade " in filters, "rubberband filter (pitch)": " rubberband " in filters}
     for name, ok in needs.items():
         checks.append(Check(f"ffmpeg {name}", ok, "present" if ok else "missing",
                             "" if ok else "use a full ffmpeg build (unset NARRATE_FFMPEG to use narrate's own)"))
