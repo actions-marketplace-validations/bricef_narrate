@@ -55,6 +55,7 @@ uv run narrate check script.md                # parse and check files, no render
 uv run narrate voices                         # voices per engine
 just demo                                     # examples/demo rendered with both engines into out/
 just test
+just test -m elevenlabs                       # live API check (spends a few credits)
 ```
 
 `build` writes the MP4 and a poster JPG. With `subtitles: external` or `embed`

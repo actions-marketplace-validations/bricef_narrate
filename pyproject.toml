@@ -27,4 +27,9 @@ build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["kokoro: needs the Kokoro model files (slow; deselect with -m 'not kokoro')"]
+# Live API tests spend credits: opt in with `just test -m elevenlabs`
+addopts = "-m 'not elevenlabs'"
+markers = [
+    "kokoro: needs the Kokoro model files (slow; deselect with -m 'not kokoro')",
+    "elevenlabs: calls the live ElevenLabs API with ELEVENLABS_API_KEY (spends a few credits)",
+]
