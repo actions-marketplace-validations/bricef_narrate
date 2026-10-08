@@ -23,7 +23,7 @@ from typing import Any, Callable
 
 import numpy as np
 
-from . import media, motion, subtitles, voicemap
+from . import media, motion, music, subtitles, voicemap
 from .config import (
     BUILTIN_MUSIC, FPS, TRANSITIONS, ConfigError, Settings, SubtitleConfig, parse_pitch, parse_transition, parse_color, parse_number, parse_speed,
     parse_time, parse_volume, settings_from_header,
@@ -639,18 +639,17 @@ class Builder:
         bg = self.settings.background
         candidate = self.script.base_dir / bg.source
         if not candidate.is_file():
-            if bg.source in BUILTIN_MUSIC:
-                self.notes.add(f"built-in background track {bg.source!r} (not bundled; no music)")
-                return np.zeros(total, dtype=np.float32)
-            raise BuildError(f"background file not found: {bg.source}")
-        music = fit_length(media.decode_audio(candidate, SR), total, tile=True) * bg.volume
+            if bg.source not in BUILTIN_MUSIC:
+                raise BuildError(f"background file not found: {bg.source}")
+            candidate = music.track(bg.source)  # narrate's own rendering of Narakeet's track name
+        loop = fit_length(media.decode_audio(candidate, SR), total, tile=True) * bg.volume
         if bg.fade_in and scene_samples:
             n = min(scene_samples[0], total)
-            music[:n] *= np.linspace(0.0, 1.0, n, dtype=np.float32)
+            loop[:n] *= np.linspace(0.0, 1.0, n, dtype=np.float32)
         if bg.fade_out and scene_samples:
             n = min(scene_samples[-1], total)
-            music[total - n:] *= np.linspace(1.0, 0.0, n, dtype=np.float32)
-        return music
+            loop[total - n:] *= np.linspace(1.0, 0.0, n, dtype=np.float32)
+        return loop
 
     def _mux(self, out: Path, scene_segments: list[list[Path]], scene_frames: list[int],
              transitions: list[tuple[str, float] | None], wav: Path, cues: list[Cue], work: Path) -> list[Path]:

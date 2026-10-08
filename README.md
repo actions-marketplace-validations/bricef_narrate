@@ -147,6 +147,17 @@ engine renders the same subset:
 Other tags keep their text, with a note. Malformed XML is read as plain text,
 with a warning.
 
+### Background music
+
+The built-in track names (`ukulele-1`, `ukulele-2`, `uplifting-1`,
+`uplifting-2`, `corporate-1`) play narrate's own synthesised loops, since
+Narakeet's tracks can't be redistributed.
+- They're licence-free, rendered once into the tools cache, and mastered to
+  sit about 10 dB under narration; `background: ukulele-1 2` doubles the
+  level.
+- Put real recordings with the same names in `$NARRATE_MUSIC_DIR` to use
+  those instead.
+
 ### Russian stress marks
 
 Narakeet's `^` before a Russian vowel (`гвозд^ики`) becomes the standard
@@ -185,7 +196,7 @@ Brian:
 
 | Area | Works | Not yet (noted when used) |
 | --- | --- | --- |
-| Header | `size`, `voice`, `voice-speed`, `voice-volume`, `narration-language`, `canvas`, `theme` (default, light, `.css`), `asset-resize`, `subtitles` (every mode and style property), `background` (project file, volume, fades), `poster-time`, `target`, `transition` (all 26 types), `voice-pitch` | built-in background tracks |
+| Header | `size`, `voice`, `voice-speed`, `voice-volume`, `narration-language`, `canvas`, `theme` (default, light, `.css`), `asset-resize`, `subtitles` (every mode and style property), `background` (project file or built-in track, volume, fades), `poster-time`, `target`, `transition` (all 26 types), `voice-pitch`, built-in background tracks | |
 | Images | fit/contain/cover, positions, several images per scene, pan/zoom animation (`zoom`, `zoomout`, `pan`, `panzoom`, `panzoomout`) | |
 | Videos | segments, still frames, all six sync modes, volume/mute, animated GIFs, several clips and images in one scene | |
 | Narration | paragraphs, pauses, `pause-until`, recorded audio, voices, speed (any 0.3–2), volume (presets, or `normalized` to EBU R 128), pitch, emphasis (markup and `voice-emphasis`), language spans (`[See]{de}`), phonetic spans (IPA, X-SAMPA, Pinyin, Jyutping), SSML paragraphs, ellipsis pauses, spelling (backticks and `{literal}`, with letter names in English, Spanish, French, German, Italian and Portuguese), `narration-mode` (`fragment`, and `merge` across scenes) | |
