@@ -8,6 +8,15 @@ from dataclasses import dataclass
 ELLIPSIS_PAUSE = 0.5
 SENTENCE_PAUSE = 0.25  # between runs split by emphasis, after a sentence ends
 JOIN_PAUSE = 0.06  # between runs split mid-sentence
+STYLES = {"normal", "ipa", "x-sampa", "literal", "pinyin", "jyutping"}
+_LANG_RE = re.compile(r"^[a-z]{2,3}(?:-[a-z0-9]{2,8})?$")
+# Private-use markers carry language spans through the run splitting:
+# OPEN lang SEP text CLOSE
+_OPEN, _SEP, _CLOSE = "\ue000", "\ue001", "\ue002"
+_SEGMENT_RE = re.compile(f"{_OPEN}([^{_SEP}]*){_SEP}([^{_CLOSE}]*){_CLOSE}")
+
+# A run's text, or (text, language) segments when part of it is in another language
+Speech = str | tuple[tuple[str, str | None], ...]
 
 _SPAN_RE = re.compile(r"\[([^\]]+)\]\{([^}]+)\}")
 _LINK_RE = re.compile(r"\[([^\]]+)\]\([^)]*\)")
@@ -87,7 +96,7 @@ def _strip_emphasis(text: str) -> str:
 class Run:
     """A stretch of narration synthesised in one call."""
 
-    text: str
+    text: Speech
     emphasis: str = "none"  # none | moderate | strong | reduced
     pause: float = 0.0  # silence before it
 
@@ -104,6 +113,8 @@ def speech_runs(text: str, lang: str, notes: set[str]) -> list[Run]:
         inner, opts = m.group(1), m.group(2).strip().lower()
         if opts == "literal":
             return spell(inner, lang)
+        if opts not in STYLES and _LANG_RE.match(opts):
+            return f"{_OPEN}{opts}{_SEP}{inner}{_CLOSE}"
         if opts != "normal":
             notes.add(f"narration span {{{opts}}} (read as plain text)")
         return inner
@@ -133,8 +144,30 @@ def speech_runs(text: str, lang: str, notes: set[str]) -> list[Run]:
                 pause = SENTENCE_PAUSE if runs[-1].text.rstrip()[-1:] in ".!?:;" else JOIN_PAUSE
             else:
                 pause = 0.0
-            runs.append(Run(part, emphasis, pause))
+            runs.append(Run(_segments(part), emphasis, pause))
     return runs
+
+
+def _segments(text: str) -> Speech:
+    """Plain text, or (text, language) segments where language spans were marked."""
+    if _OPEN not in text:
+        return text.replace(_SEP, "").replace(_CLOSE, "")
+    segments: list[tuple[str, str | None]] = []
+    at = 0
+    for m in _SEGMENT_RE.finditer(text):
+        if text[at:m.start()].strip():
+            segments.append((text[at:m.start()].strip(), None))
+        segments.append((m.group(2).strip(), m.group(1)))
+        at = m.end()
+    if text[at:].strip():
+        segments.append((text[at:].strip(), None))
+    # A span cut by an ellipsis leaves stray markers: drop them
+    return tuple((t.translate({ord(_OPEN): None, ord(_SEP): " ", ord(_CLOSE): None}).strip(), lg)
+                 for t, lg in segments if t)
+
+
+def speech_text(speech: Speech) -> str:
+    return speech if isinstance(speech, str) else " ".join(t for t, _ in speech)
 
 
 def stress_marks(text: str) -> str:
