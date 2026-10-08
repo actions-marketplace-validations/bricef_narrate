@@ -6,9 +6,10 @@ import argparse
 import os
 import sys
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
-from . import media
+from . import media, project
 from .build import Builder, BuildError
 from .config import ConfigError, settings_from_header
 from .doctor import SetupError, run_checks
@@ -36,9 +37,27 @@ def _report(script, notes: list[str]) -> None:
         print(f"note: {note}", file=sys.stderr)
 
 
+@contextmanager
+def script_path(args: argparse.Namespace):
+    """The script to build: the path given, or the one inside a project archive (.zip)."""
+    path = Path(args.script)
+    if path.suffix.lower() == ".zip":
+        with project.unpacked(path, args.source) as script:
+            yield script
+    else:
+        if args.source:
+            raise project.ProjectError("--source applies to a project archive (.zip)")
+        yield path
+
+
 def cmd_build(args: argparse.Namespace) -> int:
-    script = parse_file(args.script)
-    out = Path(args.output or Path(args.script).with_suffix(".mp4").name)
+    with script_path(args) as path:
+        return _build(args, path)
+
+
+def _build(args: argparse.Namespace, path: Path) -> int:
+    script = parse_file(path)
+    out = Path(args.output or path.with_suffix(".mp4").name)
     log = (lambda msg: None) if args.quiet else (lambda msg: print(msg, file=sys.stderr))
     started = time.monotonic()
     synth = make_synth(args.tts, args.tts_model)
@@ -52,7 +71,12 @@ def cmd_build(args: argparse.Namespace) -> int:
 
 
 def cmd_check(args: argparse.Namespace) -> int:
-    script = parse_file(args.script)
+    with script_path(args) as path:
+        return _check(path)
+
+
+def _check(path: Path) -> int:
+    script = parse_file(path)
     settings_from_header(script.header, script.warnings)
     missing = [
         f"line {b.line}: file not found: {b.path}"
@@ -133,8 +157,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="narrate", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    build = sub.add_parser("build", help="render a script to MP4")
-    build.add_argument("script")
+    build = sub.add_parser("build", help="render a script (or a .zip project) to MP4")
+    build.add_argument("script", help="a .md/.txt script, or a .zip of the script and its assets")
+    build.add_argument("--source", help="the script's path inside a .zip project (found if there is only one)")
     build.add_argument("-o", "--output", help="output .mp4 (default: <script name>.mp4 here)")
     build.add_argument("--tts", choices=["auto", "kokoro", "elevenlabs", "silent"], default="auto",
                        help="speech engine (default auto: ElevenLabs when ELEVENLABS_API_KEY is set, "
@@ -147,6 +172,7 @@ def main(argv: list[str] | None = None) -> int:
 
     check = sub.add_parser("check", help="parse a script and check its files, without rendering")
     check.add_argument("script")
+    check.add_argument("--source", help="the script's path inside a .zip project")
     check.set_defaults(func=cmd_check)
 
     voices = sub.add_parser("voices", help="list voices, and any voices.yaml pins")
@@ -167,6 +193,9 @@ def main(argv: list[str] | None = None) -> int:
     load_dotenv(Path.cwd(), *([Path(args.script).resolve().parent] if getattr(args, "script", None) else []))
     try:
         return args.func(args)
+    except project.ProjectError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
     except (ScriptError, BuildError) as e:
         where = f":{e.line}" if getattr(e, "line", None) else ""
         print(f"error: {getattr(args, 'script', '')}{where}: {e}", file=sys.stderr)
