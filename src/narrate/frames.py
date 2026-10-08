@@ -18,6 +18,8 @@ from markdown_it import MarkdownIt
 from pygments import highlight
 from pygments.formatters import HtmlFormatter
 from pygments.lexers import TextLexer, get_lexer_by_name
+from pygments.style import Style
+from pygments.token import Comment, Generic, Keyword, Name, Number, Operator, String
 from pygments.util import ClassNotFound
 
 OBJECT_POSITION = {
@@ -30,9 +32,16 @@ MARKDOWN_LANGS = {"md", "markdown"}
 
 _md = MarkdownIt("commonmark").enable("strikethrough").enable("table")
 
+# Measured against Narakeet's own renders (narrate #20): a 50 px base with
+# browser-default proportions, bold 2em plain slides, sans headings, body text
+# in the browser's default serif, code at 1em in a Courier-style face
+SANS = '"Helvetica Neue", Helvetica, Arial, "Liberation Sans", "Noto Sans", "DejaVu Sans", sans-serif'
+SERIF = '"Times New Roman", Times, "Liberation Serif", "DejaVu Serif", serif'
+MONO = '"Courier New", Courier, "Liberation Mono", "DejaVu Sans Mono", monospace'
+
 _BASE_CSS = """
 html, body { margin: 0; padding: 0; width: %(w)dpx; height: %(h)dpx; overflow: hidden; }
-body { font-family: "DejaVu Sans", Arial, sans-serif; font-size: 50px; color: #000; background: #fff; }
+body { font-family: %(serif)s; font-size: 50px; color: #000; background: #fff; }
 body.theme-light { color: #fff; background: #000; }
 body.over { color: #fff; }
 body.over .slide { text-shadow: 0 2px 8px rgba(0, 0, 0, .75); }
@@ -42,14 +51,21 @@ body.theme-light .backdrop { background: none; }
 .slide { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
          box-sizing: border-box; padding: 5%% 7%%; }
 .content { max-width: 100%%; }
-.plain { white-space: pre-wrap; text-align: center; }
-.md { text-align: center; }
-.md ul, .md ol { display: inline-block; text-align: left; margin: .2em 0; }
-.md h1 { font-size: 1.5em; margin: .2em 0; }
-.md h2 { font-size: 1.2em; margin: .2em 0; }
-.md p { margin: .3em 0; }
-.code pre { font-family: "DejaVu Sans Mono", monospace; font-size: .85em; text-align: left;
-            margin: 0; white-space: pre; line-height: 1.35; }
+/* The slide sets its own 50 px base, as Narakeet's does: a theme's body font-size
+   doesn't reach slide text (colour still inherits from body) */
+:where(.slide) { font-size: 50px; }
+/* :where() keeps these at zero specificity, so a theme's plain `h1 {…}` still wins */
+:where(.plain, .md h1, .md h2, .md h3, .md h4) { font-family: %(sans)s; }
+:where(.plain) { white-space: pre-wrap; text-align: center; font-weight: bold; font-size: 2em; }
+:where(.md) { text-align: center; }
+:where(.md h1) { font-size: 2em; margin: .67em 0; }
+:where(.md h2) { font-size: 1.5em; margin: .83em 0; }
+:where(.md h3) { font-size: 1.17em; margin: 1em 0; }
+:where(.md ul, .md ol) { display: inline-block; text-align: left; margin: 1em 0; }
+:where(.md li > ul, .md li > ol) { display: block; margin: 0; }
+:where(.md p) { margin: 1em 0; }
+:where(.code pre) { font-family: %(mono)s; font-size: 1em; text-align: left; margin: 0; white-space: pre; }
+.code pre { line-height: normal !important; /* Pygments inlines 125%% */ }
 svg.callout { position: absolute; inset: 0; }
 """
 
@@ -57,11 +73,11 @@ _SHRINK_JS = """() => {
   const slide = document.querySelector('.slide');
   if (!slide) return;
   const content = slide.querySelector('.content');
-  let size = parseFloat(getComputedStyle(document.body).fontSize);
+  let size = parseFloat(getComputedStyle(slide).fontSize);
   for (let i = 0; i < 60 && size > 8; i++) {
     if (content.scrollHeight <= slide.clientHeight * 0.92 && content.scrollWidth <= slide.clientWidth) break;
     size *= 0.92;
-    document.body.style.fontSize = size + 'px';
+    slide.style.fontSize = size + 'px';
   }
 }"""
 
@@ -86,6 +102,30 @@ class FrameSpec:
     backdrop: bool = False  # in an overlay, keep the theme backdrop (over an animated image)
 
 
+class CodeLight(Style):
+    """Narakeet's code colours: dark-red names and numbers, bold black keywords."""
+
+    background_color = "#ffffff"
+    styles = {
+        Comment: "italic #999988", Keyword: "bold #000000", Keyword.Constant: "#000000",
+        Keyword.Type: "#990000", Name.Class: "#990000", Name.Tag: "#990000", Name.Function: "#990000",
+        Name.Builtin: "#0086b3", Number: "#990000", String: "#dd1144", Operator: "bold #000000",
+        Generic.Deleted: "#990000", Generic.Inserted: "#008800",
+    }
+
+
+class CodeDark(Style):
+    """The same palette, lightened for slides over images, videos or the light theme."""
+
+    background_color = "#000000"
+    styles = {
+        Comment: "italic #bbbbbb", Keyword: "bold #ffffff", Keyword.Constant: "#ffffff",
+        Keyword.Type: "#ffab91", Name.Class: "#ffab91", Name.Tag: "#ffab91", Name.Function: "#ffab91",
+        Name.Builtin: "#80deea", Number: "#ffab91", String: "#ff8a80", Operator: "bold #ffffff",
+        Generic.Deleted: "#ffab91", Generic.Inserted: "#a5d6a7",
+    }
+
+
 def slide_html(slide: SlideSpec, dark: bool) -> str:
     lang = slide.lang
     if lang in PLAIN_LANGS:
@@ -96,7 +136,7 @@ def slide_html(slide: SlideSpec, dark: bool) -> str:
         lexer = get_lexer_by_name(lang)
     except ClassNotFound:
         lexer = TextLexer()
-    formatter = HtmlFormatter(noclasses=True, nobackground=True, style="monokai" if dark else "default")
+    formatter = HtmlFormatter(noclasses=True, nobackground=True, style=CodeDark if dark else CodeLight)
     return f'<div class="content code">{highlight(slide.text, lexer, formatter)}</div>'
 
 
@@ -131,7 +171,7 @@ def frame_html(spec: FrameSpec, width: int, height: int) -> str:
     over = spec.image is not None or spec.over_video
     classes = [f"theme-{theme}"] + (["over"] if over else [])
 
-    styles = [_BASE_CSS % {"w": width, "h": height}]
+    styles = [_BASE_CSS % {"w": width, "h": height, "sans": SANS, "serif": SERIF, "mono": MONO}]
     if spec.over_video:
         styles.append("html, body { background: transparent !important; }")
     elif spec.image is not None:
@@ -145,20 +185,20 @@ def frame_html(spec: FrameSpec, width: int, height: int) -> str:
     if custom_css:
         head += f'<link rel="stylesheet" href="{Path(custom_css).resolve().as_uri()}">'
 
-    body_style = f' style="font-size: {spec.font_size}px"' if spec.font_size else ""
     parts = []
     if spec.image is not None:
         parts.append(f'<img class="media" src="{spec.image.resolve().as_uri()}">')
     if spec.slide is not None:
         dark = over or theme == "light"
-        slide = f'<div class="slide">{slide_html(spec.slide, dark)}</div>'
+        size = f' style="font-size: {spec.font_size}px"' if spec.font_size else ""
+        slide = f'<div class="slide"{size}>{slide_html(spec.slide, dark)}</div>'
         # Over a still image the slide sits inside the backdrop, which custom
         # themes restyle; Narakeet has no backdrop over videos
         parts.append(f'<div class="backdrop">{slide}</div>' if spec.image is not None or spec.backdrop else slide)
     for i, props in enumerate(spec.callouts):
         parts.append(callout_svg(i, props, width, height))
     return (f"<!doctype html><html><head><meta charset='utf-8'>{head}</head>"
-            f"<body class=\"{' '.join(classes)}\"{body_style}>{''.join(parts)}</body></html>")
+            f"<body class=\"{' '.join(classes)}\">{''.join(parts)}</body></html>")
 
 
 class FrameRenderer:

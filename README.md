@@ -147,6 +147,21 @@ engine renders the same subset:
 Other tags keep their text, with a note. Malformed XML is read as plain text,
 with a warning.
 
+### Slide look
+
+Default slides follow measurements of Narakeet's own renders:
+- A 50 px base set on the slide itself, so a theme's `body` font size doesn't
+  shrink slide text, while colour still inherits.
+- Plain slides in bold at 2em.
+- Browser-default heading sizes and margins (`h1` 2em, `h2` 1.5em).
+- Sans-serif headings, with body and list text in the default serif (as
+  Narakeet renders them).
+- Code at 1em in a Courier-style font, in Narakeet's dark-red and bold-black
+  palette.
+
+The base rules have zero specificity, so a custom `.css` theme overrides any
+of them.
+
 ### Background music
 
 The built-in track names (`ukulele-1`, `ukulele-2`, `uplifting-1`,
