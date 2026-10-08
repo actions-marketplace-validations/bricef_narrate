@@ -6,6 +6,8 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
+from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
@@ -39,6 +41,29 @@ def run(args: list[str], *, input: bytes | None = None) -> bytes:
         tail = proc.stderr.decode(errors="replace").strip().splitlines()[-12:]
         raise MediaError("ffmpeg failed:\n  " + "\n  ".join(tail))
     return proc.stdout
+
+
+def encode_frames(frames: Iterable[bytes], width: int, height: int, fps: int, args: list[str], out: Path) -> Path:
+    """Encode raw RGB24 frames streamed to ffmpeg's stdin (input 0); `args` holds any further inputs and outputs."""
+    with tempfile.TemporaryFile() as errors:
+        proc = subprocess.Popen(
+            [ffmpeg(), "-hide_banner", "-y", "-loglevel", "error",
+             "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{width}x{height}", "-r", str(fps), "-i", "-",
+             *args, str(out)],
+            stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=errors,
+        )
+        try:
+            for frame in frames:
+                proc.stdin.write(frame)
+        except BrokenPipeError:
+            pass  # ffmpeg stopped reading (enough frames, or an error reported below)
+        finally:
+            proc.stdin.close()
+        if proc.wait() != 0:
+            errors.seek(0)
+            tail = errors.read().decode(errors="replace").strip().splitlines()[-12:]
+            raise MediaError("ffmpeg failed:\n  " + "\n  ".join(tail))
+    return out
 
 
 @dataclass

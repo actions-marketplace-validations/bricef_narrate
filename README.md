@@ -91,7 +91,7 @@ engines. `narrate voices` lists the voices for each engine.
 | Area | Works | Not yet (noted when used) |
 | --- | --- | --- |
 | Header | `size`, `voice`, `voice-speed`, `voice-volume`, `narration-language`, `canvas`, `theme` (default, light, `.css`), `asset-resize`, `subtitles` (every mode and style property), `background` (project file, volume, fades), `poster-time`, `target` | `transition`, `voice-pitch`, built-in background tracks |
-| Images | fit/contain/cover, positions, several images per scene | pan/zoom animation (shown static) |
+| Images | fit/contain/cover, positions, several images per scene, pan/zoom animation (`zoom`, `zoomout`, `pan`, `panzoom`, `panzoomout`) | |
 | Videos | segments, still frames, all six sync modes, volume/mute, animated GIFs, several clips and images in one scene | |
 | Narration | paragraphs, pauses, `pause-until`, recorded audio, voices, speed, volume, ellipsis pauses, spelling (backticks and `{literal}`), `narration-mode: fragment` | emphasis, pitch, IPA/X-SAMPA/Pinyin spans and SSML (read as plain text), `merge` mode |
 | Visuals | plain, Markdown and syntax-highlighted slides (several per scene take turns), themes and custom CSS, callouts (circle, rectangle, mask) | transitions (scenes cut) |

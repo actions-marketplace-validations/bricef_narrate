@@ -20,7 +20,7 @@ from typing import Any, Callable
 
 import numpy as np
 
-from . import media, subtitles
+from . import media, motion, subtitles
 from .config import (
     BUILTIN_MUSIC, FPS, ConfigError, Settings, SubtitleConfig, parse_color, parse_number, parse_speed,
     parse_time, parse_volume, settings_from_header,
@@ -65,6 +65,7 @@ class Visual:
     volume: float = 1.0
     has_audio: bool = False
     frames: int = 0
+    motion: str | None = None  # pan/zoom animation of a still image
 
 
 @dataclass
@@ -295,12 +296,14 @@ class Builder:
     def _visual(self, m: Media, workdir: Path) -> Visual:
         path = self._path(m.path, m.line)
         size = m.size or self.settings.asset_resize
+        animation = None
         if size in ANIMATED_SIZES:
-            self.notes.add("pan/zoom image animation (shown static)")
-            size = "cover"
+            animation, size = size, "cover"
         position = m.position or "center"
         if m.kind == "image" and not media.is_animated_gif(path):
-            return Visual("still", path, size, position)
+            return Visual("still", path, size, position, motion=animation)
+        if animation:
+            self.notes.add(f"{animation} on a video clip (ignored; pan/zoom applies to images)")
         info = media.probe(path)
         if m.segment and m.segment[1] is None:
             at = {"start": 0.0, "end": max(0.0, info.duration - 0.1)}.get(m.segment[0])
@@ -419,11 +422,18 @@ class Builder:
                     for j, slide in enumerate(slides) if bounds[j + 1] > bounds[j]]
 
         layout = plan.layout
-        overlays: list[tuple[Path, float, float]] = []
-        if (layout.repeat or any(v.kind == "video" for v in plan.visuals)) and (plan.slides or plan.spec.callouts):
-            for j, slide in enumerate(slides):
-                png = renderer.render(spec(slide=slide, over_video=True), name(f"overlay{j}.png"))
-                overlays.append((png, bounds[j] / FPS, bounds[j + 1] / FPS))
+        cache: dict[bool, list[tuple[Path, float, float]]] = {}
+
+        def overlays(backdrop: bool = False) -> list[tuple[Path, float, float]]:
+            """Slides and callouts as time-windowed overlays over the whole scene."""
+            if backdrop not in cache:
+                cache[backdrop] = [
+                    (renderer.render(spec(slide=slide, over_video=True, backdrop=backdrop),
+                                     name(f"overlay{j}{'b' if backdrop else ''}.png")),
+                     bounds[j] / FPS, bounds[j + 1] / FPS)
+                    for j, slide in enumerate(slides)
+                ] if plan.slides or plan.spec.callouts else []
+            return cache[backdrop]
 
         if layout.repeat:
             # One pass at natural length, looped from disk afterwards (the loop
@@ -440,8 +450,13 @@ class Builder:
             lo, hi = at, at + count
             at = hi
             if v.kind == "video":
-                windows = [] if layout.repeat else _windows(overlays, lo, hi)
+                windows = [] if layout.repeat else _windows(overlays(), lo, hi)
                 segments.append(self._encode_video(v, count, tempo, windows, plan.spec.canvas, name(f"{i}.mp4")))
+                continue
+            if v.motion:
+                # One continuous animation, with slides overlaid rather than splitting it
+                windows = [] if layout.repeat else _windows(overlays(backdrop=True), lo, hi)
+                segments.append(self._encode_motion(v, count, windows, name(f"{i}.mp4")))
                 continue
             image = {"image": v.path, "fit": v.fit, "position": v.position}
             if layout.repeat:
@@ -463,10 +478,19 @@ class Builder:
             listing.write_text("".join(f"file '{p.as_posix()}'\n" for p in segments))
             media.run(["-f", "concat", "-safe", "0", "-i", str(listing), "-c", "copy", str(once)])
         looped = base.with_suffix(".mp4")
-        inputs, graph = _overlay_graph("[0:v]null", overlays)
+        inputs, graph = _overlay_graph("[0:v]null", overlays())
         media.run(["-stream_loop", "-1", "-i", str(once), *inputs, "-filter_complex", graph,
                    "-map", "[v]", "-frames:v", str(frames), "-an", *_SEGMENT_CODEC, str(looped)])
         return [looped]
+
+    def _encode_motion(self, v: Visual, frames: int, overlays: list[tuple[Path, float, float]], out: Path) -> Path:
+        w, h = self.settings.width, self.settings.height
+        inputs, graph = _overlay_graph("[0:v]setsar=1", overlays)
+        return media.encode_frames(
+            motion.frames(v.path, v.motion, v.position, w, h, frames), w, h, FPS,
+            [*inputs, "-filter_complex", graph, "-map", "[v]", "-frames:v", str(frames), "-an", *_SEGMENT_CODEC],
+            out,
+        )
 
     def _encode_video(self, v: Visual, frames: int, tempo: float, overlays: list[tuple[Path, float, float]],
                       canvas: str | None, out: Path) -> Path:
