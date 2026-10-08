@@ -39,9 +39,13 @@ uv run playwright install chromium   # slides and frames are rendered by headles
   `uv run playwright install-deps` (needs root). Without root, extract them
   under `~/.cache/chromium-libs/root`; the justfile adds that directory to
   `LD_LIBRARY_PATH` when it exists.
-- **ffmpeg:** comes from `imageio-ffmpeg`, a static build installed with the
-  Python dependencies. An `ffmpeg` on `PATH`, or `$NARRATE_FFMPEG`, takes
-  precedence.
+- **ffmpeg:** narrate downloads its own static ffmpeg 9.0 build on first use
+  (about 150 MB, checked against the release's SHA-256), or ahead of time
+  with `uv run narrate models`.
+  - It doesn't use an installed ffmpeg, because ffmpeg 7.0 crashes
+    intermittently on narrate's transition graphs (#37).
+  - `$NARRATE_FFMPEG` overrides it.
+  - `uv run narrate doctor` checks the whole setup.
 - **Kokoro:** the model (about 350 MB) downloads on first use, or ahead of time
   with `uv run narrate models`.
 - **ElevenLabs:** put `ELEVENLABS_API_KEY=…` in a `.env` file (git-ignored),
