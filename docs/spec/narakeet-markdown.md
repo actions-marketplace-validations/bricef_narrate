@@ -978,8 +978,13 @@ scene-change detection (2026-10-08):
 | --- | --- | --- |
 | `slides` | 14.04 s | Text slide without audio = 1 s; `duration: 2` = 2 s exactly; a video with no narration plays in full (5 s). This matches §4.2. |
 | `transition-types` | 25.08 s | 25 scenes of `duration: 1` with 24 transitions of 0.5 s. Transitions do **not** shorten the video (gap 9). |
-| `image-sizing` | 12.60 s | Scene cuts every 2.52 s for `(pause: 2)`. Narakeet pads a pause by about 0.5 s, most likely silence added by its speech engine around a break. |
+| `image-sizing` | 12.60 s | Scene cuts every 2.52 s for scenes of an image, a text slide and `(pause: 2)`. |
+| `image-panzoom` | 9.96 s | The first scene, an image and `(pause: 1)` with no slide, cuts at exactly 1.0 s: no padding. |
 | `video-segments` | 11.71 s | Cuts at 5.0 s (the full 5 s clip under short narration, `freeze`) and 7.005 s (a still frame with `duration: 2`). About 0.7 s more than the rules predict lands in the last two scenes; unexplained. |
 
-The pause padding is an implementation artefact, not a format rule. narrate
-keeps pauses exact.
+**Pauses (narrate #19).** The extra 0.5 s in `image-sizing` is not a pause
+rule: an unpadded `(pause: 1)` scene in `image-panzoom` shows that. The extra
+time appears only in scenes that also contain a text slide. Narakeet's renders
+date from different years, so this may be version drift rather than a rule.
+narrate keeps pauses exact and offers no "Narakeet timing" mode, since there's
+no consistent behaviour to reproduce.

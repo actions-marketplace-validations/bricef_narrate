@@ -212,7 +212,7 @@ compares timing against them. What they show so far:
 - **Matches exactly:** where a script has no narration (the `slides` example
   is 14.0 s in both).
 - **Transitions** don't change a video's length in Narakeet, and narrate matches that (the `transition-types` example is 25.0 s in both).
-- **Narakeet pads `(pause: N)`** to about N + 0.5 s. narrate keeps pauses exact.
+- **Pauses:** Narakeet adds about 0.5 s to some scenes that hold a text slide and a pause, but not to a plain `(pause: 1)` scene. That's no consistent rule, so narrate keeps pauses exact (spec §17).
 
 ## Layout
 
