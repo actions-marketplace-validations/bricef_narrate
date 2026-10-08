@@ -249,15 +249,24 @@ class FrameRenderer:
         """Any page at the frame size, for render blocks: load it, run `script` (a JS
         function given `arg`), then capture it at `scale` pixels per CSS pixel.
         Returns what the script returned."""
-        if scale not in self._pages:
-            self._pages[scale] = self._browser.new_page(
-                viewport={"width": self.width, "height": self.height}, device_scale_factor=scale)
-        page = self._pages[scale]
+        page = self._render_page(scale)
         self._load(page, page_html)
         result = page.evaluate(script, arg) if script else None
         page.evaluate("document.fonts.ready.then(() => true)")
         page.screenshot(path=str(out), type="png")
         return result
+
+    def evaluate(self, page_html: str, script: str, arg: Any = None) -> Any:
+        """Load a page and run `script` on it, without capturing anything."""
+        page = self._render_page(1)
+        self._load(page, page_html)
+        return page.evaluate(script, arg)
+
+    def _render_page(self, scale: int):
+        if scale not in self._pages:
+            self._pages[scale] = self._browser.new_page(
+                viewport={"width": self.width, "height": self.height}, device_scale_factor=scale)
+        return self._pages[scale]
 
     def _load(self, page, page_html: str) -> None:
         self._count += 1

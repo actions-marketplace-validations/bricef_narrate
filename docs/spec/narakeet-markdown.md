@@ -1049,7 +1049,8 @@ frontmatter  := "---" NL yaml-mapping NL "---" NL      ; at the very top of the 
 
 | Renderer | Draws | Settings |
 | --- | --- | --- |
+| `mermaid` | the body as a Mermaid diagram (mermaid.js 12, pinned), fitted to 90% of the frame and captured at twice its size; Mermaid's dark theme on a dark background | `background` (default: the canvas, else the theme's slide background), `scale` (of the fitted size, default 1); Mermaid's `title`, `displayMode` and `config` pass through |
 | `placeholder` | a card labelled with the body (or "Placeholder") and the frame size | `background`, `color` |
 
-Planned renderers: `mermaid` diagrams (narrate #40), and AI-generated pictures
-and clips (#41, #42).
+`narrate check` also runs each renderer's deeper validation, such as Mermaid's
+parser. Planned renderers: AI-generated pictures and clips (narrate #41, #42).

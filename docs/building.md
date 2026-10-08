@@ -279,6 +279,7 @@ narrate fetches some files on first use and caches synthesised speech:
 | ffmpeg (from a source checkout) | `~/.cache/narrate/ffmpeg/` | 170 MB (a 150 MB download) |
 | Speech-to-text model, for subtitles on recordings | `~/.cache/narrate/stt/` | about 460 MB |
 | Built-in music | `~/.cache/narrate/music/` | a few MB |
+| mermaid.js, for diagrams | `~/.cache/narrate/mermaid/` | about 5 MB |
 | Synthesised speech and transcripts | `~/.cache/narrate/tts/`, `stt/` | grows with use |
 | Pictures drawn from render blocks | `~/.cache/narrate/render/` | grows with use |
 
@@ -367,7 +368,7 @@ models and the ElevenLabs key, and prints a fix for each problem.
 | `narrate check SCRIPT` | report missing files and problems, without rendering |
 | `narrate callouts FILE` | write a page for placing callouts on an image or a clip's frame |
 | `narrate voices [SCRIPT]` | list voices, and a script's `voices.yaml` pins |
-| `narrate models` | download the voice, speech-to-text and ffmpeg files now |
+| `narrate models` | download the voice, speech-to-text, ffmpeg and mermaid.js files now |
 | `narrate doctor` | check the setup |
 | `narrate cache [--prune …]` | show or prune the speech and render caches |
 | `narakeet-api-client …` | Narakeet's command-line client, building locally |
@@ -387,5 +388,6 @@ takes `--keep-work`. `narrate COMMAND --help` lists every option.
 | `NARRATE_STT_MODEL` | `small` | faster-whisper model for transcribing recordings |
 | `NARRATE_MUSIC_DIR` | none | recordings to use instead of the built-in music |
 | `NARRATE_FFMPEG` | narrate's own | the ffmpeg to use |
+| `NARRATE_MERMAID_JS` | narrate's own | the mermaid.js to use for `render:mermaid` |
 | `NARRATE_TOOLS` | `~/.cache/narrate` | where downloads go |
 | `NARRATE_CACHE` | `~/.cache/narrate` | where synthesised speech and transcripts are cached |

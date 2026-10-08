@@ -51,9 +51,13 @@ class Renderer:
     settings: frozenset[str] = frozenset()  # the frontmatter keys it takes, besides placement
 
     def check(self, block: Render) -> list[str]:
-        """Problems with the block, found without rendering it."""
+        """Problems with the block, found quickly, without rendering it or starting tools."""
         unknown = sorted(set(block.settings) - self.settings)
         return [f"render:{self.name} doesn't take {key!r}" for key in unknown]
+
+    def validate(self, blocks: list[Render]) -> list[list[str]]:
+        """Deeper problems, for `narrate check`: it may start tools (one go for all the blocks)."""
+        return [[] for _ in blocks]
 
     def render(self, block: Render, ctx: Context, out: Path) -> None:
         raise NotImplementedError
@@ -75,11 +79,24 @@ def renderer(name: str) -> Renderer:
         raise RenderError(f"unknown renderer render:{name} (known: {known})") from None
 
 
-def check(media: Media) -> list[str]:
-    try:
-        return renderer(media.render.name).check(media.render)
-    except RenderError as e:
-        return [str(e)]
+def check(blocks: list[Media]) -> list[list[str]]:
+    """Every problem with each block, as `narrate check` reports them."""
+    problems: list[list[str]] = []
+    for media in blocks:
+        try:
+            problems.append(renderer(media.render.name).check(media.render))
+        except RenderError as e:
+            problems.append([str(e)])
+    # Blocks that pass the quick checks go to their renderer's deeper one, a renderer at a time
+    for name in {m.render.name for m, found in zip(blocks, problems) if not found}:
+        group = [i for i, m in enumerate(blocks) if m.render.name == name and not problems[i]]
+        try:
+            found = renderer(name).validate([blocks[i].render for i in group])
+        except RenderError as e:
+            found = [[str(e)]] * len(group)
+        for i, more in zip(group, found):
+            problems[i] += more
+    return problems
 
 
 def output(media: Media, ctx: Context) -> Path:
@@ -99,6 +116,7 @@ def output(media: Media, ctx: Context) -> Path:
     try:
         r.render(media.render, ctx, part)
     except RenderError as e:
+        part.unlink(missing_ok=True)
         raise RenderError(str(e), e.line or media.line) from None
     part.replace(path)
     return path
@@ -147,3 +165,6 @@ svg {{ position: absolute; inset: 0; }}
 <div class="label"><span>{label}</span><span class="size">{w} × {h}</span></div>
 </body></html>"""
         ctx.frames.screenshot(page, out)
+
+
+from . import mermaid  # noqa: E402,F401 -- registers render:mermaid

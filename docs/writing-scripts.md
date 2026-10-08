@@ -20,6 +20,7 @@ speech. [Building videos](building.md) covers the commands.
 - [Show pictures](#show-pictures)
 - [Play video clips](#play-video-clips)
 - [Generate pictures from code blocks](#generate-pictures-from-code-blocks)
+- [Draw diagrams](#draw-diagrams)
 - [Show text slides](#show-text-slides)
 - [Style slides with a theme](#style-slides-with-a-theme)
 - [Add subtitles](#add-subtitles)
@@ -340,6 +341,7 @@ Chart: sales by region
 - **Settings:** an optional block between `---` lines at the top holds the
   renderer's settings. `size` and `position` there work as in `(image: …)`.
 - **Renderers:**
+  - `render:mermaid` draws a Mermaid diagram (see [Draw diagrams](#draw-diagrams)).
   - `render:placeholder` draws a card labelled with the block's text and the
     video's size, standing in for a picture still to come. `background` and
     `color` set its colours.
@@ -347,6 +349,55 @@ Chart: sales by region
   isn't drawn again.
 - `narrate check` reports unknown renderers and settings.
 - These blocks are narrate's own; Narakeet would show them as code.
+
+## Draw diagrams
+
+````markdown
+```render:mermaid
+flowchart LR
+  Script --> Parser --> Builder --> Video
+```
+
+The parser reads the script, and the builder renders each scene.
+
+---
+
+```render:mermaid
+---
+title: How a build works
+config:
+  theme: forest
+background: "#f4f1ea"
+scale: 0.8
+---
+sequenceDiagram
+  participant You
+  participant narrate
+  You->>narrate: narrate build script.md
+  narrate-->>You: script.mp4
+```
+
+(pause: 1)
+````
+
+- **Any Mermaid diagram:** flowcharts, sequence, class, state and entity
+  diagrams, Gantt charts, pie charts, mind maps, timelines and more.
+  [Mermaid's documentation](https://mermaid.js.org/intro/) covers the syntax.
+  The diagram is drawn sharply at the video's size, then shown like a picture.
+- **Size:** it fills up to 90% of the frame, centred. `scale: 0.8` makes it
+  smaller.
+- **Background:** the scene's canvas, otherwise the theme's (white, or black
+  for `light`). `background` sets another colour. On a dark background,
+  Mermaid's dark theme is used.
+- **Mermaid's own settings** go in the same block: `title`, `displayMode` and
+  `config` (such as `theme`, `look: handDrawn` or `themeVariables`) pass to
+  Mermaid unchanged.
+- **Movement:** ```` ```render:mermaid zoom ```` zooms slowly into the
+  diagram, and the other pan and zoom options work too.
+- **Errors:** `narrate check` runs Mermaid's parser and reports syntax errors
+  with the block's line.
+- The first diagram downloads Mermaid itself (about 5 MB); the Docker image
+  already has it.
 
 ## Show text slides
 
