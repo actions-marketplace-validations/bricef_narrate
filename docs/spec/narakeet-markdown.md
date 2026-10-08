@@ -980,7 +980,7 @@ scene-change detection (2026-10-08):
 | `transition-types` | 25.08 s | 25 scenes of `duration: 1` with 24 transitions of 0.5 s. Transitions do **not** shorten the video (gap 9). |
 | `image-sizing` | 12.60 s | Scene cuts every 2.52 s for scenes of an image, a text slide and `(pause: 2)`. |
 | `image-panzoom` | 9.96 s | The first scene, an image and `(pause: 1)` with no slide, cuts at exactly 1.0 s: no padding. |
-| `video-segments` | 11.71 s | Cuts at 5.0 s (the full 5 s clip under short narration, `freeze`) and 7.005 s (a still frame with `duration: 2`). About 0.7 s more than the rules predict lands in the last two scenes; unexplained. |
+| `video-segments` | 11.71 s | The first three scenes match the rules: the full 5 s clip under short narration (`freeze`), then two 2.0 s stills (cuts at 4.97, 6.97 and 8.97 s). The last scene, `![00:02-00:04](stopwatch.mp4)`, runs 2.76 s instead of 2.0 s (narrate #18). Its frames do start at source 2.00 s, but play past 4.0 s (source 4.60 s at 11.6 s) until the render ends. The clip has a single keyframe, so this isn't keyframe snapping: Narakeet ignored the segment's end, against its own documentation. narrate follows the documented range. |
 
 **Pauses (narrate #19).** The extra 0.5 s in `image-sizing` is not a pause
 rule: an unpadded `(pause: 1)` scene in `image-panzoom` shows that. The extra
