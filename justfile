@@ -20,6 +20,14 @@ demo:
     uv run narrate build examples/demo/demo.md --tts kokoro -o out/demo-kokoro.mp4
     uv run narrate build examples/demo/demo.md --tts elevenlabs -o out/demo-elevenlabs.mp4
 
+# Build the container image as narrate:local
+image:
+    docker build -t narrate:local .
+
+# Run the test suite inside the container image
+image-test:
+    docker build --target test .
+
 # Download the Narakeet reference snapshot (docs, example scripts and their media)
 reference:
     ./scripts/fetch-narakeet-reference.sh --media

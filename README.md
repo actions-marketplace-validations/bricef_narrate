@@ -53,6 +53,35 @@ uv run playwright install chromium   # slides and frames are rendered by headles
 - **ElevenLabs:** put `ELEVENLABS_API_KEY=…` in a `.env` file (git-ignored),
   either in the directory you run from or next to the script.
 
+### In a container
+
+The image `ghcr.io/bricef/narrate` carries narrate with all of its
+dependencies, so nothing but Docker is needed:
+
+```sh
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -v narrate-cache:/cache \
+    ghcr.io/bricef/narrate build script.md -o video.mp4
+```
+
+- Paths are relative to `/work`, the mounted directory. Run as your own user
+  (`--user`) so the video belongs to you.
+- The Kokoro model, music and synthesised speech land in `/cache` on first
+  use. A volume there keeps them between runs; use the same `--user` with it
+  each time.
+- Pass `-e ELEVENLABS_API_KEY` to use ElevenLabs, or keep the key in a `.env`
+  in the mounted directory.
+- `just image` builds it locally (`narrate:local`); `just image-test` runs the
+  test suite inside it.
+- It weighs about 1.2 GB unpacked (420 MB to download):
+  - the Python environment, 670 MB;
+  - Playwright's headless Chromium, 280 MB;
+  - the Debian base, 135 MB, and libraries and fonts, 75 MB;
+  - ffmpeg 9.0, built with only the external libraries narrate uses, 30 MB
+    (the static build is 173 MB).
+- Fonts cover Latin, Greek and Cyrillic, plus emoji. For other scripts, add
+  fonts in an image built on this one (`USER root`, then `apt-get install
+  fonts-noto-cjk` for example).
+
 ## Usage
 
 ```sh
