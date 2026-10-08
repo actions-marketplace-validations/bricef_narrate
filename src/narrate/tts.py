@@ -127,8 +127,6 @@ ELEVENLABS_BY_PROFILE = {
 }
 ELEVENLABS_BY_GENDER = {"f": "sarah", "m": "george"}
 ELEVENLABS_MODEL = "eleven_multilingual_v2"
-# Models that accept an explicit language_code; the others detect the language
-ELEVENLABS_LANGUAGE_MODELS = {"eleven_turbo_v2_5", "eleven_flash_v2_5"}
 ELEVENLABS_SPEED = (0.7, 1.2)
 _ELEVENLABS_ID_RE = re.compile(r"^[A-Za-z0-9]{20}$")
 
@@ -315,6 +313,10 @@ class KokoroSynth:
 # -- ElevenLabs backend ---------------------------------------------------------
 
 
+class LanguageRejected(Exception):
+    """The model refused an explicit language_code."""
+
+
 class ElevenLabsSynth:
     name = "elevenlabs"
     url = "https://api.elevenlabs.io/v1/text-to-speech/{voice}?output_format=pcm_24000"
@@ -327,6 +329,7 @@ class ElevenLabsSynth:
             raise RuntimeError("ELEVENLABS_API_KEY is not set (put it in .env or the environment)")
         self.model = model or os.environ.get("NARRATE_ELEVENLABS_MODEL") or ELEVENLABS_MODEL
         self._cache = SynthCache(self.name)
+        self._ignores_language: set[str] = set()
 
     def resolve(self, name: str | None, lang: str | None, notes: set[str]) -> Voice:
         base, suffix_lang = split_voice(name)
@@ -361,12 +364,16 @@ class ElevenLabsSynth:
         body: dict = {"text": text, "model_id": self.model}
         if clamped != 1.0:
             body["voice_settings"] = {"speed": clamped}
-        if voice.lang:
-            if self.model in ELEVENLABS_LANGUAGE_MODELS:
-                body["language_code"] = voice.lang
-            else:
-                notes.add(f"language hints with {self.model} (the model detects the language itself)")
-        pcm = self._post(voice.id, body)
+        if voice.lang and self.model not in self._ignores_language:
+            body["language_code"] = voice.lang
+        try:
+            pcm = self._post(voice.id, body)
+        except LanguageRejected:
+            # Older models refuse language_code: remember, and let them detect the language
+            self._ignores_language.add(self.model)
+            notes.add(f"language hints with {self.model} (the model detects the language itself)")
+            body.pop("language_code", None)
+            pcm = self._post(voice.id, body)
         audio = np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32768.0
         np.save(cached, audio)
         return audio
@@ -389,6 +396,8 @@ class ElevenLabsSynth:
                     detail = json.loads(detail)["detail"]["message"]
                 except (ValueError, KeyError, TypeError):
                     pass
+                if e.code in (400, 422) and "language" in str(detail).lower() and "language_code" in body:
+                    raise LanguageRejected(str(detail)) from None
                 raise RuntimeError(f"ElevenLabs request failed ({e.code}): {detail}") from None
         raise RuntimeError("ElevenLabs request failed after retries")
 

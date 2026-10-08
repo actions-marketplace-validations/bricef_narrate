@@ -33,3 +33,9 @@ def test_synthesises_pcm_at_the_pipeline_rate(synth):
 def test_reports_api_errors_clearly(synth):
     with pytest.raises(RuntimeError, match="ElevenLabs request failed"):
         synth.synth("Hi.", synth.resolve("ZZZZZZZZZZZZZZZZZZZZ", None, set()), 1.0, set())
+
+
+def test_default_model_takes_language_hints(synth):
+    notes: set[str] = set()
+    audio = synth.synth("Hallo.", synth.resolve("George", "de", notes), 1.0, notes)
+    assert len(audio) > 0 and not any("language hints" in n for n in notes)
