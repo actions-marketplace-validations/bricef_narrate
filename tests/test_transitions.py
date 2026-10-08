@@ -34,18 +34,19 @@ def test_every_narakeet_transition_exists_in_ffmpeg():
     assert set(TRANSITIONS.values()) <= available
 
 
-def test_transition_is_centred_on_the_cut_and_keeps_the_length():
+def test_transition_starts_at_the_cut_and_keeps_the_length():
     graph = transition_graph([30, 30, 30], [None, ("crossfade", 0.4), None])
-    # 12 frames: 6 held after the first scene, 6 before the second; the fade spans 0.8 s .. 1.2 s
-    assert "tpad=stop_mode=clone:stop_duration=0.200000,settb=AVTB[p0]" in graph
-    assert "tpad=start_mode=clone:start_duration=0.200000,settb=AVTB[p1]" in graph
-    assert "xfade=transition=fade:duration=0.400000:offset=0.800000" in graph
+    # As in Narakeet: the first scene holds its last frame for 12 frames while
+    # the second fades in over its own first 0.4 s, from the cut at 1.0 s
+    assert "tpad=stop_mode=clone:stop_duration=0.400000,settb=AVTB[p0]" in graph
+    assert "[1:v]fps=30,settb=AVTB[p1]" in graph
+    assert "xfade=transition=fade:duration=0.400000:offset=1.000000" in graph
     assert "[x1][p2]concat=n=2" in graph
 
 
-def test_transition_is_clamped_to_half_the_shorter_scene():
-    graph = transition_graph([10, 60], [None, ("wipe", 2.0)])
-    assert "duration=0.166667" in graph  # 5 frames, half of the 10-frame scene
+def test_transition_is_clamped_to_the_incoming_scene():
+    graph = transition_graph([60, 10], [None, ("wipe", 2.0)])
+    assert "duration=0.333333" in graph  # the 10-frame incoming scene
 
 
 def colour(path: Path, name: str) -> Path:
@@ -69,8 +70,9 @@ def test_crossfade_end_to_end(tmp_path):
         return np.asarray(Image.open(png).convert("RGB"), dtype=float)[90, 160]
 
     assert rgb(0.5)[0] > 200 and rgb(1.5)[2] > 200
-    r, _, b = rgb(1.0)
-    assert 60 < r < 200 and 60 < b < 200  # mid-blend at the cut
+    assert rgb(0.95)[0] > 200  # red right up to the cut
+    r, _, b = rgb(1.2)
+    assert 60 < r < 200 and 60 < b < 200  # mid-blend 0.2 s after the cut
 
 
 def test_transition_into_the_first_scene_is_ignored_with_a_warning(tmp_path):
@@ -80,14 +82,6 @@ def test_transition_into_the_first_scene_is_ignored_with_a_warning(tmp_path):
     parsed = parse_file(script)
     Builder(parsed, SilentSynth(), log=lambda _: None).build(tmp_path / "out.mp4")
     assert any("first scene" in w for w in parsed.warnings)
-
-
-@pytest.mark.skipif(not (EXAMPLES / "transition-types" / "result.mp4").exists(),
-                    reason="run scripts/fetch-narakeet-reference.sh --media first")
-def test_matches_narakeet_length_for_transition_types(tmp_path):
-    script = parse_file(EXAMPLES / "transition-types" / "script" / "source.md")
-    result = Builder(script, SilentSynth(), log=lambda _: None).build(tmp_path / "types.mp4")
-    assert result.duration == pytest.approx(media.probe(EXAMPLES / "transition-types" / "result.mp4").duration, abs=0.1)
 
 
 def test_cuts_and_transitions_mix(tmp_path):

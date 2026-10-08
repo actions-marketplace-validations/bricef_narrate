@@ -827,37 +827,27 @@ def _overlay_graph(base: str, overlays: list[tuple[Path, float, float]]) -> tupl
 def transition_graph(frames: list[int], transitions: list[tuple[str, float] | None]) -> str:
     """Filter graph joining scene inputs 0..n-1 with xfade transitions, output [vx].
 
-    Each transition is centred on its cut. The outgoing scene holds its last
-    frame for the half after the cut and the incoming scene its first frame
-    for the half before, so the joined video is exactly as long as the scenes
-    (as in Narakeet's renders) and the audio timeline is untouched. A
-    transition is clamped to half the shorter neighbouring scene.
+    As in Narakeet's renders, a transition starts at the cut and plays over the
+    start of the incoming scene while the outgoing scene holds its last frame,
+    so the joined video is exactly as long as the scenes and the audio
+    timeline is untouched. A transition is clamped to the incoming scene.
     """
     n = len(frames)
     span = [0] * n  # frames of the transition into scene k
     for k in range(1, n):
         if transitions[k]:
-            span[k] = min(round(transitions[k][1] * FPS), frames[k - 1] // 2, frames[k] // 2)
-
-    def before(k: int) -> int:  # held first frames of scene k
-        return span[k] // 2 if k else 0
-
-    def after(k: int) -> int:  # held last frames of scene k
-        return span[k + 1] - span[k + 1] // 2 if k + 1 < n else 0
+            span[k] = min(round(transitions[k][1] * FPS), frames[k])
 
     parts = []
     for k in range(n):
-        pads = []
-        if before(k):
-            pads.append(f"tpad=start_mode=clone:start_duration={before(k) / FPS:.6f}")
-        if after(k):
-            pads.append(f"tpad=stop_mode=clone:stop_duration={after(k) / FPS:.6f}")
+        hold = span[k + 1] if k + 1 < n else 0  # last frame held while the next scene comes in
+        pads = [f"tpad=stop_mode=clone:stop_duration={hold / FPS:.6f}"] if hold else []
         # One timebase for every input (set after fps, which changes it), so xfade
         # and concat outputs always match the next scene's input (#38)
         parts.append(f"[{k}:v]" + ",".join([f"fps={FPS}", *pads, "settb=AVTB"]) + f"[p{k}]")
-    current, length = "p0", frames[0] + after(0)
+    current, length = "p0", frames[0] + (span[1] if n > 1 else 0)
     for k in range(1, n):
-        padded = frames[k] + before(k) + after(k)
+        padded = frames[k] + (span[k + 1] if k + 1 < n else 0)
         if span[k]:
             kind = TRANSITIONS[transitions[k][0]]
             parts.append(f"[{current}][p{k}]xfade=transition={kind}:duration={span[k] / FPS:.6f}"

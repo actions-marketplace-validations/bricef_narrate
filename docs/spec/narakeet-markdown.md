@@ -915,14 +915,14 @@ examples disagree. The proposals favour what the official examples imply.
      during its share.
 8. **Duration-only `transition: N`.** Use the header's transition type if one
    is set, otherwise `crossfade`, for N seconds. *Implemented (narrate #1).*
-9. **Transition timing.** *Answered by Narakeet's own render (§17): total
-   length = sum of scenes.* A transition plays inside the scene boundary
-   without shortening the video. Clamp each transition to half the shorter
-   neighbouring scene. *Implemented (narrate #1):*
-   - The transition is centred on the cut.
-   - The outgoing scene holds its last frame, and the incoming scene its first,
-     for the half that falls outside each.
-   - The names map onto ffmpeg `xfade` transitions.
+9. **Transition timing.** *Answered by Narakeet's own render (§17).*
+   - Total length equals the sum of the scenes.
+   - A transition starts at the cut and plays over the start of the incoming
+     scene, while the outgoing scene holds its last frame. Measured on
+     `transition-types`: each 0.5 s wipe runs from the cut to cut + 0.5 s.
+
+   *Implemented (narrate #1, placement corrected in #35):* clamped to the
+   incoming scene's length; the names map onto ffmpeg `xfade` transitions.
 10. **Poster default.** 50% of the duration (explicitly stated, and the later
     of the two statements).
 11. **`voice-pitch` numbers.** *Implemented (narrate #6):* N is read as
