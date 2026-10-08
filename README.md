@@ -84,6 +84,35 @@ point at narrate unchanged:
 GitHub projects are fetched file by file under the script's folder rather than
 as the whole repository. The extra `--tts` flag chooses narrate's engine.
 
+### GitHub Action
+
+The repository is a composite action that builds a video on the runner, with
+the same outputs as Narakeet's `build-video-github-action`: `video-file`,
+`poster-file`, and `srt-file` and `vtt-file` when the script asks for
+subtitle files.
+
+```yaml
+- id: video
+  uses: bricef/narrate@main
+  with:
+    source-path: videos/intro.md              # or a .zip project
+    output: out/intro.mp4                     # default narrate/result.mp4
+    elevenlabs-api-key: ${{ secrets.ELEVENLABS_API_KEY }}  # optional
+- uses: actions/upload-artifact@v4
+  with:
+    name: intro
+    path: ${{ steps.video.outputs.video-file }}
+```
+
+- `tts` picks the engine as `--tts` does. The default `auto` uses ElevenLabs
+  when a key is given, Kokoro otherwise.
+- Models, ffmpeg and synthesised speech are cached between runs.
+- While the repository is private, only workflows in repositories that it
+  [grants access](https://docs.github.com/en/actions/sharing-automations/sharing-actions-and-workflows-from-your-private-repository)
+  can use it.
+- `.github/workflows/demo.yml` renders `examples/demo` this way and keeps the
+  video as an artifact.
+
 ### Speech engines (`--tts`)
 
 | Engine | Notes |

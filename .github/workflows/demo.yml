@@ -1,0 +1,31 @@
+name: Demo video
+
+# Renders examples/demo with the action in this repository and keeps the
+# result. Runs by hand (Actions tab, or `gh workflow run demo.yml`) and on
+# pushes that change the action.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - action.yml
+      - .github/workflows/demo.yml
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: video
+        uses: ./
+        with:
+          source-path: examples/demo/demo.md
+          output: out/demo.mp4
+          tts: kokoro
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: demo-video
+          path: |
+            ${{ steps.video.outputs.video-file }}
+            ${{ steps.video.outputs.poster-file }}

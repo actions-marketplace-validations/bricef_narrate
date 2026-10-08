@@ -1,0 +1,68 @@
+name: narrate
+description: Build a narrated video from a Markdown script (Narakeet format) on the runner, with narrate
+branding:
+  icon: video
+  color: blue
+
+inputs:
+  source-path:
+    description: Path of the main script in the repository, or of a .zip project
+    required: true
+  output:
+    description: Where to write the video (the poster and subtitles go next to it)
+    default: narrate/result.mp4
+  tts:
+    description: "Speech engine: auto (ElevenLabs when a key is given, else Kokoro), kokoro, elevenlabs or silent"
+    default: auto
+  elevenlabs-api-key:
+    description: ElevenLabs API key, e.g. from a secret (optional)
+    default: ""
+
+outputs:
+  video-file:
+    description: The video (MP4)
+    value: ${{ steps.build.outputs.video-file }}
+  poster-file:
+    description: The poster image (JPG)
+    value: ${{ steps.build.outputs.poster-file }}
+  srt-file:
+    description: Subtitles (SRT), when the script asks for subtitle files
+    value: ${{ steps.build.outputs.srt-file }}
+  vtt-file:
+    description: Subtitles (VTT), when the script asks for subtitle files
+    value: ${{ steps.build.outputs.vtt-file }}
+
+runs:
+  using: composite
+  steps:
+    - uses: astral-sh/setup-uv@v6
+
+    - name: Cache narrate's models, ffmpeg and speech
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/narrate
+        key: narrate-${{ runner.os }}-${{ hashFiles(format('{0}/uv.lock', github.action_path)) }}
+        restore-keys: narrate-${{ runner.os }}-
+
+    - name: Install narrate and headless Chromium
+      shell: bash
+      run: |
+        uv sync --project "$GITHUB_ACTION_PATH" --frozen
+        uv run --project "$GITHUB_ACTION_PATH" playwright install --with-deps chromium
+
+    - name: Build the video
+      id: build
+      shell: bash
+      env:
+        ELEVENLABS_API_KEY: ${{ inputs.elevenlabs-api-key }}
+        SOURCE: ${{ inputs.source-path }}
+        OUTPUT: ${{ inputs.output }}
+        TTS: ${{ inputs.tts }}
+      run: |
+        mkdir -p "$(dirname "$OUTPUT")"
+        uv run --project "$GITHUB_ACTION_PATH" narrate build "$SOURCE" -o "$OUTPUT" --tts "$TTS"
+        base="${OUTPUT%.*}"
+        echo "video-file=$OUTPUT" >> "$GITHUB_OUTPUT"
+        echo "poster-file=$base.jpg" >> "$GITHUB_OUTPUT"
+        if [ -f "$base.srt" ]; then echo "srt-file=$base.srt" >> "$GITHUB_OUTPUT"; fi
+        if [ -f "$base.vtt" ]; then echo "vtt-file=$base.vtt" >> "$GITHUB_OUTPUT"; fi
