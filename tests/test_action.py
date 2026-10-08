@@ -45,3 +45,11 @@ def test_image_is_published_only_from_main_and_tags():
     meta = next(s for s in steps if s.get("id") == "meta")
     assert publish["if"] == "steps.meta.outcome == 'success'"
     assert meta["if"] == "github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')"
+
+
+def test_published_image_is_checked_through_the_action():
+    workflow = yaml.safe_load((ROOT / ".github/workflows/image.yml").read_text())
+    job = workflow["jobs"]["published"]
+    assert job["needs"] == "image" and job["permissions"]["packages"] == "read"
+    step = next(s for s in job["steps"] if s.get("uses") == "./")
+    assert step["with"]["image"].startswith("ghcr.io/") and "needs.image.outputs.digest" in step["with"]["image"]

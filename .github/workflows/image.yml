@@ -25,6 +25,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      digest: ${{ steps.publish.outputs.digest }}
     steps:
       - uses: actions/checkout@v7
 
@@ -80,7 +82,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      - name: Publish the image
+      - id: publish
+        name: Publish the image
         if: steps.meta.outcome == 'success'
         uses: docker/build-push-action@v7
         with:
@@ -89,3 +92,23 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
+
+  # What other repositories do: pull the published image from ghcr.io with the
+  # workflow's token, and build with it through the action
+  published:
+    needs: image
+    if: needs.image.outputs.digest
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Render the demo with the published image
+        uses: ./
+        with:
+          image: ghcr.io/${{ github.repository }}@${{ needs.image.outputs.digest }}
+          source-path: examples/demo/demo.md
+          output: out/demo.mp4
+          tts: kokoro

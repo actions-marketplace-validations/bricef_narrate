@@ -146,7 +146,9 @@ narrate image, with the same outputs as Narakeet's
 `.github/workflows/image.yml` builds the image, runs the test suite inside it
 and renders `examples/demo` through the action with it, keeping the video as
 an artifact. On main it then publishes the image as `latest` (and `sha-…`);
-a `v1.2.3` tag publishes `1.2.3` and `1.2`.
+a `v1.2.3` tag publishes `1.2.3` and `1.2`. A second job renders the demo
+again with the published image, pulled from ghcr.io the way other
+repositories pull it.
 
 ### Speech engines (`--tts`)
 
