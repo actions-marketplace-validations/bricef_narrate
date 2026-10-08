@@ -17,6 +17,9 @@ inputs:
   elevenlabs-api-key:
     description: ElevenLabs API key, e.g. from a secret (optional)
     default: ""
+  image:
+    description: The narrate container image to build with
+    default: ghcr.io/bricef/narrate:latest
 
 outputs:
   video-file:
@@ -35,53 +38,66 @@ outputs:
 runs:
   using: composite
   steps:
-    # setup-uv publishes exact version tags only, no moving major
-    - uses: astral-sh/setup-uv@v10.2.0
-
     # hashFiles() can't read the action's own directory when another repository
-    # uses it, so the key comes from a shell step: the files pinning ffmpeg, the
-    # models and the music, and uv.lock for Playwright's Chromium.
+    # uses it, so the key comes from a shell step: the files that pin the models
+    # and the music narrate fetches or makes on first use.
     - name: Cache keys
       id: keys
       shell: bash
       run: |
         cd "$GITHUB_ACTION_PATH"
-        echo "tools=$(cat uv.lock src/narrate/{media,tts,stt,music}.py | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+        echo "tools=$(cat src/narrate/{tts,stt,music}.py | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
 
-    - name: Cache tools (ffmpeg, models, music, Chromium)
+    - name: Cache models and music
       uses: actions/cache@v6
       with:
-        path: |
-          ~/.cache/narrate-tools
-          ~/.cache/ms-playwright
-        key: narrate-tools-${{ runner.os }}-${{ steps.keys.outputs.tools }}
+        path: ~/.cache/narrate-image/tools
+        key: narrate-image-tools-${{ runner.os }}-${{ steps.keys.outputs.tools }}
 
     # Speech grows with every script, so each run saves a new entry seeded from the last
     - name: Cache synthesised speech
       uses: actions/cache@v6
       with:
-        path: ~/.cache/narrate-speech
-        key: narrate-speech-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
-        restore-keys: narrate-speech-${{ runner.os }}-
+        path: |
+          ~/.cache/narrate-image/tts
+          ~/.cache/narrate-image/stt
+        key: narrate-image-speech-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+        restore-keys: narrate-image-speech-${{ runner.os }}-
 
-    - name: Install narrate and headless Chromium
+    # Images on ghcr.io are pulled with the workflow's token, so a private
+    # package works for repositories it grants access to (needs packages: read)
+    - name: Pull the image
       shell: bash
+      env:
+        IMAGE: ${{ inputs.image }}
+        TOKEN: ${{ github.token }}
       run: |
-        uv sync --project "$GITHUB_ACTION_PATH" --frozen
-        uv run --project "$GITHUB_ACTION_PATH" playwright install --with-deps chromium
+        case "$IMAGE" in
+          */*) ;;
+          *) exit 0 ;;  # a local image, e.g. one built earlier in the job
+        esac
+        export DOCKER_CONFIG="$(mktemp -d)"
+        trap 'rm -rf "$DOCKER_CONFIG"' EXIT
+        if [[ "$IMAGE" == ghcr.io/* ]]; then
+          echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin > /dev/null
+        fi
+        docker pull --quiet "$IMAGE"
 
     - name: Build the video
       id: build
       shell: bash
       env:
         ELEVENLABS_API_KEY: ${{ inputs.elevenlabs-api-key }}
+        IMAGE: ${{ inputs.image }}
         SOURCE: ${{ inputs.source-path }}
         OUTPUT: ${{ inputs.output }}
         TTS: ${{ inputs.tts }}
       run: |
-        export NARRATE_TOOLS="$HOME/.cache/narrate-tools" NARRATE_CACHE="$HOME/.cache/narrate-speech"
-        mkdir -p "$(dirname "$OUTPUT")"
-        uv run --project "$GITHUB_ACTION_PATH" narrate build "$SOURCE" -o "$OUTPUT" --tts "$TTS"
+        cache="$HOME/.cache/narrate-image"
+        mkdir -p "$cache" "$(dirname "$OUTPUT")"
+        docker run --rm --user "$(id -u):$(id -g)" \
+          -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$PWD" -v "$cache:/cache" \
+          -e ELEVENLABS_API_KEY "$IMAGE" build "$SOURCE" -o "$OUTPUT" --tts "$TTS"
         base="${OUTPUT%.*}"
         echo "video-file=$OUTPUT" >> "$GITHUB_OUTPUT"
         echo "poster-file=$base.jpg" >> "$GITHUB_OUTPUT"

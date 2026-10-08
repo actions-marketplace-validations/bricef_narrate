@@ -1,0 +1,91 @@
+name: Image
+
+# Builds the container image, runs the test suite inside it and renders
+# examples/demo through the action with it (the video is kept as an artifact).
+# Pushes to main and v* tags then publish it as ghcr.io/bricef/narrate.
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - pyproject.toml
+      - uv.lock
+      - src/**
+      - tests/**
+      - examples/**
+      - action.yml
+      - .github/workflows/image.yml
+  workflow_dispatch:
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Run the tests in the image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build the image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: narrate:ci
+          cache-from: type=gha
+
+      - id: video
+        name: Render the demo with it
+        uses: ./
+        with:
+          image: narrate:ci
+          source-path: examples/demo/demo.md
+          output: out/demo.mp4
+          tts: kokoro
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: demo-video
+          path: |
+            ${{ steps.video.outputs.video-file }}
+            ${{ steps.video.outputs.poster-file }}
+
+      - id: meta
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      - if: steps.meta.outcome == 'success'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Publish the image
+        if: steps.meta.outcome == 'success'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
