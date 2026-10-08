@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 
 ELLIPSIS_PAUSE = 0.5
+SENTENCE_PAUSE = 0.25  # between runs split by emphasis, after a sentence ends
+JOIN_PAUSE = 0.06  # between runs split mid-sentence
 
 _SPAN_RE = re.compile(r"\[([^\]]+)\]\{([^}]+)\}")
 _LINK_RE = re.compile(r"\[([^\]]+)\]\([^)]*\)")
@@ -17,6 +20,11 @@ _EMPHASIS_RES = [
     re.compile(r"(?<!\w)_(.+?)_(?!\w)"),
 ]
 _TAG_RE = re.compile(r"<[^>]+>")
+# Outermost emphasis, longest delimiters first: ** __ ~~ then * _
+_EMPHASIS_RE = re.compile(
+    r"\*\*(?P<strong>.+?)\*\*|(?<!\w)__(?P<strong2>.+?)__(?!\w)|~~(?P<reduced>.+?)~~"
+    r"|\*(?P<moderate>.+?)\*|(?<!\w)_(?P<moderate2>.+?)_(?!\w)"
+)
 _ELLIPSIS_RE = re.compile(r"…|\.{3}")
 
 _LETTERS = {
@@ -53,11 +61,21 @@ def _strip_emphasis(text: str) -> str:
     return text
 
 
-def speech_parts(text: str, lang: str, notes: set[str]) -> list[str]:
-    """Speakable chunks of one narration paragraph; an inline pause separates each chunk.
+@dataclass
+class Run:
+    """A stretch of narration synthesised in one call."""
 
-    `notes` collects the names of markup features that were approximated, so the
-    caller can warn once per feature.
+    text: str
+    emphasis: str = "none"  # none | moderate | strong | reduced
+    pause: float = 0.0  # silence before it
+
+
+def speech_runs(text: str, lang: str, notes: set[str]) -> list[Run]:
+    """Speakable runs of one narration paragraph.
+
+    Emphasis markup (`*x*`/`_x_` moderate, `**x**`/`__x__` strong, `~~x~~`
+    reduced) and inline pauses (an ellipsis) split the paragraph; each run is
+    synthesised separately. `notes` collects markup that was approximated.
     """
 
     def span(m: re.Match[str]) -> str:
@@ -71,12 +89,30 @@ def speech_parts(text: str, lang: str, notes: set[str]) -> list[str]:
     text = _SPAN_RE.sub(span, text)
     text = _LINK_RE.sub(r"\1", text)
     text = _CODE_RE.sub(lambda m: spell(m.group(1), lang), text)
-    stripped = _strip_emphasis(text)
-    if stripped != text:
-        notes.add("emphasis markup (read without emphasis)")
-    text = _TAG_RE.sub(" ", stripped).replace("^", "")
-    parts = [" ".join(p.split()) for p in _ELLIPSIS_RE.split(text)]
-    return [p for p in parts if any(ch.isalnum() for ch in p)]
+
+    pieces: list[tuple[str, str]] = []
+    at = 0
+    for m in _EMPHASIS_RE.finditer(text):
+        pieces.append((text[at:m.start()], "none"))
+        kind = next(k for k, v in m.groupdict().items() if v is not None)
+        pieces.append((_strip_emphasis(m.group(kind)), kind.rstrip("2")))
+        at = m.end()
+    pieces.append((text[at:], "none"))
+
+    runs: list[Run] = []
+    for chunk, emphasis in pieces:
+        for i, part in enumerate(_ELLIPSIS_RE.split(_TAG_RE.sub(" ", chunk).replace("^", ""))):
+            part = " ".join(part.split())
+            if not any(ch.isalnum() for ch in part):
+                continue
+            if i:
+                pause = ELLIPSIS_PAUSE
+            elif runs:
+                pause = SENTENCE_PAUSE if runs[-1].text.rstrip()[-1:] in ".!?:;" else JOIN_PAUSE
+            else:
+                pause = 0.0
+            runs.append(Run(part, emphasis, pause))
+    return runs
 
 
 def ssml_text(ssml: str) -> str:

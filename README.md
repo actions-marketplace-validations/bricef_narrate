@@ -104,6 +104,21 @@ thread pool. The output is byte-identical to a sequential build.
 | `NARRATE_KOKORO_WORKERS` | up to 4 Kokoro sessions |
 | `NARRATE_ELEVENLABS_CONCURRENCY` | 2, the free plan's limit |
 
+### Emphasis
+
+Neither engine exposes an emphasis control, so emphasis is a prosody bundle
+applied on any engine. The speed change is rendered by the engine itself.
+
+| Level | Markup | Speed | Pitch | Gain |
+| --- | --- | --- | --- | --- |
+| `moderate` | `*x*`, `_x_` | 0.96× | +0.75 semitones | +1.5 dB |
+| `strong` | `**x**`, `__x__` | 0.92× | +1.5 semitones | +3 dB |
+| `reduced` | `~~x~~` | 1.06× | −1 semitone | −4 dB |
+
+Inline markup splits a paragraph into runs. Narakeet advises wrapping whole
+sentences, and mid-sentence emphasis adds a short join. `voice-emphasis` sets
+the level for the paragraphs that follow.
+
 ### Voice names
 
 A script's voice can be named in any of three ways:
@@ -137,7 +152,7 @@ Brian:
 | Header | `size`, `voice`, `voice-speed`, `voice-volume`, `narration-language`, `canvas`, `theme` (default, light, `.css`), `asset-resize`, `subtitles` (every mode and style property), `background` (project file, volume, fades), `poster-time`, `target`, `transition` (all 26 types), `voice-pitch` | built-in background tracks |
 | Images | fit/contain/cover, positions, several images per scene, pan/zoom animation (`zoom`, `zoomout`, `pan`, `panzoom`, `panzoomout`) | |
 | Videos | segments, still frames, all six sync modes, volume/mute, animated GIFs, several clips and images in one scene | |
-| Narration | paragraphs, pauses, `pause-until`, recorded audio, voices, speed (any 0.3–2), volume (presets, or `normalized` to EBU R 128), pitch, ellipsis pauses, spelling (backticks and `{literal}`), `narration-mode: fragment` | emphasis, IPA/X-SAMPA/Pinyin spans and SSML (read as plain text), `merge` mode |
+| Narration | paragraphs, pauses, `pause-until`, recorded audio, voices, speed (any 0.3–2), volume (presets, or `normalized` to EBU R 128), pitch, emphasis (markup and `voice-emphasis`), ellipsis pauses, spelling (backticks and `{literal}`), `narration-mode: fragment` | IPA/X-SAMPA/Pinyin spans and SSML (read as plain text), `merge` mode |
 | Visuals | plain, Markdown and syntax-highlighted slides (several per scene take turns), themes and custom CSS, callouts (circle, rectangle, mask), transitions between scenes | |
 | Subtitles | cues from narration or block quotes, SRT/VTT, embedded track, burned-in styles, custom fonts | |
 

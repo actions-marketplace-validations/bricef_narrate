@@ -2,7 +2,7 @@ import pytest
 
 from narrate.config import ConfigError, parse_color, parse_size, parse_speed, parse_subtitles, parse_time
 from narrate.subtitles import narration_cues, spread, split_text, to_srt, to_vtt
-from narrate.text import speech_parts, spell, subtitle_text
+from narrate.text import ELLIPSIS_PAUSE, SENTENCE_PAUSE, speech_runs, spell, subtitle_text
 
 
 @pytest.mark.parametrize("value, seconds", [
@@ -45,11 +45,24 @@ def test_subtitle_modes_and_map():
         parse_subtitles({"break": "30"})
 
 
-def test_speech_parts_strip_markup_spell_and_split_on_ellipsis():
+def test_speech_runs_spell_split_on_ellipsis_and_carry_emphasis():
     notes: set[str] = set()
-    parts = speech_parts("My name is **Bond**… James `SAR` [tomato]{ipa}.", "en-us", notes)
-    assert parts == ["My name is Bond", "James ess, ay, ar tomato."]
+    runs = speech_runs("My name is Bond… James `SAR` [tomato]{ipa}.", "en-us", notes)
+    assert [(r.text, r.pause) for r in runs] == [("My name is Bond", 0.0), ("James ess, ay, ar tomato.", ELLIPSIS_PAUSE)]
     assert any("ipa" in n for n in notes)
+
+
+def test_emphasis_markup_splits_into_runs():
+    text = ("This is my usual voice. *This is more important.* **This is really important.** "
+            "~~This is not so much.~~ This is my normal voice again.")
+    runs = speech_runs(text, "en-us", set())
+    assert [r.emphasis for r in runs] == ["none", "moderate", "strong", "reduced", "none"]
+    assert all(r.pause == SENTENCE_PAUSE for r in runs[1:])
+
+
+def test_snake_case_is_not_emphasis():
+    (run,) = speech_runs("Set my_variable_name to two.", "en-us", set())
+    assert run.text == "Set my_variable_name to two." and run.emphasis == "none"
 
 
 def test_spell_symbols_and_non_english():

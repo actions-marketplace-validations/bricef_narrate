@@ -32,7 +32,7 @@ from .doctor import find_font
 from .frames import FrameRenderer, FrameSpec, SlideSpec
 from .script import ANIMATED_SIZES, POSITIONS, SIZES, Directive, Media, Narration, Quote, Script, Slide
 from .subtitles import Cue
-from .text import ELLIPSIS_PAUSE, speech_parts, ssml_text, subtitle_text
+from .text import Run, speech_runs, ssml_text, subtitle_text
 from .tts import SAMPLE_RATE, Prefetching, Synth, Voice
 
 SR = SAMPLE_RATE
@@ -44,8 +44,14 @@ TARGETS = {  # x264 preset, crf, faststart
     "online": ("medium", 18, True),
     "self-hosted": ("slow", 23, True),
 }
-UNSUPPORTED = {
-    "voice-emphasis": "voice-emphasis (ignored)",
+UNSUPPORTED: dict[str, str] = {}
+# Emphasis as a prosody bundle that works on every engine: speed (rendered by
+# the engine), pitch in semitones and gain in dB
+EMPHASIS = {
+    "none": (1.0, 0.0, 0.0),
+    "moderate": (0.96, 0.75, 1.5),
+    "strong": (0.92, 1.5, 3.0),
+    "reduced": (1.06, -1.0, -4.0),
 }
 
 
@@ -213,6 +219,7 @@ class Builder:
         s = self.settings
         voice_name, lang = s.voice, s.narration_language
         speed, volume, pitch = s.voice_speed, s.voice_volume, s.voice_pitch
+        emphasis = "none"
         image_size: str | None = None
         image_position: str | None = None
         duration: float | None = None
@@ -236,6 +243,8 @@ class Builder:
                         volume = parse_volume(value)
                     elif key == "voice-pitch":
                         pitch = parse_pitch(value)
+                    elif key == "voice-emphasis":
+                        emphasis = _choice(value, set(EMPHASIS), "voice-emphasis")
                     elif key == "narration-language":
                         lang = None if str(value).lower() == "default" else str(value)
                     elif key == "narration-mode":
@@ -291,15 +300,16 @@ class Builder:
                     voice = self._voice(voice_name, lang)
                     if block.ssml:
                         self.notes.add("SSML (tags stripped, text read plainly)")
-                        parts = [ssml_text(block.text)]
+                        runs = [Run(ssml_text(block.text))]
                     else:
-                        parts = speech_parts(block.text, voice.lang or "en", self.notes)
+                        runs = speech_runs(block.text, voice.lang or "en", self.notes)
                     start = track.seconds
-                    for i, part in enumerate(parts):
-                        if i:
-                            track.silence(ELLIPSIS_PAUSE)
-                        track.add(apply_gain(self._speak(part, voice, speed, pitch), volume))
-                    if parts:
+                    for run in runs:
+                        track.silence(run.pause)
+                        rate, semitones, gain = EMPHASIS[run.emphasis if run.emphasis != "none" else emphasis]
+                        audio = self._speak(run.text, voice, speed * rate, pitch * 2 ** (semitones / 12))
+                        track.add(apply_gain(apply_gain(audio, volume), gain))
+                    if runs:
                         caption = subtitle_text(ssml_text(block.text) if block.ssml else block.text)
                         narration_spans.append((start, track.seconds, caption))
                         track.silence(PARAGRAPH_PAUSE[self.mode])
