@@ -45,6 +45,8 @@ uv run playwright install chromium   # slides and frames are rendered by headles
   - It doesn't use an installed ffmpeg, because ffmpeg 7.0 crashes
     intermittently on narrate's transition graphs (#37).
   - `$NARRATE_FFMPEG` overrides it.
+  - Downloaded tools live under `~/.cache/narrate` (`$NARRATE_TOOLS`); speech
+    audio is cached apart from them (`$NARRATE_CACHE`).
   - `uv run narrate doctor` checks the whole setup.
 - **Kokoro:** the model (about 350 MB) downloads on first use, or ahead of time
   with `uv run narrate models`.
@@ -71,9 +73,14 @@ you pass `--keep-work DIR`.
 | Engine | Notes |
 | --- | --- |
 | `auto` (default) | ElevenLabs when `ELEVENLABS_API_KEY` is set, otherwise Kokoro |
-| `elevenlabs` | `eleven_multilingual_v2` by default (change it with `--tts-model`); speed 0.7–1.2 |
-| `kokoro` | Kokoro-82M on the CPU (about 7× real time here); 54 voices across 9 languages; speed 0.5–2 |
+| `elevenlabs` | `eleven_multilingual_v2` by default (change it with `--tts-model`); renders speeds 0.7–1.2 natively |
+| `kokoro` | Kokoro-82M on the CPU (about 7× real time here); 54 voices across 9 languages; renders speeds 0.5–2 natively |
 | `silent` | silence timed like speech, for fast layout previews |
+
+Speeds beyond an engine's native range (Narakeet allows 0.3–2) are synthesised at the
+nearest native speed and time-stretched the rest of the way, preserving pitch.
+Measured: Kokoro within 5% of the requested length; ElevenLabs within 6% at 1.8×,
+because its own speed setting is slightly non-linear.
 
 Synthesised audio is cached under `~/.cache/narrate/tts/`, so a rebuild only
 synthesises paragraphs that changed. That matters for ElevenLabs credits.

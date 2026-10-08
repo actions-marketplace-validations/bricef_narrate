@@ -179,6 +179,15 @@ class Builder:
             self._voices[key] = self.synth.resolve(name, lang.lower() if lang else None, self.notes)
         return self._voices[key]
 
+    def _speak(self, text: str, voice: Voice, speed: float) -> np.ndarray:
+        """Synthesise at the nearest speed the engine supports, then stretch the remainder."""
+        lo, hi = self.synth.speed_range
+        native = min(hi, max(lo, speed))
+        audio = self.synth.synth(text, voice, native, self.notes)
+        if abs(speed / native - 1.0) > 1e-3 and len(audio):
+            audio = media.time_stretch(audio, SR, speed / native)
+        return audio
+
     def _theme(self, value: str, line: int) -> str:
         if value.lower().endswith(".css"):
             return str(self._path(value, line))
@@ -275,7 +284,7 @@ class Builder:
                     for i, part in enumerate(parts):
                         if i:
                             track.silence(ELLIPSIS_PAUSE)
-                        track.add(apply_gain(self.synth.synth(part, voice, speed, self.notes), volume))
+                        track.add(apply_gain(self._speak(part, voice, speed), volume))
                     if parts:
                         caption = subtitle_text(ssml_text(block.text) if block.ssml else block.text)
                         narration_spans.append((start, track.seconds, caption))
@@ -531,6 +540,7 @@ class Builder:
 
         class Recorder:
             name = real.name
+            speed_range = real.speed_range  # so requests are recorded at the speed actually synthesised
 
             def resolve(self, name, lang, notes):
                 return real.resolve(name, lang, notes)

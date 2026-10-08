@@ -45,9 +45,9 @@ def ffmpeg_asset(machine: str | None = None, system: str | None = None) -> str |
 
 def managed_ffmpeg() -> Path:
     """Where narrate keeps its own ffmpeg (it may not be downloaded yet)."""
-    from .tts import cache_dir
+    from .tts import tools_dir
 
-    return cache_dir() / "ffmpeg" / f"n{FFMPEG_SERIES}" / "ffmpeg"
+    return tools_dir() / "ffmpeg" / f"n{FFMPEG_SERIES}" / "ffmpeg"
 
 
 def ensure_ffmpeg(log=lambda msg: print(msg, file=sys.stderr), opener=urllib.request.urlopen) -> Path:
@@ -209,6 +209,14 @@ def decode_audio(
     if abs(tempo - 1.0) > 1e-3:
         args += ["-filter:a", ",".join(_atempo_chain(tempo))]
     out = run([*args, "-f", "f32le", "-"])
+    return np.frombuffer(out, dtype=np.float32).copy()
+
+
+def time_stretch(samples: np.ndarray, sample_rate: int, tempo: float) -> np.ndarray:
+    """Speed mono float32 audio up (tempo > 1) or slow it down without changing its pitch."""
+    out = run(["-f", "f32le", "-ar", str(sample_rate), "-ac", "1", "-i", "-",
+               "-filter:a", ",".join(_atempo_chain(tempo)), "-f", "f32le", "-"],
+              input=np.asarray(samples, dtype="<f4").tobytes())
     return np.frombuffer(out, dtype=np.float32).copy()
 
 
