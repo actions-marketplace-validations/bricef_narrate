@@ -113,9 +113,22 @@ A script's voice can be named in any of three ways:
   ID from your own library.
 - **A Narakeet voice name**, such as `Brian`.
 
-Each engine uses the name directly when it's one of its own voices. Otherwise
-it picks its voice of the same language and gender, so scripts carry across
-engines. `narrate voices` lists the voices for each engine.
+Each engine uses the name directly when it's one of its own voices.
+ElevenLabs also tries your account's library, if the key may list voices.
+Otherwise the engine picks its voice of the same language and gender, so
+scripts carry across engines. Australian, Indian, Irish, Scottish and South
+African English fall back to British, then American.
+
+To choose exactly, pin names per engine in `voices.yaml`, either next to the
+script or in `~/.config/narrate/voices.yaml` (the project file wins):
+
+```yaml
+Brian:
+  kokoro: bm_lewis
+  elevenlabs: George      # a default voice name, or a voice id
+```
+
+`narrate voices [script]` lists each engine's voices and the pins in effect.
 
 ## Feature status
 

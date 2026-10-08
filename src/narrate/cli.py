@@ -12,6 +12,7 @@ from . import media
 from .build import Builder, BuildError
 from .config import ConfigError, settings_from_header
 from .doctor import SetupError, run_checks
+from .voicemap import VoiceMapError
 from .script import Media, ScriptError, parse_file
 from .tts import ELEVENLABS_VOICES, KOKORO_VOICES, NARAKEET_PROFILES, ensure_models, make_synth
 
@@ -74,6 +75,15 @@ def cmd_voices(args: argparse.Namespace) -> int:
         print(f"  {name.title():10} {voice_id}  {lang} {gender}")
     print("\nNarakeet names map to a voice of the same language and gender:")
     print("  " + " ".join(sorted(NARAKEET_PROFILES)))
+    from . import voicemap
+
+    mapping = voicemap.load(Path(args.script).resolve().parent if args.script else None)
+    print(f"\nPinned in voices.yaml ({voicemap.user_file()}"
+          + (f" and next to {args.script}" if args.script else "") + "):")
+    if not mapping:
+        print("  (none)")
+    for name, engines in sorted(mapping.items()):
+        print(f"  {name:12} " + ", ".join(f"{engine}: {voice}" for engine, voice in engines.items()))
     return 0
 
 
@@ -139,7 +149,9 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument("script")
     check.set_defaults(func=cmd_check)
 
-    sub.add_parser("voices", help="list voices").set_defaults(func=cmd_voices)
+    voices = sub.add_parser("voices", help="list voices, and any voices.yaml pins")
+    voices.add_argument("script", nargs="?", help="also show the voices.yaml next to this script")
+    voices.set_defaults(func=cmd_voices)
     sub.add_parser("models", help="download the Kokoro model files and ffmpeg").set_defaults(func=cmd_models)
     sub.add_parser("doctor", help="check ffmpeg, Chromium, fonts, models and keys").set_defaults(func=cmd_doctor)
 
@@ -162,7 +174,7 @@ def main(argv: list[str] | None = None) -> int:
     except SetupError as e:
         print(f"setup problem: {e}", file=sys.stderr)
         return 3
-    except (ConfigError, media.MediaError, RuntimeError) as e:
+    except (ConfigError, media.MediaError, RuntimeError, VoiceMapError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
 

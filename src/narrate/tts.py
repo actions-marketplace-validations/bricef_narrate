@@ -54,6 +54,13 @@ NARAKEET_PROFILES: dict[str, tuple[str, str]] = {
         "jimmy burton wally randy fred barney".split(), ("en-us", "m")),
     **dict.fromkeys("amy emma victoria daisy beatrice amelia".split(), ("en-gb", "f")),
     **dict.fromkeys("brian benedict edward anton william alfred arthur".split(), ("en-gb", "m")),
+    **dict.fromkeys("nicole olivia emily".split(), ("en-au", "f")),
+    **dict.fromkeys("russell russel graham alan".split(), ("en-au", "m")),
+    **dict.fromkeys("raveena kajal neerja sheela devika kavita".split(), ("en-in", "f")),
+    **dict.fromkeys("prabhat manish".split(), ("en-in", "m")),
+    **dict.fromkeys("aileen".split(), ("en-scotland", "f")),
+    **dict.fromkeys("niamh".split(), ("en-ie", "f")),
+    **dict.fromkeys("aletta ayanda".split(), ("en-za", "f")),
     **dict.fromkeys("monika vicki marlene gertrud".split(), ("de", "f")),
     **dict.fromkeys("helmut hans florian dietrich".split(), ("de", "m")),
     **dict.fromkeys("carmen lucia conchita lupe mia blanca elvira paquita ramona".split(), ("es", "f")),
@@ -129,6 +136,22 @@ ELEVENLABS_BY_GENDER = {"f": "sarah", "m": "george"}
 ELEVENLABS_MODEL = "eleven_multilingual_v2"
 ELEVENLABS_SPEED = (0.7, 1.2)
 _ELEVENLABS_ID_RE = re.compile(r"^[A-Za-z0-9]{20}$")
+
+
+# When an engine has no voice for an accent, try these next (same gender)
+ACCENT_FALLBACK = {
+    "en-au": ["en-gb", "en-us"], "en-nz": ["en-gb", "en-us"], "en-ie": ["en-gb", "en-us"],
+    "en-za": ["en-gb", "en-us"], "en-scotland": ["en-gb", "en-us"], "en-in": ["en-gb", "en-us"],
+    "en-gb": ["en-us"], "en-us": ["en-gb"],
+}
+
+
+def by_profile(table: dict[tuple[str, str], str], profile: Profile) -> str | None:
+    """The table's voice for a profile, falling back to a related accent."""
+    for lang in [profile.lang, *ACCENT_FALLBACK.get(profile.lang, [])]:
+        if (lang, profile.gender) in table:
+            return table[(lang, profile.gender)]
+    return None
 
 
 def profile_of(name: str) -> Profile | None:
@@ -235,7 +258,7 @@ def kokoro_resolve(name: str | None, lang: str | None, notes: set[str]) -> Voice
         elif same_name in KOKORO_VOICES:
             voice_id = same_name  # e.g. ElevenLabs "Sarah" -> af_sarah
             notes.add(f"voice {base!r} matched to Kokoro voice {voice_id}")
-        elif profile and (match := KOKORO_BY_PROFILE.get((profile.lang, profile.gender))):
+        elif profile and (match := by_profile(KOKORO_BY_PROFILE, profile)):
             voice_id = match
             notes.add(f"voice {base!r} approximated by Kokoro voice {voice_id}")
         else:
@@ -343,6 +366,22 @@ class ElevenLabsSynth:
         self.model = model or os.environ.get("NARRATE_ELEVENLABS_MODEL") or ELEVENLABS_MODEL
         self._cache = SynthCache(self.name)
         self._ignores_language: set[str] = set()
+        self._library_names: dict[str, str] | None = None
+
+    def _get(self, url: str) -> bytes:
+        request = urllib.request.Request(url, headers={"xi-api-key": self.key})
+        with urllib.request.urlopen(request, timeout=30) as resp:
+            return resp.read()
+
+    def _library(self) -> dict[str, str]:
+        """Voices in the account's library by lowercase name; empty if the key can't list voices."""
+        if self._library_names is None:
+            try:
+                voices = json.loads(self._get("https://api.elevenlabs.io/v1/voices")).get("voices", [])
+                self._library_names = {v["name"].split(" - ")[0].strip().lower(): v["voice_id"] for v in voices}
+            except (urllib.error.URLError, ValueError, KeyError, TypeError, OSError):
+                self._library_names = {}  # e.g. a key without voices_read
+        return self._library_names
 
     def resolve(self, name: str | None, lang: str | None, notes: set[str]) -> Voice:
         base, suffix_lang = split_voice(name)
@@ -356,9 +395,10 @@ class ElevenLabsSynth:
                 voice_id = base  # a raw voice id from the user's own library
             elif key in ELEVENLABS_VOICES:
                 voice_name = key
+            elif key in self._library():
+                voice_id = self._library()[key]  # a voice in the account's library, by name
             elif profile:
-                voice_name = (ELEVENLABS_BY_PROFILE.get((profile.lang, profile.gender))
-                              or ELEVENLABS_BY_GENDER[profile.gender])
+                voice_name = by_profile(ELEVENLABS_BY_PROFILE, profile) or ELEVENLABS_BY_GENDER[profile.gender]
                 notes.add(f"voice {base!r} approximated by ElevenLabs voice {voice_name.title()}")
                 lang = lang or (profile.lang if not profile.lang.startswith("en") else None)
             else:

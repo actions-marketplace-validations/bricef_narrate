@@ -23,7 +23,7 @@ from typing import Any, Callable
 
 import numpy as np
 
-from . import media, motion, subtitles
+from . import media, motion, subtitles, voicemap
 from .config import (
     BUILTIN_MUSIC, FPS, TRANSITIONS, ConfigError, Settings, SubtitleConfig, parse_transition, parse_color, parse_number, parse_speed,
     parse_time, parse_volume, settings_from_header,
@@ -156,6 +156,10 @@ class Builder:
             self.settings: Settings = settings_from_header(script.header, script.warnings)
         except ConfigError as e:
             raise BuildError(str(e)) from None
+        try:
+            self.voice_map = voicemap.load(script.base_dir)
+        except voicemap.VoiceMapError as e:
+            raise BuildError(str(e)) from None
         self.mode = "normal"  # narration-mode persists across scenes
         if self.settings.voice_pitch:
             self.notes.add(UNSUPPORTED["voice-pitch"])
@@ -176,7 +180,8 @@ class Builder:
     def _voice(self, name: str | None, lang: str | None) -> Voice:
         key = (name, lang)
         if key not in self._voices:
-            self._voices[key] = self.synth.resolve(name, lang.lower() if lang else None, self.notes)
+            mapped = voicemap.apply(self.voice_map, name, self.synth.name)
+            self._voices[key] = self.synth.resolve(mapped, lang.lower() if lang else None, self.notes)
         return self._voices[key]
 
     def _speak(self, text: str, voice: Voice, speed: float) -> np.ndarray:

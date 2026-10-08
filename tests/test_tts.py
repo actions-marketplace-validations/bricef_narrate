@@ -34,6 +34,8 @@ def eleven(monkeypatch):
         return (np.ones(2400, dtype="<i2") * 1000).tobytes()
 
     monkeypatch.setattr(synth, "_post", fake_post)
+    library = b'{"voices": [{"name": "Grandpa Joe - warm", "voice_id": "LIBRARYVOICE00000001"}]}'
+    monkeypatch.setattr(synth, "_get", lambda url: library)
     return synth, calls
 
 
@@ -97,3 +99,29 @@ def test_kokoro_synthesis(monkeypatch):
     audio = synth.synth("Welcome to London.", kokoro_resolve("bm_george", None, set()), 1.0, set())
     assert 0.5 < len(audio) / tts.SAMPLE_RATE < 5
     assert float(np.abs(audio).max()) > 0.05
+
+
+def test_elevenlabs_library_voices_by_name(eleven):
+    synth, _ = eleven
+    assert synth.resolve("grandpa joe", None, set()).id == "LIBRARYVOICE00000001"
+
+
+def test_elevenlabs_without_voices_permission_skips_the_library(monkeypatch):
+    import urllib.error
+
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "test-key")
+    synth = ElevenLabsSynth()
+
+    def denied(url):
+        raise urllib.error.HTTPError(url, 401, "missing_permissions", {}, None)
+
+    monkeypatch.setattr(synth, "_get", denied)
+    notes: set[str] = set()
+    assert synth.resolve("Somebody", None, notes).id == tts.ELEVENLABS_VOICES["george"][0]
+    assert any("unknown" in n for n in notes)
+
+
+def test_accents_fall_back_to_a_related_one():
+    notes: set[str] = set()
+    assert kokoro_resolve("Nicole", None, notes).id == "bf_emma"  # Australian -> British
+    assert kokoro_resolve("Prabhat", None, notes).id == "bm_george"  # Indian English -> British
