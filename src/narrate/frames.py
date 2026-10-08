@@ -46,8 +46,13 @@ body.theme-light { color: #fff; background: #000; }
 body.over { color: #fff; }
 body.over .slide { text-shadow: 0 2px 8px rgba(0, 0, 0, .75); }
 img.media { position: absolute; inset: 0; width: 100%%; height: 100%%; }
-.backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, .45); }
-body.theme-light .backdrop { background: none; }
+/* Narakeet darkens the image under a slide with a backdrop filter (measured: x0.45),
+   which a theme's own backdrop-filter replaces outright */
+.backdrop { position: absolute; inset: 0; backdrop-filter: brightness(.45); }
+body.theme-light .backdrop { backdrop-filter: none; }
+/* An overlay has nothing behind it for a filter to act on: darken with a layer */
+body.overlay .backdrop { backdrop-filter: none; background: rgba(0, 0, 0, .55); }
+body.overlay.theme-light .backdrop { background: none; }
 .slide { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
          box-sizing: border-box; padding: 5%% 7%%; }
 .content { max-width: 100%%; }
@@ -169,7 +174,7 @@ def frame_html(spec: FrameSpec, width: int, height: int) -> str:
     custom_css = spec.theme if spec.theme.endswith(".css") else None
     theme = "light" if spec.theme == "light" else "default"
     over = spec.image is not None or spec.over_video
-    classes = [f"theme-{theme}"] + (["over"] if over else [])
+    classes = [f"theme-{theme}"] + (["over"] if over else []) + (["overlay"] if spec.over_video else [])
 
     styles = [_BASE_CSS % {"w": width, "h": height, "sans": SANS, "serif": SERIF, "mono": MONO}]
     if spec.over_video:
