@@ -119,6 +119,19 @@ Inline markup splits a paragraph into runs. Narakeet advises wrapping whole
 sentences, and mid-sentence emphasis adds a short join. `voice-emphasis` sets
 the level for the paragraphs that follow.
 
+### Phonetic spans
+
+`[təˈmeɪ.toʊ]{ipa}`, `{x-sampa}`, `{pinyin}` and `{jyutping}` give a word's
+pronunciation.
+- X-SAMPA is converted to IPA.
+- Pinyin can use tone marks or tone numbers, and is phonemised by espeak's
+  Mandarin.
+- Jyutping is converted to IPA from tables of initials and finals; tones are
+  dropped.
+- Kokoro speaks the IPA directly as phonemes, inside the same utterance.
+- ElevenLabs only reads IPA in `<phoneme>` tags on its flash/turbo v2 models,
+  so phonetic words are voiced by `eleven_flash_v2` with the same voice.
+
 ### Russian stress marks
 
 Narakeet's `^` before a Russian vowel (`гвозд^ики`) becomes the standard
@@ -160,7 +173,7 @@ Brian:
 | Header | `size`, `voice`, `voice-speed`, `voice-volume`, `narration-language`, `canvas`, `theme` (default, light, `.css`), `asset-resize`, `subtitles` (every mode and style property), `background` (project file, volume, fades), `poster-time`, `target`, `transition` (all 26 types), `voice-pitch` | built-in background tracks |
 | Images | fit/contain/cover, positions, several images per scene, pan/zoom animation (`zoom`, `zoomout`, `pan`, `panzoom`, `panzoomout`) | |
 | Videos | segments, still frames, all six sync modes, volume/mute, animated GIFs, several clips and images in one scene | |
-| Narration | paragraphs, pauses, `pause-until`, recorded audio, voices, speed (any 0.3–2), volume (presets, or `normalized` to EBU R 128), pitch, emphasis (markup and `voice-emphasis`), language spans (`[See]{de}`), ellipsis pauses, spelling (backticks and `{literal}`, with letter names in English, Spanish, French, German, Italian and Portuguese), `narration-mode: fragment` | IPA/X-SAMPA/Pinyin spans and SSML (read as plain text), `merge` mode |
+| Narration | paragraphs, pauses, `pause-until`, recorded audio, voices, speed (any 0.3–2), volume (presets, or `normalized` to EBU R 128), pitch, emphasis (markup and `voice-emphasis`), language spans (`[See]{de}`), phonetic spans (IPA, X-SAMPA, Pinyin, Jyutping), ellipsis pauses, spelling (backticks and `{literal}`, with letter names in English, Spanish, French, German, Italian and Portuguese), `narration-mode: fragment` | SSML (read as plain text), `merge` mode |
 | Visuals | plain, Markdown and syntax-highlighted slides (several per scene take turns), themes and custom CSS, callouts (circle, rectangle, mask), transitions between scenes | |
 | Subtitles | cues from narration or block quotes, SRT/VTT, embedded track, burned-in styles, custom fonts | |
 

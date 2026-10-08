@@ -15,7 +15,10 @@ _LANG_RE = re.compile(r"^[a-z]{2,3}(?:-[a-z0-9]{2,8})?$")
 _OPEN, _SEP, _CLOSE = "\ue000", "\ue001", "\ue002"
 _SEGMENT_RE = re.compile(f"{_OPEN}([^{_SEP}]*){_SEP}([^{_CLOSE}]*){_CLOSE}")
 
-# A run's text, or (text, language) segments when part of it is in another language
+from .phonetics import PHONETIC_STYLES  # noqa: E402
+
+# A run's text, or (text, tag) segments where part of it is in another language
+# (tag = language code) or given phonetically (tag = ipa, x-sampa, pinyin, jyutping)
 Speech = str | tuple[tuple[str, str | None], ...]
 
 _SPAN_RE = re.compile(r"\[([^\]]+)\]\{([^}]+)\}")
@@ -113,7 +116,7 @@ def speech_runs(text: str, lang: str, notes: set[str]) -> list[Run]:
         inner, opts = m.group(1), m.group(2).strip().lower()
         if opts == "literal":
             return spell(inner, lang)
-        if opts not in STYLES and _LANG_RE.match(opts):
+        if opts in PHONETIC_STYLES or (opts not in STYLES and _LANG_RE.match(opts)):
             return f"{_OPEN}{opts}{_SEP}{inner}{_CLOSE}"
         if opts != "normal":
             notes.add(f"narration span {{{opts}}} (read as plain text)")
@@ -162,8 +165,9 @@ def _segments(text: str) -> Speech:
     if text[at:].strip():
         segments.append((text[at:].strip(), None))
     # A span cut by an ellipsis leaves stray markers: drop them
-    return tuple((t.translate({ord(_OPEN): None, ord(_SEP): " ", ord(_CLOSE): None}).strip(), lg)
-                 for t, lg in segments if t)
+    cleaned = [(t.translate({ord(_OPEN): None, ord(_SEP): " ", ord(_CLOSE): None}).strip(), lg) for t, lg in segments]
+    # Punctuation left over after a span (the full stop in "[x]{ipa}.") isn't worth its own request
+    return tuple((t, lg) for t, lg in cleaned if any(ch.isalnum() for ch in t))
 
 
 def speech_text(speech: Speech) -> str:

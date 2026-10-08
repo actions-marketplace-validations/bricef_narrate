@@ -11,6 +11,7 @@ for Narakeet) still renders sensibly on another.
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import os
 import re
@@ -25,6 +26,7 @@ from typing import Protocol
 
 import numpy as np
 
+from .phonetics import PHONETIC_STYLES, phonemize, to_ipa
 from .text import Speech, speech_text
 
 JOIN_SECONDS = 0.06  # between segments synthesised as separate requests
@@ -138,6 +140,7 @@ ELEVENLABS_BY_PROFILE = {
 }
 ELEVENLABS_BY_GENDER = {"f": "sarah", "m": "george"}
 ELEVENLABS_MODEL = "eleven_multilingual_v2"
+ELEVENLABS_PHONEME_MODEL = "eleven_flash_v2"  # reads <phoneme alphabet="ipa"> tags
 ELEVENLABS_SPEED = (0.7, 1.2)
 _ELEVENLABS_ID_RE = re.compile(r"^[A-Za-z0-9]{20}$")
 
@@ -276,6 +279,12 @@ def kokoro_resolve(name: str | None, lang: str | None, notes: set[str]) -> Voice
     return Voice(voice_id, espeak_code(lang or KOKORO_PREFIX_LANG[voice_id[0]]))
 
 
+def segment_phonemes(part: str, tag: str | None, voice_lang: str) -> str:
+    if tag in PHONETIC_STYLES:
+        return to_ipa(part, tag)
+    return phonemize(part, espeak_code(tag) if tag else voice_lang)
+
+
 def espeak_code(lang: str) -> str:
     """An espeak language for Kokoro's phonemizer: keep regions espeak knows, else drop them."""
     lang = lang.lower()
@@ -345,11 +354,9 @@ class KokoroSynth:
             return hit
         kokoro = self._engine()
         segments = [(text, None)] if isinstance(text, str) else text
-        with self._phonemize:
-            # Each segment in its own language, spliced into one utterance so
-            # the voice and its prosody carry straight through the foreign words
-            phonemes = " ".join(kokoro.tokenizer.phonemize(part, espeak_code(lang) if lang else voice.lang)
-                                for part, lang in segments)
+        # Each segment in its own language, or as given phonetically, spliced
+        # into one utterance so the voice and its prosody run straight through
+        phonemes = " ".join(segment_phonemes(part, tag, voice.lang) for part, tag in segments)
         audio, sr = kokoro.create(phonemes, voice=voice.id, speed=clamped, lang=voice.lang, is_phonemes=True)
         assert sr == SAMPLE_RATE
         audio = np.asarray(audio, dtype=np.float32)
@@ -420,9 +427,11 @@ class ElevenLabsSynth:
 
     def synth(self, text: str, voice: Voice, speed: float, notes: set[str]) -> np.ndarray:
         if not isinstance(text, str):
-            # One request per segment, each with its own language hint
-            parts = [self.synth(part, Voice(voice.id, lang.split("-")[0] if lang else voice.lang), speed, notes)
-                     for part, lang in text]
+            # One request per segment, each with its own language hint; phonetic
+            # segments go to a model that reads IPA
+            parts = [self._synth_phonetic(to_ipa(part, tag), voice, speed, notes) if tag in PHONETIC_STYLES
+                     else self.synth(part, Voice(voice.id, tag.split("-")[0] if tag else voice.lang), speed, notes)
+                     for part, tag in text]
             gap = np.zeros(int(JOIN_SECONDS * SAMPLE_RATE), dtype=np.float32)
             return np.concatenate([p for part in parts for p in (part, gap)][:-1])
         lo, hi = ELEVENLABS_SPEED
@@ -446,6 +455,24 @@ class ElevenLabsSynth:
             body.pop("language_code", None)
             pcm = self._post(voice.id, body)
         audio = np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32768.0
+        np.save(cached, audio)
+        return audio
+
+    def _synth_phonetic(self, ipa: str, voice: Voice, speed: float, notes: set[str]) -> np.ndarray:
+        """A word given in IPA, via a <phoneme> tag (only the flash/turbo v2 models read them)."""
+        lo, hi = ELEVENLABS_SPEED
+        clamped = min(hi, max(lo, speed))
+        cached = self._cache.path(ELEVENLABS_PHONEME_MODEL, "ipa", ipa, voice.id, round(clamped, 3))
+        if (hit := self._cache.load(cached)) is not None:
+            return hit
+        notes.add(f"phonetic spans on ElevenLabs are voiced by {ELEVENLABS_PHONEME_MODEL}, "
+                  "the model family that reads IPA")
+        safe = html.escape(ipa, quote=True)
+        body: dict = {"text": f'<phoneme alphabet="ipa" ph="{safe}">{safe}</phoneme>',
+                      "model_id": ELEVENLABS_PHONEME_MODEL}
+        if clamped != 1.0:
+            body["voice_settings"] = {"speed": clamped}
+        audio = np.frombuffer(self._post(voice.id, body), dtype="<i2").astype(np.float32) / 32768.0
         np.save(cached, audio)
         return audio
 
