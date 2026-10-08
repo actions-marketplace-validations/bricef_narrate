@@ -117,6 +117,15 @@ def check_kokoro() -> Check:
     return Check("kokoro models", True, f"{model_dir()} ({size:.0f} MB)")
 
 
+def check_stt() -> Check:
+    from .stt import model_dir, model_name
+
+    found = any(model_dir().rglob("model.bin")) if model_dir().is_dir() else False
+    detail = (f"faster-whisper {model_name()} downloaded" if found
+              else f"faster-whisper {model_name()} downloads when a recording first needs subtitles")
+    return Check("speech-to-text", True, detail)
+
+
 def check_elevenlabs() -> Check:
     key = os.environ.get("ELEVENLABS_API_KEY", "")
     if not key:
@@ -128,4 +137,4 @@ def check_elevenlabs() -> Check:
 
 
 def run_checks() -> list[Check]:
-    return [*check_ffmpeg(), check_chromium(), check_fonts(), check_kokoro(), check_elevenlabs()]
+    return [*check_ffmpeg(), check_chromium(), check_fonts(), check_kokoro(), check_stt(), check_elevenlabs()]

@@ -271,6 +271,7 @@ class Builder:
         slides: list[Slide] = []
         quotes: list[str] = []
         narration_spans: list[tuple[float, float, str]] = []
+        recordings: list[tuple[float, Path, str | None]] = []  # start in the track, file, language hint
 
         for block in scene.blocks:
             try:
@@ -323,6 +324,7 @@ class Builder:
                 elif isinstance(block, Media):
                     if block.kind == "audio":
                         path = self._path(block.path, block.line)
+                        recordings.append((track.seconds, path, lang))
                         track.add(media.decode_audio(path, SR))
                     else:
                         if block.size is None and image_size and block.kind == "image":
@@ -374,12 +376,31 @@ class Builder:
             texts = [q for q in quotes if q]
             cues = subtitles.spread(0.0, d, texts) if texts else []
         elif s.subtitles.mode != "none":
-            cues = [c for start, end, text in narration_spans
-                    for c in subtitles.narration_cues(start, end, text, s.subtitles.break_chars)]
+            spans = narration_spans + self._transcripts(recordings)
+            cues = sorted((c for start, end, text in spans
+                           for c in subtitles.narration_cues(start, end, text, s.subtitles.break_chars)),
+                          key=lambda c: c.start)
         else:
             cues = []
         return ScenePlan(scene.index, visuals, spec, audio, d, cues, layout,
                          [SlideSpec(lang=sl.lang, text=sl.text) for sl in slides], transition)
+
+    def _transcripts(self, recordings: list[tuple[float, Path, str | None]]) -> list[tuple[float, float, str]]:
+        """Phrases spoken in a scene's recordings, placed where each recording plays."""
+        if not recordings:
+            return []
+        try:
+            from . import stt
+        except ImportError:
+            self.notes.add("subtitles for recorded audio (needs faster-whisper)")
+            return []
+        spans = []
+        for start, path, lang in recordings:
+            hint = lang.split("-")[0].lower() if lang else None
+            phrases = stt.transcribe(path, hint)
+            spans += [(start + a, start + b, text)
+                      for a, b, text in stt.captions(phrases, self.settings.subtitles.break_chars)]
+        return spans
 
     def _visual(self, m: Media, workdir: Path) -> Visual:
         path = self._path(m.path, m.line)
