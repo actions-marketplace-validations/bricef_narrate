@@ -65,9 +65,14 @@ def test_snake_case_is_not_emphasis():
     assert run.text == "Set my_variable_name to two." and run.emphasis == "none"
 
 
-def test_spell_symbols_and_non_english():
+def test_spell_symbols_and_languages():
     assert spell("a?", "en-gb") == "ay, question mark"
-    assert spell("abc", "de") == "a, b, c"
+    assert spell("SAR", "es") == "ese, a, erre"
+    assert spell("WC", "fr-fr") == "double vé, cé"
+    assert spell("VW", "de") == "fau, we"
+    assert spell("Straße", "de") == "es, te, er, a, eszett, e"
+    assert spell("H2O", "it") == "acca, 2, o"
+    assert spell("abc", "ja") == "a, b, c"  # no table: characters
 
 
 def test_subtitle_text_keeps_words_not_markup():
