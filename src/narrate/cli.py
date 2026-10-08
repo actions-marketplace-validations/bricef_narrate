@@ -1,4 +1,4 @@
-"""Command line: narrate build | check | voices | models | doctor | cache."""
+"""narrate: turn a Markdown script (Narakeet's format) into a narrated video."""
 
 from __future__ import annotations
 
@@ -182,7 +182,8 @@ def cmd_cache(args: argparse.Namespace) -> int:
 
 def cmd_models(args: argparse.Namespace) -> int:
     print(ensure_models())
-    print(media.ensure_ffmpeg())
+    if not os.environ.get("NARRATE_FFMPEG"):  # the container image brings its own
+        print(media.ensure_ffmpeg())
     from . import stt
 
     print(stt.ensure_model())
@@ -190,7 +191,14 @@ def cmd_models(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="narrate", description=__doc__)
+    parser = argparse.ArgumentParser(
+        prog="narrate", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="examples:\n"
+               "  narrate build script.md                 render script.mp4 and its poster\n"
+               "  narrate build script.md --tts silent    a quick preview, without speech\n"
+               "  narrate check script.md                 find missing files and problems\n"
+               "  narrate COMMAND --help                  a command's options\n\n"
+               "guides: docs/writing-scripts.md and docs/building.md")
     sub = parser.add_subparsers(dest="command", required=True)
 
     build = sub.add_parser("build", help="render a script (or a .zip project) to MP4")
@@ -203,38 +211,42 @@ def main(argv: list[str] | None = None) -> int:
     build.add_argument("--tts-model", help="ElevenLabs model id (default eleven_multilingual_v2)")
     build.add_argument("--keep-work", metavar="DIR", help="keep intermediate files in DIR")
     build.add_argument("-j", "--jobs", type=int, help="parallel encodes (default: up to 4, or $NARRATE_JOBS)")
-    build.add_argument("-q", "--quiet", action="store_true")
+    build.add_argument("-q", "--quiet", action="store_true", help="print only warnings and errors")
     build.set_defaults(func=cmd_build)
 
     audio = sub.add_parser("audio", help="render only the narration, as an audio file")
     audio.add_argument("script", help="a .md/.txt script, or a .zip project")
     audio.add_argument("--source", help="the script's path inside a .zip project")
     audio.add_argument("-o", "--output", help="output file: .mp3 (default), .m4a, .ogg, .opus, .flac or .wav")
-    audio.add_argument("--tts", choices=["auto", "kokoro", "elevenlabs", "silent"], default="auto")
-    audio.add_argument("--tts-model", help="ElevenLabs model id")
-    audio.add_argument("-j", "--jobs", type=int)
-    audio.add_argument("-q", "--quiet", action="store_true")
+    audio.add_argument("--tts", choices=["auto", "kokoro", "elevenlabs", "silent"], default="auto",
+                       help="speech engine (default auto: ElevenLabs when ELEVENLABS_API_KEY is set, else Kokoro)")
+    audio.add_argument("--tts-model", help="ElevenLabs model id (default eleven_multilingual_v2)")
+    audio.add_argument("-j", "--jobs", type=int, help="parallel work (default: up to 4, or $NARRATE_JOBS)")
+    audio.add_argument("-q", "--quiet", action="store_true", help="print only warnings and errors")
     audio.set_defaults(func=cmd_audio)
 
     callouts = sub.add_parser("callouts", help="write a page for placing callouts on an image or video frame")
     callouts.add_argument("file", help="the image or video the callout goes on")
     callouts.add_argument("--size", default="720p", help="the script's video size (default 720p)")
-    callouts.add_argument("--fit", choices=["cover", "contain", "fit"], default="cover")
-    callouts.add_argument("--position", default="center", choices=["center", "top-left", "left", "right", "top", "bottom"])
+    callouts.add_argument("--fit", choices=["cover", "contain", "fit"], default="cover",
+                          help="how the script fits the image to the frame (default cover)")
+    callouts.add_argument("--position", default="center", choices=["center", "top-left", "left", "right", "top", "bottom"],
+                          help="which part a cover crop keeps (default center)")
     callouts.add_argument("--at", type=float, default=0.0, help="for a video: the moment to show, in seconds")
     callouts.add_argument("-o", "--output", help="the page to write (default: <file>-callouts.html here)")
     callouts.add_argument("--open", action="store_true", help="open the page in a browser")
     callouts.set_defaults(func=cmd_callouts)
 
     check = sub.add_parser("check", help="parse a script and check its files, without rendering")
-    check.add_argument("script")
+    check.add_argument("script", help="a .md/.txt script, or a .zip project")
     check.add_argument("--source", help="the script's path inside a .zip project")
     check.set_defaults(func=cmd_check)
 
     voices = sub.add_parser("voices", help="list voices, and any voices.yaml pins")
     voices.add_argument("script", nargs="?", help="also show the voices.yaml next to this script")
     voices.set_defaults(func=cmd_voices)
-    sub.add_parser("models", help="download the Kokoro, speech-to-text and ffmpeg files").set_defaults(func=cmd_models)
+    sub.add_parser("models", help="download the Kokoro, speech-to-text and ffmpeg files now, "
+                   "instead of on first use").set_defaults(func=cmd_models)
     sub.add_parser("doctor", help="check ffmpeg, Chromium, fonts, models and keys").set_defaults(func=cmd_doctor)
 
     cache_cmd = sub.add_parser("cache", help="show the speech cache, or prune it")

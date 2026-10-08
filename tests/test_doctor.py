@@ -36,3 +36,24 @@ def test_doctor_passes_here(capsys):
     assert main(["doctor"]) == 0
     out = capsys.readouterr().out
     assert "ok   chromium" in out and "ok   ffmpeg libx264 encoder" in out
+
+
+def test_models_skips_ffmpeg_when_one_is_configured(monkeypatch, tmp_path):
+    """The container image sets NARRATE_FFMPEG; `narrate models` mustn't fetch another 150 MB."""
+    from narrate import cli, media, stt
+
+    monkeypatch.setenv("NARRATE_FFMPEG", "/usr/local/bin/ffmpeg")
+    monkeypatch.setattr(cli, "ensure_models", lambda: tmp_path)
+    monkeypatch.setattr(stt, "ensure_model", lambda: tmp_path)
+    monkeypatch.setattr(media, "ensure_ffmpeg", lambda: pytest.fail("downloaded ffmpeg"))
+    assert main(["models"]) == 0
+
+
+def test_files_still_to_download_are_not_faults(monkeypatch, tmp_path):
+    """A fresh install passes: ffmpeg and the Kokoro model download on the first build."""
+    monkeypatch.delenv("NARRATE_FFMPEG", raising=False)
+    monkeypatch.setenv("NARRATE_TOOLS", str(tmp_path))
+    ffmpeg, = doctor.check_ffmpeg()
+    kokoro = doctor.check_kokoro()
+    assert ffmpeg.ok and "first build" in ffmpeg.detail
+    assert kokoro.ok and "first Kokoro build" in kokoro.detail
