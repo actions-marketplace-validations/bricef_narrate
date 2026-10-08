@@ -13,10 +13,12 @@ def test_language_spans_become_segments():
     assert subtitle_text("The German word [See]{de-DE}.") == "The German word See."
 
 
-def test_styles_are_not_languages_and_unknown_ones_are_noted():
+def test_phonetic_styles_become_segments_and_unknown_ones_are_noted():
+    (run,) = speech_runs('Say [t@"meIt@U]{x-sampa} please.', "en-us", set())
+    assert run.text == (("Say", None), ('t@"meIt@U', "x-sampa"), ("please.", None))
     notes: set[str] = set()
-    (run,) = speech_runs("Say [tomato]{x-sampa} please.", "en-us", notes)
-    assert run.text == "Say tomato please." and any("x-sampa" in n for n in notes)
+    (run,) = speech_runs("Say [tomato]{whisper} please.", "en-us", notes)
+    assert run.text == "Say tomato please." and any("whisper" in n for n in notes)
 
 
 def test_an_ellipsis_inside_a_span_does_not_leak_markers():
@@ -42,7 +44,8 @@ def test_silent_times_the_whole_sentence():
 
 
 @pytest.mark.kokoro
-def test_kokoro_reads_the_span_in_its_language(monkeypatch):
+def test_kokoro_reads_the_span_in_its_language(monkeypatch, tmp_path):
+    monkeypatch.setenv("NARRATE_CACHE", str(tmp_path))  # synthesise for real, not from the cache
     from narrate.tts import MODEL_FILES, KokoroSynth, kokoro_resolve, model_dir
 
     if not (model_dir() / MODEL_FILES[0]).exists():

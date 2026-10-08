@@ -48,8 +48,9 @@ def test_subtitle_modes_and_map():
 def test_speech_runs_spell_split_on_ellipsis_and_carry_emphasis():
     notes: set[str] = set()
     runs = speech_runs("My name is Bond… James `SAR` [tomato]{ipa}.", "en-us", notes)
-    assert [(r.text, r.pause) for r in runs] == [("My name is Bond", 0.0), ("James ess, ay, ar tomato.", ELLIPSIS_PAUSE)]
-    assert any("ipa" in n for n in notes)
+    assert [(r.text, r.pause) for r in runs] == [
+        ("My name is Bond", 0.0), ((("James ess, ay, ar", None), ("tomato", "ipa")), ELLIPSIS_PAUSE)]
+    assert not notes
 
 
 def test_emphasis_markup_splits_into_runs():

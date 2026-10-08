@@ -39,3 +39,9 @@ def test_default_model_takes_language_hints(synth):
     notes: set[str] = set()
     audio = synth.synth("Hallo.", synth.resolve("George", "de", notes), 1.0, notes)
     assert len(audio) > 0 and not any("language hints" in n for n in notes)
+
+
+def test_phonetic_span_is_voiced(synth):
+    notes: set[str] = set()
+    audio = synth.synth((("Say", None), ("təˈmeɪtoʊ", "ipa")), synth.resolve("George", None, notes), 1.0, notes)
+    assert len(audio) / SAMPLE_RATE > 0.5 and float(np.abs(audio).max()) > 0.01
