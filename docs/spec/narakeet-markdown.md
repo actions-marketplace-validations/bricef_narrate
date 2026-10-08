@@ -896,9 +896,16 @@ examples disagree. The proposals favour what the official examples imply.
    script default for slides); offer a configurable default.
 5. **`duration` together with audio.** The scene lasts max(`duration`, audio).
    Warn when `duration` is shorter than the audio.
-6. **Several videos, or videos plus images, in one scene.** Play them in
-   sequence. The audio syncs to the whole sequence, and the `sync` modes apply
-   to that sequence.
+6. **Several videos, or videos plus images, in one scene.** *Implemented
+   (narrate #4).* The visuals play in order as one sequence:
+   - Clips count at their own length, and images at 1 s each.
+   - The first clip's `sync` mode applies to the whole sequence.
+   - `freeze` (and `loop-audio`): spare narration time goes to the images,
+     or holds the last clip's final frame if there are none.
+   - `match`: scales every item in proportion.
+   - `trim`: cuts the sequence in order.
+   - `loop` / `trim-or-loop`: repeat the whole sequence.
+   - Clip soundtracks play where their clip does.
 7. **Several slides in one scene.** Show them in sequence with equal shares,
    like images.
 8. **Duration-only `transition: N`.** Use the header's transition type if one
