@@ -57,6 +57,7 @@ uv run playwright install chromium   # slides and frames are rendered by headles
 
 ```sh
 uv run narrate build script.md -o video.mp4   # or: just build script.md
+uv run narrate build project.zip              # a .zip of the script and its assets (--source picks the script)
 uv run narrate check script.md                # parse and check files, no rendering
 uv run narrate voices                         # voices per engine
 just demo                                     # examples/demo rendered with both engines into out/
