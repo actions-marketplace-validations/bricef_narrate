@@ -37,8 +37,8 @@ def test_every_narakeet_transition_exists_in_ffmpeg():
 def test_transition_is_centred_on_the_cut_and_keeps_the_length():
     graph = transition_graph([30, 30, 30], [None, ("crossfade", 0.4), None])
     # 12 frames: 6 held after the first scene, 6 before the second; the fade spans 0.8 s .. 1.2 s
-    assert "tpad=stop_mode=clone:stop_duration=0.200000[p0]" in graph
-    assert "tpad=start_mode=clone:start_duration=0.200000[p1]" in graph
+    assert "tpad=stop_mode=clone:stop_duration=0.200000,settb=AVTB[p0]" in graph
+    assert "tpad=start_mode=clone:start_duration=0.200000,settb=AVTB[p1]" in graph
     assert "xfade=transition=fade:duration=0.400000:offset=0.800000" in graph
     assert "[x1][p2]concat=n=2" in graph
 
@@ -88,3 +88,15 @@ def test_matches_narakeet_length_for_transition_types(tmp_path):
     script = parse_file(EXAMPLES / "transition-types" / "script" / "source.md")
     result = Builder(script, SilentSynth(), log=lambda _: None).build(tmp_path / "types.mp4")
     assert result.duration == pytest.approx(media.probe(EXAMPLES / "transition-types" / "result.mp4").duration, abs=0.1)
+
+
+def test_cuts_and_transitions_mix(tmp_path):
+    """A transition after a plain cut used to fail: concat and xfade timebases differed (#38)."""
+    for name in ("red", "green", "blue"):
+        colour(tmp_path / f"{name}.png", name)
+    script = tmp_path / "s.md"
+    script.write_text("---\nsize: 320x180\n---\n\n![](red.png)\n\n(duration: 1)\n\n---\n\n![](green.png)\n\n"
+                      "(duration: 1)\n\n---\n\n(transition: wipe 0.4)\n\n![](blue.png)\n\n(duration: 1)\n\n---\n\n"
+                      "![](red.png)\n\n(duration: 1)\n")
+    result = Builder(parse_file(script), SilentSynth(), log=lambda _: None).build(tmp_path / "out.mp4")
+    assert media.probe(result.video).duration == pytest.approx(4.0, abs=0.05)
