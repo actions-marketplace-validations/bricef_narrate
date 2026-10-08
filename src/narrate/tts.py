@@ -15,6 +15,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -247,14 +248,39 @@ class SilentSynth:
 
 
 class KokoroSynth:
+    """Kokoro-82M on the CPU, one ONNX session per worker thread.
+
+    Several smaller sessions synthesise more speech per second than one
+    session using every core (about 1.5x with four on eight cores), so
+    paragraphs are synthesised `concurrency` at a time. espeak, which
+    phonemizes the text, is not thread-safe and runs under a lock.
+    """
+
     name = "kokoro"
 
     def __init__(self) -> None:
-        from kokoro_onnx import Kokoro
-
-        models = ensure_models()
-        self._kokoro = Kokoro(str(models / MODEL_FILES[0]), str(models / MODEL_FILES[1]))
+        self._models = ensure_models()
+        cores = os.cpu_count() or 1
+        self.concurrency = max(1, int(os.environ.get("NARRATE_KOKORO_WORKERS", 0)) or min(4, cores // 2))
+        self._threads = max(1, cores // self.concurrency)
+        self._local = threading.local()
+        self._phonemize = threading.Lock()
         self._cache = SynthCache(self.name)
+
+    def _engine(self):
+        if not hasattr(self._local, "kokoro"):
+            import onnxruntime as rt
+            from kokoro_onnx import Kokoro
+
+            options = rt.SessionOptions()
+            options.intra_op_num_threads = self._threads
+            # Idle ONNX threads busy-wait by default, which starves the video
+            # encodes running alongside narration; sleeping costs little here
+            options.add_session_config_entry("session.intra_op.allow_spinning", "0")
+            session = rt.InferenceSession(str(self._models / MODEL_FILES[0]), options,
+                                          providers=["CPUExecutionProvider"])
+            self._local.kokoro = Kokoro.from_session(session, str(self._models / MODEL_FILES[1]))
+        return self._local.kokoro
 
     def resolve(self, name: str | None, lang: str | None, notes: set[str]) -> Voice:
         return kokoro_resolve(name, lang, notes)
@@ -266,7 +292,10 @@ class KokoroSynth:
         cached = self._cache.path(MODEL_FILES[0], text, voice.id, voice.lang, round(clamped, 3))
         if cached.exists():
             return np.load(cached)
-        audio, sr = self._kokoro.create(text, voice=voice.id, speed=clamped, lang=voice.lang)
+        kokoro = self._engine()
+        with self._phonemize:
+            phonemes = kokoro.tokenizer.phonemize(text, voice.lang)
+        audio, sr = kokoro.create(phonemes, voice=voice.id, speed=clamped, lang=voice.lang, is_phonemes=True)
         assert sr == SAMPLE_RATE
         audio = np.asarray(audio, dtype=np.float32)
         np.save(cached, audio)
@@ -279,6 +308,8 @@ class KokoroSynth:
 class ElevenLabsSynth:
     name = "elevenlabs"
     url = "https://api.elevenlabs.io/v1/text-to-speech/{voice}?output_format=pcm_24000"
+    # Simultaneous requests: the free plan allows 2; raise it for larger plans
+    concurrency = int(os.environ.get("NARRATE_ELEVENLABS_CONCURRENCY", 2))
 
     def __init__(self, model: str | None = None) -> None:
         self.key = os.environ.get("ELEVENLABS_API_KEY")
@@ -350,6 +381,33 @@ class ElevenLabsSynth:
                     pass
                 raise RuntimeError(f"ElevenLabs request failed ({e.code}): {detail}") from None
         raise RuntimeError("ElevenLabs request failed after retries")
+
+
+class Prefetching:
+    """Wraps a backend: starts synthesising known requests in the background, in order.
+
+    `synth` returns a request's result once it is ready (so the caller can
+    get on with earlier scenes meanwhile) and falls back to the backend for
+    anything not prefetched.
+    """
+
+    def __init__(self, backend: Synth, requests: list[tuple[str, Voice, float]], notes: set[str]):
+        from concurrent.futures import ThreadPoolExecutor
+
+        self.backend = backend
+        self.name = backend.name
+        self._pool = ThreadPoolExecutor(getattr(backend, "concurrency", 1))
+        self._futures = {r: self._pool.submit(backend.synth, *r, notes) for r in dict.fromkeys(requests)}
+
+    def resolve(self, name: str | None, lang: str | None, notes: set[str]) -> Voice:
+        return self.backend.resolve(name, lang, notes)
+
+    def synth(self, text: str, voice: Voice, speed: float, notes: set[str]) -> np.ndarray:
+        future = self._futures.get((text, voice, speed))
+        return future.result() if future else self.backend.synth(text, voice, speed, notes)
+
+    def close(self) -> None:
+        self._pool.shutdown(cancel_futures=True)
 
 
 def make_synth(name: str, model: str | None = None) -> Synth:

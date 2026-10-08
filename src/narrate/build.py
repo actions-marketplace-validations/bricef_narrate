@@ -9,8 +9,11 @@ drift apart.
 
 from __future__ import annotations
 
+import dataclasses
+import os
 import shutil
 import sys
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from itertools import accumulate
 import tempfile
 import wave
@@ -30,7 +33,7 @@ from .frames import FrameRenderer, FrameSpec, SlideSpec
 from .script import ANIMATED_SIZES, POSITIONS, SIZES, Directive, Media, Narration, Quote, Script, Slide
 from .subtitles import Cue
 from .text import ELLIPSIS_PAUSE, speech_parts, ssml_text, subtitle_text
-from .tts import SAMPLE_RATE, Synth, Voice
+from .tts import SAMPLE_RATE, Prefetching, Synth, Voice
 
 SR = SAMPLE_RATE
 PARAGRAPH_PAUSE = {"normal": 0.4, "fragment": 0.1}
@@ -141,9 +144,12 @@ def apply_gain(samples: np.ndarray, volume: float | str) -> np.ndarray:
 
 
 class Builder:
-    def __init__(self, script: Script, synth: Synth, *, log: Callable[[str], None] | None = None):
+    def __init__(self, script: Script, synth: Synth, *, log: Callable[[str], None] | None = None,
+                 jobs: int | None = None):
         self.script = script
         self.synth = synth
+        # Encodes run in a thread pool alongside narration; x264 threads each one too
+        self.jobs = max(1, jobs or int(os.environ.get("NARRATE_JOBS", 0)) or min(4, os.cpu_count() or 1))
         self.log = log or (lambda msg: print(msg, file=sys.stderr))
         self.notes: set[str] = set()
         try:
@@ -362,20 +368,32 @@ class Builder:
         scenes = self.script.scenes
         if not scenes:
             raise BuildError("the script has no scenes")
-        plans: list[ScenePlan] = []
-        for scene in scenes:
-            self.log(f"scene {scene.index}/{len(scenes)}: narration")
-            plans.append(self.plan_scene(scene, work))
+        backend = self.synth
+        if getattr(backend, "concurrency", 1) > 1:
+            self.synth = self._prefetch_speech(work)
+        try:
+            return self._render_all(out, work)
+        finally:
+            if isinstance(self.synth, Prefetching):
+                self.synth.close()
+            self.synth = backend
 
-        scene_segments: list[list[Path]] = []
+    def _render_all(self, out: Path, work: Path) -> BuildResult:
+        s = self.settings
+        scenes = self.script.scenes
+        plans: list[ScenePlan] = []
+        pending: list[list[Future]] = []
         scene_frames: list[int] = []
         audio_parts: list[np.ndarray] = []
         cues: list[Cue] = []
         scene_samples: list[int] = []
         frame = 0
-        with FrameRenderer(s.width, s.height, work) as renderer:
-            for plan in plans:
-                self.log(f"scene {plan.index}/{len(plans)}: video")
+        # Scene k's segments encode in the pool while scene k+1 is narrated
+        with ThreadPoolExecutor(self.jobs) as pool, FrameRenderer(s.width, s.height, work) as renderer:
+            for scene in scenes:
+                self.log(f"scene {scene.index}/{len(scenes)}")
+                plan = self.plan_scene(scene, work)
+                plans.append(plan)
                 start_f = frame
                 end_f = max(start_f + 1, int(round(start_f + plan.duration * FPS)))
                 frames = end_f - start_f
@@ -384,9 +402,10 @@ class Builder:
                 scene_samples.append(samples)
                 offset = start_f / FPS
                 cues += [Cue(c.start + offset, min(c.end, frames / FPS) + offset, c.text) for c in plan.cues]
-                scene_segments.append(self._render_scene(plan, frames, renderer, work))
+                pending.append(self._render_scene(plan, frames, renderer, work, pool.submit))
                 scene_frames.append(frames)
                 frame = end_f
+            scene_segments = [[f.result() for f in futures] for futures in pending]
 
         total = frame / FPS
         audio = np.concatenate(audio_parts)
@@ -406,15 +425,19 @@ class Builder:
         media.extract_frame(out, _poster_time(s.poster_time, total), poster)
         return BuildResult(out, poster, subtitle_files, total, sorted(self.notes))
 
-    def _render_scene(self, plan: ScenePlan, frames: int, renderer: FrameRenderer | None,
-                      work: Path) -> list[Path]:
+    def _render_scene(self, plan: ScenePlan, frames: int, renderer: FrameRenderer | None, work: Path,
+                      submit: Callable[..., Future] | None = None) -> list[Future]:
         """Encode a scene as segments totalling exactly `frames` frames.
 
         Slides share the scene's time equally, independently of the visuals.
         Over images they are composed into the frame (so theme backdrops
         apply), splitting an image where the slide changes; over clips, and
         over a looping sequence, they are time-windowed overlays.
+
+        Frames are rendered here (Chromium stays on this thread); encodes go to
+        `submit` and come back as futures of the scene's segments.
         """
+        submit = submit or _run_now
         base = work / f"scene-{plan.index:03d}"
         slides: list[SlideSpec | None] = list(plan.slides) or [None]
         bounds = list(accumulate(allocate_frames(frames, [1.0] * len(slides)), initial=0))
@@ -426,8 +449,8 @@ class Builder:
             return base.with_name(f"{base.name}-{suffix}")
 
         if not plan.visuals:
-            return [_encode_still(renderer.render(spec(slide=slide), name(f"s{j}.png")),
-                                  bounds[j + 1] - bounds[j], name(f"s{j}.mp4"))
+            return [submit(_encode_still, renderer.render(spec(slide=slide), name(f"s{j}.png")),
+                           bounds[j + 1] - bounds[j], name(f"s{j}.mp4"))
                     for j, slide in enumerate(slides) if bounds[j + 1] > bounds[j]]
 
         layout = plan.layout
@@ -451,7 +474,7 @@ class Builder:
             counts = [max(1, round(p * FPS)) for p in layout.pieces]
         else:
             counts = allocate_frames(frames, layout.pieces)
-        segments: list[Path] = []
+        segments: list[Future] = []
         at = 0
         for i, (v, count, tempo) in enumerate(zip(plan.visuals, counts, layout.tempo)):
             if count <= 0:
@@ -460,37 +483,67 @@ class Builder:
             at = hi
             if v.kind == "video":
                 windows = [] if layout.repeat else _windows(overlays(), lo, hi)
-                segments.append(self._encode_video(v, count, tempo, windows, plan.spec.canvas, name(f"{i}.mp4")))
+                segments.append(submit(self._encode_video, v, count, tempo, windows, plan.spec.canvas,
+                                       name(f"{i}.mp4")))
                 continue
             if v.motion:
                 # One continuous animation, with slides overlaid rather than splitting it
                 windows = [] if layout.repeat else _windows(overlays(backdrop=True), lo, hi)
-                segments.append(self._encode_motion(v, count, windows, name(f"{i}.mp4")))
+                segments.append(submit(self._encode_motion, v, count, windows, name(f"{i}.mp4")))
                 continue
             image = {"image": v.path, "fit": v.fit, "position": v.position}
             if layout.repeat:
                 png = renderer.render(spec(**image, slide=None, callouts=[]), name(f"{i}.png"))
-                segments.append(_encode_still(png, count, name(f"{i}.mp4")))
+                segments.append(submit(_encode_still, png, count, name(f"{i}.mp4")))
                 continue
             for j, slide in enumerate(slides):
                 a, b = max(lo, bounds[j]), min(hi, bounds[j + 1])
                 if b > a:
                     png = renderer.render(spec(**image, slide=slide), name(f"{i}-{j}.png"))
-                    segments.append(_encode_still(png, b - a, name(f"{i}-{j}.mp4")))
+                    segments.append(submit(_encode_still, png, b - a, name(f"{i}-{j}.mp4")))
         if not layout.repeat:
             return segments
 
-        once = segments[0]
-        if len(segments) > 1:
-            once = name("once.mp4")
-            listing = name("once.txt")
-            listing.write_text("".join(f"file '{p.as_posix()}'\n" for p in segments))
-            media.run(["-f", "concat", "-safe", "0", "-i", str(listing), "-c", "copy", str(once)])
-        looped = base.with_suffix(".mp4")
-        inputs, graph = _overlay_graph("[0:v]null", overlays())
-        media.run(["-stream_loop", "-1", "-i", str(once), *inputs, "-filter_complex", graph,
-                   "-map", "[v]", "-frames:v", str(frames), "-an", *_SEGMENT_CODEC, str(looped)])
-        return [looped]
+        final_overlays = overlays()  # rendered now: Chromium must not run on a pool thread
+
+        def loop_pass() -> Path:
+            # Queued after its pieces, so waiting here can't starve the pool
+            wait(segments)
+            parts = [f.result() for f in segments]
+            once = parts[0]
+            if len(parts) > 1:
+                once = name("once.mp4")
+                listing = name("once.txt")
+                listing.write_text("".join(f"file '{p.as_posix()}'\n" for p in parts))
+                media.run(["-f", "concat", "-safe", "0", "-i", str(listing), "-c", "copy", str(once)])
+            looped = base.with_suffix(".mp4")
+            inputs, graph = _overlay_graph("[0:v]null", final_overlays)
+            media.run(["-stream_loop", "-1", "-i", str(once), *inputs, "-filter_complex", graph,
+                       "-map", "[v]", "-frames:v", str(frames), "-an", *_SEGMENT_CODEC, str(looped)])
+            return looped
+
+        return [submit(loop_pass)]
+
+    def _prefetch_speech(self, work: Path) -> Synth:
+        """List every speech request the script makes and start synthesising them in the background."""
+        requests: list[tuple[str, Voice, float]] = []
+        real = self.synth
+
+        class Recorder:
+            name = real.name
+
+            def resolve(self, name, lang, notes):
+                return real.resolve(name, lang, notes)
+
+            def synth(self, text, voice, speed, notes):
+                requests.append((text, voice, speed))
+                return np.zeros(1, dtype=np.float32)
+
+        shadow = Builder(dataclasses.replace(self.script, warnings=[]), Recorder(), log=lambda _: None, jobs=1)
+        for scene in self.script.scenes:
+            shadow.plan_scene(scene, work)
+        self.log(f"speech: {len(set(requests))} paragraphs, {real.concurrency} at a time")
+        return Prefetching(real, requests, self.notes)
 
     def _encode_motion(self, v: Visual, frames: int, overlays: list[tuple[Path, float, float]], out: Path) -> Path:
         w, h = self.settings.width, self.settings.height
@@ -589,7 +642,7 @@ class Builder:
         return f"subtitles=filename='{ass.as_posix()}':fontsdir='{fonts.as_posix()}'"
 
 
-_SEGMENT_CODEC = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "12", "-pix_fmt", "yuv420p",
+_SEGMENT_CODEC = ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "12", "-pix_fmt", "yuv420p",
                   "-r", str(FPS), "-video_track_timescale", "15360"]
 
 
@@ -650,6 +703,16 @@ def layout_visuals(visuals: list[Visual], a: float, duration: float | None) -> t
             pieces[i] = min(x, max(0.0, remaining))
             remaining -= pieces[i]
     return d, Layout(pieces, [1.0] * n)
+
+
+def _run_now(fn: Callable, *args) -> Future:
+    """A completed future: the synchronous stand-in for an executor's submit."""
+    future: Future = Future()
+    try:
+        future.set_result(fn(*args))
+    except BaseException as e:  # noqa: BLE001 - surfaced by .result()
+        future.set_exception(e)
+    return future
 
 
 def _windows(overlays: list[tuple[Path, float, float]], lo: int, hi: int) -> list[tuple[Path, float, float]]:

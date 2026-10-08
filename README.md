@@ -73,6 +73,18 @@ you pass `--keep-work DIR`.
 Synthesised audio is cached under `~/.cache/narrate/tts/`, so a rebuild only
 synthesises paragraphs that changed. That matters for ElevenLabs credits.
 
+### Parallelism
+
+Builds overlap their stages. Speech is synthesised in the background in
+script order while earlier scenes render, and video segments encode in a
+thread pool. The output is byte-identical to a sequential build.
+
+| Setting | Default |
+| --- | --- |
+| `--jobs N` (or `NARRATE_JOBS`) | up to 4 parallel encodes |
+| `NARRATE_KOKORO_WORKERS` | up to 4 Kokoro sessions |
+| `NARRATE_ELEVENLABS_CONCURRENCY` | 2, the free plan's limit |
+
 ### Voice names
 
 A script's voice can be named in any of three ways:

@@ -162,7 +162,7 @@ d = Path(sys.argv[1])
 b = Builder(parse("---\\nsize: 640x360\\n---\\nx\\n", d / "s.md"), SilentSynth(), log=lambda _: None)
 v = Visual("video", d / "clip.mp4", sync="loop", start=0.0, length=20.0)
 plan = ScenePlan(1, [v], FrameSpec(), np.zeros(1, dtype=np.float32), 30.0, layout=Layout([20.0], [1.0], repeat=True))
-(seg,) = b._render_scene(plan, 900, None, d)
+(seg,) = [f.result() for f in b._render_scene(plan, 900, None, d)]
 seg.rename(d / "out.mp4")
 print(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss // 1024)
 """
@@ -227,7 +227,8 @@ def test_two_slides_split_an_image_and_window_over_a_clip(project, tmp_path):
         image_plan = builder.plan_scene(script.scenes[0], tmp_path)
         assert len(builder._render_scene(image_plan, 60, renderer, tmp_path)) == 2
         clip_plan = builder.plan_scene(script.scenes[1], tmp_path)
-        (segment,) = builder._render_scene(clip_plan, 60, renderer, tmp_path)
+        (future,) = builder._render_scene(clip_plan, 60, renderer, tmp_path)
+        segment = future.result()
     first, second = frame_at(segment, 0.5, tmp_path), frame_at(segment, 1.5, tmp_path)
     assert abs(first - second).mean() > 1
 
