@@ -67,6 +67,15 @@ class Visual:
 
 
 @dataclass
+class Layout:
+    """How a scene's visuals share its time: seconds on screen in one pass, playback speed of each."""
+
+    pieces: list[float]
+    tempo: list[float]
+    repeat: bool = False  # loop the one-pass sequence to fill the scene
+
+
+@dataclass
 class ScenePlan:
     index: int
     visuals: list[Visual]
@@ -74,6 +83,7 @@ class ScenePlan:
     audio: np.ndarray
     duration: float
     cues: list[Cue] = field(default_factory=list)
+    layout: Layout = field(default_factory=lambda: Layout([], []))
 
 
 @dataclass
@@ -264,29 +274,14 @@ class Builder:
             spec.slide = SlideSpec(lang=slides[0].lang, text=slides[0].text)
 
         visuals = [self._visual(m, workdir) for m in sources]
-        videos = [v for v in visuals if v.kind == "video"]
-        if videos and len(visuals) > 1:
-            self.notes.add("a video mixed with other images/videos in one scene (only the first video is shown)")
-            visuals = videos[:1]
-
         narration = track.samples()
-        a = track.seconds
-        if videos:
-            video = visuals[0]
-            d = _video_duration(video, a, duration)
-        elif a > 0:
-            d = max(a, duration or 0.0)
-        else:
-            d = duration if duration is not None else DEFAULT_STILL_SECONDS
-        d = max(d, 1 / FPS)
+        d, layout = layout_visuals(visuals, track.seconds, duration)
 
         n = int(round(d * SR))
-        if videos and visuals[0].sync == "loop-audio":
-            audio = fit_length(narration, n, tile=True)
-        else:
-            audio = fit_length(narration, n)
-        if videos and visuals[0].has_audio and visuals[0].volume:
-            audio = audio + self._clip_audio(visuals[0], d, n)
+        sync = next((v.sync for v in visuals if v.kind == "video"), None)
+        audio = fit_length(narration, n, tile=sync == "loop-audio")
+        if any(v.kind == "video" and v.has_audio and v.volume for v in visuals):
+            audio = audio + self._clip_audio(visuals, layout, n)
 
         if quotes:
             texts = [q for q in quotes if q]
@@ -296,7 +291,7 @@ class Builder:
                     for c in subtitles.narration_cues(start, end, text, s.subtitles.break_chars)]
         else:
             cues = []
-        return ScenePlan(scene.index, visuals, spec, audio, d, cues)
+        return ScenePlan(scene.index, visuals, spec, audio, d, cues, layout)
 
     def _visual(self, m: Media, workdir: Path) -> Visual:
         path = self._path(m.path, m.line)
@@ -327,11 +322,20 @@ class Builder:
             has_audio=info.has_audio,
         )
 
-    def _clip_audio(self, v: Visual, d: float, n: int) -> np.ndarray:
-        tempo = v.length / d if v.sync == "match" else 1.0
-        clip = media.decode_audio(v.path, SR, start=v.start, duration=v.length, tempo=tempo)
-        clip = fit_length(clip, n, tile=v.sync in ("loop", "trim-or-loop"))
-        return clip * v.volume
+    def _clip_audio(self, visuals: list[Visual], layout: Layout, n: int) -> np.ndarray:
+        """The soundtracks of the scene's clips, each placed where its clip plays."""
+        span = int(round(sum(layout.pieces) * SR)) if layout.repeat else n
+        mix = np.zeros(span, dtype=np.float32)
+        offset = 0.0
+        for v, piece, tempo in zip(visuals, layout.pieces, layout.tempo):
+            if v.kind == "video" and v.has_audio and v.volume:
+                clip = media.decode_audio(v.path, SR, start=v.start, duration=v.length, tempo=tempo)
+                at = int(round(offset * SR))
+                length = min(int(round(piece * SR)), span - at)
+                if length > 0:
+                    mix[at:at + length] += fit_length(clip, length) * v.volume
+            offset += piece
+        return fit_length(mix, n, tile=layout.repeat)
 
     # -- rendering -----------------------------------------------------------
 
@@ -391,48 +395,58 @@ class Builder:
         media.extract_frame(out, _poster_time(s.poster_time, total), poster)
         return BuildResult(out, poster, subtitle_files, total, sorted(self.notes))
 
-    def _render_scene(self, plan: ScenePlan, frames: int, renderer: FrameRenderer, work: Path) -> list[Path]:
+    def _render_scene(self, plan: ScenePlan, frames: int, renderer: FrameRenderer | None,
+                      work: Path) -> list[Path]:
         base = work / f"scene-{plan.index:03d}"
         if not plan.visuals:
             png = renderer.render(plan.spec, base.with_suffix(".png"))
             return [_encode_still(png, frames, base.with_suffix(".mp4"))]
-        if plan.visuals[0].kind == "video":
-            v = plan.visuals[0]
-            overlay = None
-            if plan.spec.slide or plan.spec.callouts:
-                spec = FrameSpec(**{**plan.spec.__dict__, "over_video": True})
-                overlay = renderer.render(spec, base.with_name(base.name + "-overlay.png"))
-            return [self._encode_video(v, plan, frames, overlay, base.with_suffix(".mp4"))]
-        segments = []
-        count = len(plan.visuals)
-        for i, v in enumerate(plan.visuals):
-            share = frames // count + (1 if i < frames % count else 0)
-            if share <= 0:
-                continue
-            spec = FrameSpec(**{**plan.spec.__dict__, "image": v.path, "fit": v.fit, "position": v.position})
-            png = renderer.render(spec, base.with_name(f"{base.name}-{i}.png"))
-            segments.append(_encode_still(png, share, base.with_name(f"{base.name}-{i}.mp4")))
-        return segments
-
-    def _encode_video(self, v: Visual, plan: ScenePlan, frames: int, overlay: Path | None, out: Path) -> Path:
-        w, h = self.settings.width, self.settings.height
-        resize = [*_resize_filters(v.fit, v.position, w, h, plan.spec.canvas or "#000000"), "setsar=1"]
-        segment = ["-ss", f"{v.start:.3f}", "-t", f"{v.length:.3f}", "-i", str(v.path)]
-        if v.sync in ("loop", "trim-or-loop"):
-            # Encode one pass of the segment at output size, then loop that file
-            # from disk: ffmpeg's loop filter holds every frame in memory
-            once = out.with_name(out.stem + "-once.mp4")
-            media.run([*segment, "-vf", ",".join(["setpts=PTS-STARTPTS", f"fps={FPS}", *resize]),
-                       "-frames:v", str(max(1, round(v.length * FPS))), "-an", *_SEGMENT_CODEC, str(once)])
-            args = ["-stream_loop", "-1", "-i", str(once)]
-            chain = ["setpts=PTS-STARTPTS"]
+        overlay = None
+        if any(v.kind == "video" for v in plan.visuals) and (plan.spec.slide or plan.spec.callouts):
+            spec = FrameSpec(**{**plan.spec.__dict__, "over_video": True})
+            overlay = renderer.render(spec, base.with_name(base.name + "-overlay.png"))
+        layout = plan.layout
+        if layout.repeat:
+            # One pass at natural length, then looped from disk: ffmpeg's loop
+            # filter would hold every frame of the pass in memory
+            counts = [max(1, round(p * FPS)) for p in layout.pieces]
         else:
-            args = segment
-            chain = ["setpts=PTS-STARTPTS"]
-            if v.sync == "match":
-                chain.append(f"setpts=PTS/{v.length / plan.duration:.6f}")
-            chain += [f"fps={FPS}", *resize,
-                      f"tpad=stop_mode=clone:stop_duration={plan.duration + 1:.3f}"]
+            counts = allocate_frames(frames, layout.pieces)
+        segments = []
+        for i, (v, count, tempo) in enumerate(zip(plan.visuals, counts, layout.tempo)):
+            if count <= 0:
+                continue
+            out = base.with_name(f"{base.name}-{i}.mp4")
+            if v.kind == "video":
+                segments.append(self._encode_video(v, count, tempo, overlay, plan.spec.canvas, out))
+            else:
+                spec = FrameSpec(**{**plan.spec.__dict__, "image": v.path, "fit": v.fit, "position": v.position})
+                png = renderer.render(spec, base.with_name(f"{base.name}-{i}.png"))
+                segments.append(_encode_still(png, count, out))
+        if not layout.repeat:
+            return segments
+        once = base.with_name(base.name + "-once.mp4")
+        if len(segments) == 1:
+            once = segments[0]
+        else:
+            listing = base.with_name(base.name + "-once.txt")
+            listing.write_text("".join(f"file '{p.as_posix()}'\n" for p in segments))
+            media.run(["-f", "concat", "-safe", "0", "-i", str(listing), "-c", "copy", str(once)])
+        looped = base.with_suffix(".mp4")
+        media.run(["-stream_loop", "-1", "-i", str(once), "-frames:v", str(frames), "-an",
+                   *_SEGMENT_CODEC, str(looped)])
+        return [looped]
+
+    def _encode_video(self, v: Visual, frames: int, tempo: float, overlay: Path | None,
+                      canvas: str | None, out: Path) -> Path:
+        """One clip as exactly `frames` frames: sped up or slowed by `tempo`, last frame held if short."""
+        w, h = self.settings.width, self.settings.height
+        chain = ["setpts=PTS-STARTPTS"]
+        if abs(tempo - 1.0) > 1e-6:
+            chain.append(f"setpts=PTS/{tempo:.6f}")
+        chain += [f"fps={FPS}", *_resize_filters(v.fit, v.position, w, h, canvas or "#000000"), "setsar=1",
+                  f"tpad=stop_mode=clone:stop_duration={frames / FPS + 1:.3f}"]
+        args = ["-ss", f"{v.start:.3f}", "-t", f"{v.length:.3f}", "-i", str(v.path)]
         graph = f"[0:v]{','.join(chain)}[base]"
         if overlay:
             args += ["-loop", "1", "-framerate", str(FPS), "-i", str(overlay)]
@@ -518,19 +532,68 @@ def _choice(value: Any, allowed: set[str], what: str) -> str:
     return text
 
 
-def _video_duration(v: Visual, a: float, duration: float | None) -> float:
-    """Scene length for a video scene (spec §4.2 sync table)."""
-    length = v.length
+def layout_visuals(visuals: list[Visual], a: float, duration: float | None) -> tuple[float, Layout]:
+    """Scene length and how the visuals share it (spec §4.2, §16.6).
+
+    Images alone share the narration equally. Once a scene has a clip, its
+    visuals play in order as one sequence: clips at their own length, images
+    at DEFAULT_STILL_SECONDS each, and the first clip's sync mode applies to
+    the sequence as a whole. Spare time goes to the images, or holds the last
+    clip's final frame when there are none.
+    """
+    n = len(visuals)
+    if not any(v.kind == "video" for v in visuals):
+        if a > 0:
+            d = max(a, duration or 0.0)
+        else:
+            d = duration if duration is not None else DEFAULT_STILL_SECONDS
+        d = max(d, 1 / FPS)
+        return d, Layout([d / n] * n if n else [], [1.0] * n)
+
+    natural = [v.length if v.kind == "video" else DEFAULT_STILL_SECONDS for v in visuals]
+    total = sum(natural)
+    sync = next(v.sync for v in visuals if v.kind == "video")
     if a <= 0:
-        return duration if duration is not None else length
-    sync = v.sync
-    if sync == "match" or sync == "trim-or-loop":
-        d = a
-    elif sync == "trim":
-        d = min(length, a)
-    else:  # freeze, loop, loop-audio
-        d = max(length, a)
-    return max(d, duration or 0.0)
+        d = duration if duration is not None else total
+    else:
+        if sync in ("match", "trim-or-loop"):
+            d = a
+        elif sync == "trim":
+            d = min(total, a)
+        else:  # freeze, loop, loop-audio
+            d = max(total, a)
+        d = max(d, duration or 0.0)
+    d = max(d, 1 / FPS)
+
+    if sync == "match" and a > 0:
+        scale = d / total
+        return d, Layout([x * scale for x in natural],
+                         [1 / scale if v.kind == "video" else 1.0 for v in visuals])
+    if sync in ("loop", "trim-or-loop") and d > total:
+        return d, Layout(natural, [1.0] * n, repeat=True)
+    pieces = list(natural)
+    if d > total:
+        stills = [i for i, v in enumerate(visuals) if v.kind == "still"] or [n - 1]
+        for i in stills:
+            pieces[i] += (d - total) / len(stills)
+    elif d < total:
+        remaining = d
+        for i, x in enumerate(pieces):
+            pieces[i] = min(x, max(0.0, remaining))
+            remaining -= pieces[i]
+    return d, Layout(pieces, [1.0] * n)
+
+
+def allocate_frames(frames: int, pieces: list[float]) -> list[int]:
+    """Split a whole number of frames in proportion to `pieces` (largest remainder)."""
+    total = sum(pieces)
+    if total <= 0:
+        return [frames] + [0] * (len(pieces) - 1)
+    exact = [p / total * frames for p in pieces]
+    counts = [int(x) for x in exact]
+    for i in sorted(range(len(pieces)), key=lambda i: exact[i] - counts[i], reverse=True)[:frames - sum(counts)]:
+        counts[i] += 1
+    return counts
 
 
 def _resize_filters(fit: str, position: str, w: int, h: int, canvas: str) -> list[str]:

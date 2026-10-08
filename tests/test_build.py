@@ -6,7 +6,7 @@ import pytest
 from PIL import Image
 
 from narrate import media
-from narrate.build import Builder, Visual, _video_duration
+from narrate.build import Builder, Layout, ScenePlan, Visual, allocate_frames, layout_visuals
 from narrate.config import FPS
 from narrate.script import parse, parse_file
 from narrate.tts import SilentSynth
@@ -41,7 +41,54 @@ def frames(seconds: float) -> float:
     ("freeze", 0.0, 2.0),
 ])
 def test_video_sync_durations(sync, audio, expected):
-    assert _video_duration(Visual("video", sync=sync, length=2.0), audio, None) == expected
+    assert layout_visuals([Visual("video", sync=sync, length=2.0)], audio, None)[0] == expected
+
+
+def clip(length: float, sync: str = "freeze") -> Visual:
+    return Visual("video", sync=sync, length=length)
+
+
+STILL = Visual("still")
+
+
+def test_sequence_spare_time_goes_to_images():
+    d, layout = layout_visuals([clip(2), STILL, clip(3)], 10.0, None)
+    assert d == 10.0 and layout.pieces == [2.0, 5.0, 3.0] and not layout.repeat
+
+
+def test_sequence_without_images_holds_the_last_clip():
+    d, layout = layout_visuals([clip(2), clip(3)], 8.0, None)
+    assert layout.pieces == [2.0, 6.0]
+
+
+def test_sequence_plays_in_full_under_short_narration():
+    d, layout = layout_visuals([clip(2), STILL], 1.0, None)
+    assert d == 3.0 and layout.pieces == [2.0, 1.0]
+
+
+def test_sequence_match_scales_everything():
+    d, layout = layout_visuals([clip(2, "match"), STILL, clip(1)], 8.0, None)
+    assert d == 8.0 and layout.pieces == [4.0, 2.0, 2.0] and layout.tempo == [0.5, 1.0, 0.5]
+
+
+def test_sequence_trim_cuts_in_order():
+    d, layout = layout_visuals([clip(2, "trim"), clip(3)], 3.5, None)
+    assert d == 3.5 and layout.pieces == [2.0, 1.5]
+
+
+def test_sequence_loop_repeats_the_whole_pass():
+    d, layout = layout_visuals([clip(2, "loop"), STILL], 7.0, None)
+    assert d == 7.0 and layout.repeat and layout.pieces == [2.0, 1.0]
+
+
+def test_images_alone_share_the_narration():
+    d, layout = layout_visuals([STILL, STILL, STILL], 3.0, None)
+    assert layout.pieces == [1.0, 1.0, 1.0]
+
+
+def test_allocate_frames_sums_exactly():
+    assert allocate_frames(10, [1, 1, 1]) == [4, 3, 3]
+    assert sum(allocate_frames(301, [2.0, 5.0, 3.0])) == 301
 
 
 def test_scene_timing_rules(project, tmp_path):
@@ -106,7 +153,7 @@ import resource, sys
 import numpy as np
 from pathlib import Path
 from narrate import media
-from narrate.build import Builder, ScenePlan, Visual
+from narrate.build import Builder, Layout, ScenePlan, Visual
 from narrate.frames import FrameSpec
 from narrate.script import parse
 from narrate.tts import SilentSynth
@@ -114,8 +161,9 @@ from narrate.tts import SilentSynth
 d = Path(sys.argv[1])
 b = Builder(parse("---\\nsize: 640x360\\n---\\nx\\n", d / "s.md"), SilentSynth(), log=lambda _: None)
 v = Visual("video", d / "clip.mp4", sync="loop", start=0.0, length=20.0)
-plan = ScenePlan(1, [v], FrameSpec(), np.zeros(1, dtype=np.float32), 30.0)
-b._encode_video(v, plan, 900, None, d / "out.mp4")
+plan = ScenePlan(1, [v], FrameSpec(), np.zeros(1, dtype=np.float32), 30.0, layout=Layout([20.0], [1.0], repeat=True))
+(seg,) = b._render_scene(plan, 900, None, d)
+seg.rename(d / "out.mp4")
 print(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss // 1024)
 """
 
@@ -139,3 +187,13 @@ def test_looping_a_long_clip_keeps_memory_flat(tmp_path):
     pa, pb = Image.open(a).convert("L"), Image.open(b).convert("L")
     diff = sum(abs(x - y) for x, y in zip(pa.getdata(), pb.getdata())) / (pa.width * pa.height)
     assert diff < 3
+
+
+def test_mixed_sequence_end_to_end(project):
+    result = build(project, "---\nsize: 320x180\n---\n\n![](clip.mp4)\n\n![](blue.png)\n\n![](clip.mp4)\n\nShort.\n",
+                   name="mixed")
+    assert result.duration == pytest.approx(2 + 1 + 2, abs=1 / FPS)
+    middle = project / "middle.png"
+    media.extract_frame(result.video, 2.5, middle)
+    r, g, b = Image.open(middle).convert("RGB").getpixel((160, 90))
+    assert b > r + 40  # the steel-blue image, between the two test-pattern clips
