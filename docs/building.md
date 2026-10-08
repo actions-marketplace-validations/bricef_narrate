@@ -1,0 +1,390 @@
+# Building videos
+
+How to turn scripts into videos with narrate: on your computer, in Docker, or
+in GitHub Actions. [Writing scripts](writing-scripts.md) covers what goes in
+the script. The commands below assume narrate is installed (see the
+[README](../README.md#install)). From a source checkout, the README's alias
+makes `narrate` work in any folder.
+
+- [Build a video](#build-a-video)
+- [Preview quickly](#preview-quickly)
+- [Make an audio file instead](#make-an-audio-file-instead)
+- [Choose a speech engine](#choose-a-speech-engine)
+- [Use ElevenLabs](#use-elevenlabs)
+- [Pick voices](#pick-voices)
+- [Build in Docker](#build-in-docker)
+- [Build in GitHub Actions](#build-in-github-actions)
+- [Use Narakeet's command line](#use-narakeets-command-line)
+- [Manage downloads and caches](#manage-downloads-and-caches)
+- [Make builds faster](#make-builds-faster)
+- [Troubleshoot](#troubleshoot)
+- [Command reference](#command-reference)
+- [Environment variables](#environment-variables)
+
+## Build a video
+
+```sh
+narrate build script.md                   # script.mp4 and script.jpg, in the current folder
+narrate build script.md -o out/video.mp4  # choose where
+narrate build project.zip                 # a ZIP of the script and its files
+```
+
+- **Outputs:** the MP4, a poster JPG next to it and, when the script asks for
+  subtitle files (`subtitles: external` or `embed`), `.srt` and `.vtt` files.
+  They are named after the script (for a ZIP, the script inside it) and go in
+  the current folder, unless `-o` says otherwise.
+- **Progress** goes to the terminal: one line per scene, then notes about
+  anything narrate adapted, such as a voice it matched. `-q` keeps it quiet.
+- **Check first:** `narrate check script.md` finds missing pictures, clips and
+  recordings, and lines it doesn't understand, in a second. Bad values and
+  missing theme, music or font files show up in a build; a
+  [preview](#preview-quickly) finds them fast.
+- **Intermediate files** are deleted afterwards; `--keep-work DIR` keeps them
+  for inspection.
+- **First build:** the Kokoro voice model downloads (about 350 MB), and from
+  a source checkout so does ffmpeg (a 150 MB download). Later builds reuse
+  them.
+
+## Preview quickly
+
+```sh
+narrate build script.md --tts silent -o preview.mp4
+```
+
+`--tts silent` replaces speech with silence timed like speech, so a build
+takes seconds and spends no credits. Use it to check layout, timing and
+subtitles before rendering the real voices. It doesn't show which voice each
+name maps to; a real build's notes do.
+
+## Make an audio file instead
+
+```sh
+narrate audio script.md                  # script.mp3
+narrate audio script.md -o talk.m4a      # .mp3, .m4a, .aac, .ogg, .opus, .flac or .wav
+```
+
+The audio holds the narration, recordings, clip soundtracks and background
+music, timed exactly as in the video. Pictures, slides and callouts are
+skipped. When the script turns subtitles on, `.srt` and `.vtt` files come
+with it.
+
+## Choose a speech engine
+
+`--tts` picks the engine for a build:
+
+| Engine | What it is |
+| --- | --- |
+| `auto` (default) | ElevenLabs when `ELEVENLABS_API_KEY` is set, otherwise Kokoro |
+| `kokoro` | Kokoro-82M, free and running on your computer's CPU. 54 voices in 9 languages, several times faster than real time on a modern CPU. |
+| `elevenlabs` | ElevenLabs' service: natural voices in many languages, using your account's credits |
+| `silent` | no speech, for previews |
+
+- **Kokoro's languages:** American and British English, Spanish, French,
+  Hindi, Italian, Japanese, Brazilian Portuguese and Mandarin. A voice in any
+  other language falls back to Kokoro's default American voice, with a note;
+  use ElevenLabs for German, Russian, Korean and the rest.
+- **Speed:** both engines render some speeds themselves (Kokoro 0.5–2×,
+  ElevenLabs 0.7–1.2×). narrate stretches the audio for speeds beyond those,
+  keeping the pitch.
+- **Rebuilds** reuse every paragraph that hasn't changed, from the speech
+  cache, so they cost no credits.
+
+## Use ElevenLabs
+
+1. Create an API key in your ElevenLabs account. Text-to-speech permission is
+   enough.
+2. Put it in a `.env` file, either in the folder you run narrate from or next
+   to the script:
+
+   ```sh
+   ELEVENLABS_API_KEY=sk_...
+   ```
+
+   Or set `ELEVENLABS_API_KEY` in the environment, which wins over `.env`.
+   Keep `.env` out of version control.
+3. Build. With a key set, `--tts auto` uses ElevenLabs; `--tts kokoro` still
+   picks Kokoro.
+
+- **Model:** `eleven_multilingual_v2` by default. Choose another with
+  `--tts-model eleven_turbo_v2_5`, or `NARRATE_ELEVENLABS_MODEL`. Phonetic
+  spans are always voiced by `eleven_flash_v2`, the model that reads IPA.
+- **Voices:** ElevenLabs' default voices work on any plan. Voices from the
+  Voice Library need a paid plan, and listing your own library needs a key
+  with voice-reading permission.
+- **Credits:** every new paragraph spends credits; cached ones don't. Preview
+  with `--tts silent` until the script settles.
+- **Rate limits:** narrate sends two requests at a time, the free plan's limit,
+  and retries when ElevenLabs is busy. Raise it with
+  `NARRATE_ELEVENLABS_CONCURRENCY` on a paid plan.
+
+## Pick voices
+
+A script names voices in any of three ways:
+
+- **A Narakeet voice name**, such as `Brian` or `Amy`.
+- **A Kokoro voice ID**, such as `bf_emma`.
+- **An ElevenLabs voice:** a default voice's name (`George`), or the ID of a
+  voice in your account.
+
+Each engine uses the name directly if it is one of its own voices.
+ElevenLabs also looks in your account's library, if the key may read it.
+Otherwise the engine picks one of its voices with the same language and
+gender, and prints a note saying which. Australian, Indian, Irish, Scottish
+and South African English fall back to British, then American. A name it
+can't place at all gets the engine's default voice, also with a note.
+
+One name is in both catalogues: `Brian` is Narakeet's British voice and an
+ElevenLabs default voice, which is American. narrate takes it as the
+ElevenLabs voice on both engines; pin it (as below) for a British voice.
+
+To choose exactly, pin names in a `voices.yaml` next to the script, or in
+`~/.config/narrate/voices.yaml` for every project (the project's file wins):
+
+```yaml
+Brian:
+  kokoro: bm_lewis
+  elevenlabs: George      # a default voice name, or a voice ID
+Amy:
+  kokoro: bf_emma
+```
+
+`narrate voices` lists every engine's voices; `narrate voices script.md` also
+shows the pins in effect for that script.
+
+## Build in Docker
+
+The image `ghcr.io/bricef/narrate` holds narrate and everything it needs, so
+Docker is the only thing to install:
+
+```sh
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -v narrate-cache:/cache \
+    ghcr.io/bricef/narrate build script.md -o video.mp4
+```
+
+- **Files:** the current folder is mounted at `/work`, where narrate runs, so
+  paths are relative to it. `--user` makes the video yours rather than root's.
+- **Cache:** the voice model, music and synthesised speech go in `/cache`. The
+  `narrate-cache` volume keeps them between runs. Use the same `--user` with
+  it each time; another user can't write to it.
+- **ElevenLabs:** keep the key in a `.env` in the mounted folder, or pass
+  `-e ELEVENLABS_API_KEY`.
+- **Other commands** work the same way: put `check script.md`, `audio
+  script.md` or `doctor` after the image name. For `narakeet-api-client`, add
+  `--entrypoint narakeet-api-client`.
+- **Fonts:** the image covers Latin, Greek and Cyrillic, plus emoji. For other
+  scripts, build an image on top of it:
+
+  ```dockerfile
+  FROM ghcr.io/bricef/narrate
+  USER root
+  RUN apt-get update && apt-get install -y --no-install-recommends fonts-noto-cjk \
+   && rm -rf /var/lib/apt/lists/*
+  USER narrate
+  ```
+
+- **Private package:** while it is private, log in with a GitHub token that
+  can read packages:
+
+  ```sh
+  gh auth refresh -h github.com -s read:packages   # once, to add the scope
+  gh auth token | docker login ghcr.io -u <your GitHub user> --password-stdin
+  ```
+
+- **Apple Silicon:** the image is built for x86-64. Docker runs it under
+  emulation, more slowly; add `--platform linux/amd64` to silence its
+  warning.
+- **Size:** about 1.2 GB unpacked, 420 MB to download.
+
+To build the image from a checkout, see [Development](development.md#the-container-image).
+
+## Build in GitHub Actions
+
+The repository is a GitHub Action that builds a video in the narrate image.
+Its outputs match Narakeet's `build-video-github-action`:
+
+```yaml
+name: Video
+on: push
+jobs:
+  video:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read          # to pull the narrate image
+    steps:
+      - uses: actions/checkout@v7
+      - id: video
+        uses: bricef/narrate@main
+        with:
+          source-path: videos/intro.md
+          output: out/intro.mp4
+          elevenlabs-api-key: ${{ secrets.ELEVENLABS_API_KEY }}   # optional
+      - uses: actions/upload-artifact@v7
+        with:
+          name: intro
+          path: |
+            ${{ steps.video.outputs.video-file }}
+            ${{ steps.video.outputs.poster-file }}
+```
+
+| Input | Default | Meaning |
+| --- | --- | --- |
+| `source-path` | (required) | the script, or a `.zip` project, in the repository |
+| `output` | `narrate/result.mp4` | where to write the video; the poster and subtitles go next to it |
+| `tts` | `auto` | the speech engine, as `--tts` |
+| `elevenlabs-api-key` | none | an ElevenLabs key, from a secret |
+| `image` | `ghcr.io/bricef/narrate:latest` | the narrate image to build with |
+
+Outputs: `video-file`, `poster-file`, and `srt-file` and `vtt-file` when the
+script asks for subtitle files.
+
+- The voice model and synthesised speech are cached between runs, so
+  unchanged paragraphs cost nothing.
+- Paths must be inside the repository checkout.
+- **While narrate is private,** other repositories need access to both parts:
+  - **The repository:** Settings → Actions → General → Access, so they can
+    use the action.
+  - **The package:** "Manage Actions access" in its settings, so they can
+    pull the image.
+
+## Use Narakeet's command line
+
+`narakeet-api-client` takes the flags of Narakeet's own command-line client,
+so existing build scripts can point at narrate unchanged. It builds locally;
+nothing is uploaded.
+
+```sh
+narakeet-api-client --repository-type local-dir --repository my-project --source script.md
+narakeet-api-client --repository-type local-zip --repository project.zip --source script.md
+narakeet-api-client --repository-type zip-url --repository https://example.com/v1.zip --source script.md
+narakeet-api-client --repository-type github --repository owner/repo --source videos/intro.md \
+    --github-token "$GITHUB_TOKEN"
+```
+
+- The output is `result.mp4` (`--output` changes it); `--project-type audio`
+  writes `result.mp3`.
+- **`github`:** only the files under the script's folder are downloaded.
+  `--github-sha` picks a commit.
+- **Narakeet-only flags:** `--api-key` is accepted and ignored.
+- **narrate's own flags:** `--tts` picks the engine. It runs quietly;
+  `--verbose` shows progress.
+
+## Manage downloads and caches
+
+narrate fetches some files on first use and caches synthesised speech:
+
+| What | Where | Size |
+| --- | --- | --- |
+| Kokoro voice model | `~/.cache/narrate/models/` | about 350 MB |
+| ffmpeg (from a source checkout) | `~/.cache/narrate/ffmpeg/` | 170 MB (a 150 MB download) |
+| Speech-to-text model, for subtitles on recordings | `~/.cache/narrate/stt/` | about 460 MB |
+| Built-in music | `~/.cache/narrate/music/` | a few MB |
+| Synthesised speech and transcripts | `~/.cache/narrate/tts/`, `stt/` | grows with use |
+
+- **Download ahead of time**, for example before going offline:
+  `narrate models`.
+- **Transcripts** of recordings are `.json` files in `stt/`, beside the
+  speech-to-text model. `narrate cache --prune` leaves them alone; to clear
+  them, delete the `.json` files rather than the folder.
+- **Move them:** `NARRATE_TOOLS` sets where downloads go, and `NARRATE_CACHE`
+  where speech is cached. Both default to `~/.cache/narrate`, or
+  `$XDG_CACHE_HOME/narrate`.
+- **The speech cache is never pruned on its own:**
+  - `narrate cache` shows its size per engine.
+  - `narrate cache --prune --max-size 500M` removes the least recently used
+    entries until it fits.
+  - `narrate cache --prune --older-than 90` removes entries unused for 90 days.
+  - Entries used in the last hour are kept, so a running build keeps what it
+    needs.
+
+## Make builds faster
+
+- **Preview** with `--tts silent` while working on layout.
+- **Rebuilds** are faster than first builds: unchanged paragraphs come from
+  the speech cache.
+- **Parallelism:** narrate synthesises speech in the background while earlier
+  scenes render, and encodes several segments at once. The result is the same
+  as a one-at-a-time build.
+
+  | Setting | Default |
+  | --- | --- |
+  | `--jobs N` or `NARRATE_JOBS` | up to 4 encodes at once |
+  | `NARRATE_KOKORO_WORKERS` | up to 4 Kokoro sessions |
+  | `NARRATE_ELEVENLABS_CONCURRENCY` | 2 requests at once |
+
+## Troubleshoot
+
+Start with `narrate doctor`. It checks ffmpeg, Chromium, fonts, the voice
+models and the ElevenLabs key, and prints a fix for each problem.
+
+- **"Chromium is not installed for Playwright":** run
+  `uv run playwright install chromium`.
+- **"Chromium can't start: system libraries are missing":**
+  - With root, run `uv run playwright install-deps chromium`.
+  - Without root, use the Docker image, or extract the libraries yourself
+    (Ubuntu 24.04 and Debian 13 package names):
+
+    ```sh
+    mkdir -p ~/.cache/chromium-libs && cd ~/.cache/chromium-libs
+    apt-get download libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 \
+        libcups2t64 libdrm2 libgbm1 libwayland-server0 libxcomposite1 libxdamage1 libxext6 \
+        libxfixes3 libxi6 libxkbcommon0 libxrandr2 libxrender1 libxshmfence1 libxtst6
+    find . -name '*.deb' -exec dpkg -x {} root \;
+    export LD_LIBRARY_PATH=$HOME/.cache/chromium-libs/root/usr/lib/x86_64-linux-gnu
+    ```
+
+    Put the `export` line in your shell profile so it lasts; the `just`
+    recipes set it themselves when the folder exists. If Chromium then names
+    another missing library, `apt-get download` its package into the same
+    folder and extract it the same way.
+- **"ELEVENLABS_API_KEY is not set":** you asked for `--tts elevenlabs`
+  without a key; see [Use ElevenLabs](#use-elevenlabs).
+- **"ElevenLabs request failed (401)" or "(402)":** the message after the
+  code says why. Common causes are a wrong or revoked key, used-up credits,
+  and a Voice Library voice on a free plan.
+- **A voice sounds wrong:** read the notes at the end of the build. They name
+  each voice narrate substituted; pin the one you want in `voices.yaml`
+  ([Pick voices](#pick-voices)).
+- **"file not found":** paths are relative to the script's folder, and in
+  Docker everything must be inside the mounted folder.
+- **PermissionError under `/cache` in Docker:** the cache volume was filled by
+  another user. Run with the same `--user` as before, or start a new volume.
+- **Text shows as boxes:** the font lacks those characters. Install a font that
+  has them, or name one in a theme with `@font-face`.
+- **Another ffmpeg:** narrate uses its own build, because older versions crash
+  on some transitions. `NARRATE_FFMPEG=/path/to/ffmpeg` overrides it. It needs
+  libx264, libass, librubberband (for pitch and emphasis) and the `xfade`
+  filter, which `narrate doctor` checks. Audio exports also need libmp3lame
+  (MP3) and libopus (OGG and Opus).
+
+## Command reference
+
+| Command | Does |
+| --- | --- |
+| `narrate build SCRIPT [-o OUT.mp4]` | render a video (`SCRIPT` may be a `.zip`; `--source` picks the script inside) |
+| `narrate audio SCRIPT [-o OUT]` | render the narration only |
+| `narrate check SCRIPT` | report missing files and problems, without rendering |
+| `narrate callouts FILE` | write a page for placing callouts on an image or a clip's frame |
+| `narrate voices [SCRIPT]` | list voices, and a script's `voices.yaml` pins |
+| `narrate models` | download the voice, speech-to-text and ffmpeg files now |
+| `narrate doctor` | check the setup |
+| `narrate cache [--prune …]` | show or prune the speech cache |
+| `narakeet-api-client …` | Narakeet's command-line client, building locally |
+
+`build` and `audio` take `--tts`, `--tts-model`, `--jobs` and `-q`; `build` also
+takes `--keep-work`. `narrate COMMAND --help` lists every option.
+
+## Environment variables
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `ELEVENLABS_API_KEY` | none | ElevenLabs key; also read from `.env` |
+| `NARRATE_ELEVENLABS_MODEL` | `eleven_multilingual_v2` | ElevenLabs model, like `--tts-model` |
+| `NARRATE_ELEVENLABS_CONCURRENCY` | 2 | ElevenLabs requests at once |
+| `NARRATE_KOKORO_WORKERS` | up to 4 | Kokoro sessions at once |
+| `NARRATE_JOBS` | up to 4 | encodes at once, like `--jobs` |
+| `NARRATE_STT_MODEL` | `small` | faster-whisper model for transcribing recordings |
+| `NARRATE_MUSIC_DIR` | none | recordings to use instead of the built-in music |
+| `NARRATE_FFMPEG` | narrate's own | the ffmpeg to use |
+| `NARRATE_TOOLS` | `~/.cache/narrate` | where downloads go |
+| `NARRATE_CACHE` | `~/.cache/narrate` | where synthesised speech and transcripts are cached |

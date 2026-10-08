@@ -1,5 +1,5 @@
 # Headless Chromium needs its shared libraries. Machines without root keep them
-# extracted under ~/.cache/chromium-libs (see README); elsewhere this is empty.
+# extracted under ~/.cache/chromium-libs (docs/building.md, Troubleshoot); elsewhere this is empty.
 chromium_libs := home_directory() / ".cache/chromium-libs/root/usr/lib/x86_64-linux-gnu"
 export LD_LIBRARY_PATH := if path_exists(chromium_libs) == "true" { chromium_libs } else { env("LD_LIBRARY_PATH", "") }
 

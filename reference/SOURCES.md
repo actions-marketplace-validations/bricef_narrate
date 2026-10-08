@@ -5,8 +5,10 @@ below. Run `scripts/fetch-narakeet-reference.sh` to refresh the local copies:
 
 - `narakeet-docs/` holds Narakeet doc pages and news posts, `<main>` only,
   converted to Markdown.
-- `examples/` holds the scripts and CSS from `github.com/narakeet/examples`,
-  with no media.
+- `examples/` holds the scripts and CSS from `github.com/narakeet/examples`.
+  With `--media` (`just reference`), it also holds their media and the
+  `result.mp4` Narakeet rendered from each, which the conformance tests
+  compare against.
 
 Both directories are git-ignored. Narakeet's docs are copyright Video Puppet
 Ltd, and the examples repository has no licence.
