@@ -1,4 +1,4 @@
-"""Command line: narrate build | check | voices | models."""
+"""Command line: narrate build | check | voices | models | doctor."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from pathlib import Path
 from . import media
 from .build import Builder, BuildError
 from .config import ConfigError, settings_from_header
+from .doctor import SetupError, run_checks
 from .script import Media, ScriptError, parse_file
 from .tts import ELEVENLABS_VOICES, KOKORO_VOICES, NARAKEET_PROFILES, ensure_models, make_synth
 
@@ -76,6 +77,18 @@ def cmd_voices(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_doctor(args: argparse.Namespace) -> int:
+    failed = 0
+    for check in run_checks():
+        mark = "ok  " if check.ok else "FAIL"
+        print(f"{mark} {check.name}: {check.detail}")
+        if not check.ok:
+            failed += 1
+            print(f"     fix: {check.fix}")
+    print("all checks passed" if not failed else f"{failed} check(s) failed")
+    return 1 if failed else 0
+
+
 def cmd_models(args: argparse.Namespace) -> int:
     print(ensure_models())
     return 0
@@ -102,6 +115,7 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("voices", help="list voices").set_defaults(func=cmd_voices)
     sub.add_parser("models", help="download the Kokoro model files").set_defaults(func=cmd_models)
+    sub.add_parser("doctor", help="check ffmpeg, Chromium, fonts, models and keys").set_defaults(func=cmd_doctor)
 
     args = parser.parse_args(argv)
     load_dotenv(Path.cwd(), *([Path(args.script).resolve().parent] if getattr(args, "script", None) else []))
@@ -111,6 +125,9 @@ def main(argv: list[str] | None = None) -> int:
         where = f":{e.line}" if getattr(e, "line", None) else ""
         print(f"error: {getattr(args, 'script', '')}{where}: {e}", file=sys.stderr)
         return 2
+    except SetupError as e:
+        print(f"setup problem: {e}", file=sys.stderr)
+        return 3
     except (ConfigError, media.MediaError, RuntimeError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 2

@@ -171,9 +171,15 @@ class FrameRenderer:
     def __enter__(self) -> FrameRenderer:
         from playwright.sync_api import sync_playwright
 
+        from .doctor import launch_chromium
+
         self._pw = sync_playwright().start()
-        # Pages are file:// URLs that load project images, CSS and fonts from disk
-        self._browser = self._pw.chromium.launch(args=["--allow-file-access-from-files"])
+        try:
+            # Pages are file:// URLs that load project images, CSS and fonts from disk
+            self._browser = launch_chromium(self._pw, ["--allow-file-access-from-files"])
+        except Exception:
+            self._pw.stop()
+            raise
         self._page = self._browser.new_page(
             viewport={"width": self.width, "height": self.height}, device_scale_factor=1
         )
