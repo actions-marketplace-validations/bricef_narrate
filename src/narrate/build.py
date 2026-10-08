@@ -416,16 +416,23 @@ class Builder:
 
     def _encode_video(self, v: Visual, plan: ScenePlan, frames: int, overlay: Path | None, out: Path) -> Path:
         w, h = self.settings.width, self.settings.height
-        chain = ["setpts=PTS-STARTPTS"]
-        if v.sync == "match":
-            chain.append(f"setpts=PTS/{v.length / plan.duration:.6f}")
-        chain.append(f"fps={FPS}")
-        chain += _resize_filters(v.fit, v.position, w, h, plan.spec.canvas or "#000000")
-        chain.append("setsar=1")
+        resize = [*_resize_filters(v.fit, v.position, w, h, plan.spec.canvas or "#000000"), "setsar=1"]
+        segment = ["-ss", f"{v.start:.3f}", "-t", f"{v.length:.3f}", "-i", str(v.path)]
         if v.sync in ("loop", "trim-or-loop"):
-            chain.append(f"loop=loop=-1:size={max(1, round(v.length * FPS))}:start=0")
-        chain.append(f"tpad=stop_mode=clone:stop_duration={plan.duration + 1:.3f}")
-        args = ["-ss", f"{v.start:.3f}", "-t", f"{v.length:.3f}", "-i", str(v.path)]
+            # Encode one pass of the segment at output size, then loop that file
+            # from disk: ffmpeg's loop filter holds every frame in memory
+            once = out.with_name(out.stem + "-once.mp4")
+            media.run([*segment, "-vf", ",".join(["setpts=PTS-STARTPTS", f"fps={FPS}", *resize]),
+                       "-frames:v", str(max(1, round(v.length * FPS))), "-an", *_SEGMENT_CODEC, str(once)])
+            args = ["-stream_loop", "-1", "-i", str(once)]
+            chain = ["setpts=PTS-STARTPTS"]
+        else:
+            args = segment
+            chain = ["setpts=PTS-STARTPTS"]
+            if v.sync == "match":
+                chain.append(f"setpts=PTS/{v.length / plan.duration:.6f}")
+            chain += [f"fps={FPS}", *resize,
+                      f"tpad=stop_mode=clone:stop_duration={plan.duration + 1:.3f}"]
         graph = f"[0:v]{','.join(chain)}[base]"
         if overlay:
             args += ["-loop", "1", "-framerate", str(FPS), "-i", str(overlay)]
