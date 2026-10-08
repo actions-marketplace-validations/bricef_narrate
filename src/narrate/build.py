@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import shutil
 import sys
+from itertools import accumulate
 import tempfile
 import wave
 from dataclasses import dataclass, field
@@ -84,6 +85,7 @@ class ScenePlan:
     duration: float
     cues: list[Cue] = field(default_factory=list)
     layout: Layout = field(default_factory=lambda: Layout([], []))
+    slides: list[SlideSpec] = field(default_factory=list)  # share the scene's time equally
 
 
 @dataclass
@@ -268,10 +270,6 @@ class Builder:
             except ConfigError as e:
                 raise BuildError(str(e), block.line) from None
 
-        if len(slides) > 1:
-            self.notes.add("several slides in one scene (only the first is shown)")
-        if slides:
-            spec.slide = SlideSpec(lang=slides[0].lang, text=slides[0].text)
 
         visuals = [self._visual(m, workdir) for m in sources]
         narration = track.samples()
@@ -291,7 +289,8 @@ class Builder:
                     for c in subtitles.narration_cues(start, end, text, s.subtitles.break_chars)]
         else:
             cues = []
-        return ScenePlan(scene.index, visuals, spec, audio, d, cues, layout)
+        return ScenePlan(scene.index, visuals, spec, audio, d, cues, layout,
+                         [SlideSpec(lang=sl.lang, text=sl.text) for sl in slides])
 
     def _visual(self, m: Media, workdir: Path) -> Visual:
         path = self._path(m.path, m.line)
@@ -397,47 +396,79 @@ class Builder:
 
     def _render_scene(self, plan: ScenePlan, frames: int, renderer: FrameRenderer | None,
                       work: Path) -> list[Path]:
+        """Encode a scene as segments totalling exactly `frames` frames.
+
+        Slides share the scene's time equally, independently of the visuals.
+        Over images they are composed into the frame (so theme backdrops
+        apply), splitting an image where the slide changes; over clips, and
+        over a looping sequence, they are time-windowed overlays.
+        """
         base = work / f"scene-{plan.index:03d}"
+        slides: list[SlideSpec | None] = list(plan.slides) or [None]
+        bounds = list(accumulate(allocate_frames(frames, [1.0] * len(slides)), initial=0))
+
+        def spec(**changes) -> FrameSpec:
+            return FrameSpec(**{**plan.spec.__dict__, **changes})
+
+        def name(suffix: str) -> Path:
+            return base.with_name(f"{base.name}-{suffix}")
+
         if not plan.visuals:
-            png = renderer.render(plan.spec, base.with_suffix(".png"))
-            return [_encode_still(png, frames, base.with_suffix(".mp4"))]
-        overlay = None
-        if any(v.kind == "video" for v in plan.visuals) and (plan.spec.slide or plan.spec.callouts):
-            spec = FrameSpec(**{**plan.spec.__dict__, "over_video": True})
-            overlay = renderer.render(spec, base.with_name(base.name + "-overlay.png"))
+            return [_encode_still(renderer.render(spec(slide=slide), name(f"s{j}.png")),
+                                  bounds[j + 1] - bounds[j], name(f"s{j}.mp4"))
+                    for j, slide in enumerate(slides) if bounds[j + 1] > bounds[j]]
+
         layout = plan.layout
+        overlays: list[tuple[Path, float, float]] = []
+        if (layout.repeat or any(v.kind == "video" for v in plan.visuals)) and (plan.slides or plan.spec.callouts):
+            for j, slide in enumerate(slides):
+                png = renderer.render(spec(slide=slide, over_video=True), name(f"overlay{j}.png"))
+                overlays.append((png, bounds[j] / FPS, bounds[j + 1] / FPS))
+
         if layout.repeat:
-            # One pass at natural length, then looped from disk: ffmpeg's loop
-            # filter would hold every frame of the pass in memory
+            # One pass at natural length, looped from disk afterwards (the loop
+            # filter would hold every frame in memory); slides and callouts go
+            # on after looping so they follow the scene's time, not each pass
             counts = [max(1, round(p * FPS)) for p in layout.pieces]
         else:
             counts = allocate_frames(frames, layout.pieces)
-        segments = []
+        segments: list[Path] = []
+        at = 0
         for i, (v, count, tempo) in enumerate(zip(plan.visuals, counts, layout.tempo)):
             if count <= 0:
                 continue
-            out = base.with_name(f"{base.name}-{i}.mp4")
+            lo, hi = at, at + count
+            at = hi
             if v.kind == "video":
-                segments.append(self._encode_video(v, count, tempo, overlay, plan.spec.canvas, out))
-            else:
-                spec = FrameSpec(**{**plan.spec.__dict__, "image": v.path, "fit": v.fit, "position": v.position})
-                png = renderer.render(spec, base.with_name(f"{base.name}-{i}.png"))
-                segments.append(_encode_still(png, count, out))
+                windows = [] if layout.repeat else _windows(overlays, lo, hi)
+                segments.append(self._encode_video(v, count, tempo, windows, plan.spec.canvas, name(f"{i}.mp4")))
+                continue
+            image = {"image": v.path, "fit": v.fit, "position": v.position}
+            if layout.repeat:
+                png = renderer.render(spec(**image, slide=None, callouts=[]), name(f"{i}.png"))
+                segments.append(_encode_still(png, count, name(f"{i}.mp4")))
+                continue
+            for j, slide in enumerate(slides):
+                a, b = max(lo, bounds[j]), min(hi, bounds[j + 1])
+                if b > a:
+                    png = renderer.render(spec(**image, slide=slide), name(f"{i}-{j}.png"))
+                    segments.append(_encode_still(png, b - a, name(f"{i}-{j}.mp4")))
         if not layout.repeat:
             return segments
-        once = base.with_name(base.name + "-once.mp4")
-        if len(segments) == 1:
-            once = segments[0]
-        else:
-            listing = base.with_name(base.name + "-once.txt")
+
+        once = segments[0]
+        if len(segments) > 1:
+            once = name("once.mp4")
+            listing = name("once.txt")
             listing.write_text("".join(f"file '{p.as_posix()}'\n" for p in segments))
             media.run(["-f", "concat", "-safe", "0", "-i", str(listing), "-c", "copy", str(once)])
         looped = base.with_suffix(".mp4")
-        media.run(["-stream_loop", "-1", "-i", str(once), "-frames:v", str(frames), "-an",
-                   *_SEGMENT_CODEC, str(looped)])
+        inputs, graph = _overlay_graph("[0:v]null", overlays)
+        media.run(["-stream_loop", "-1", "-i", str(once), *inputs, "-filter_complex", graph,
+                   "-map", "[v]", "-frames:v", str(frames), "-an", *_SEGMENT_CODEC, str(looped)])
         return [looped]
 
-    def _encode_video(self, v: Visual, frames: int, tempo: float, overlay: Path | None,
+    def _encode_video(self, v: Visual, frames: int, tempo: float, overlays: list[tuple[Path, float, float]],
                       canvas: str | None, out: Path) -> Path:
         """One clip as exactly `frames` frames: sped up or slowed by `tempo`, last frame held if short."""
         w, h = self.settings.width, self.settings.height
@@ -446,14 +477,9 @@ class Builder:
             chain.append(f"setpts=PTS/{tempo:.6f}")
         chain += [f"fps={FPS}", *_resize_filters(v.fit, v.position, w, h, canvas or "#000000"), "setsar=1",
                   f"tpad=stop_mode=clone:stop_duration={frames / FPS + 1:.3f}"]
-        args = ["-ss", f"{v.start:.3f}", "-t", f"{v.length:.3f}", "-i", str(v.path)]
-        graph = f"[0:v]{','.join(chain)}[base]"
-        if overlay:
-            args += ["-loop", "1", "-framerate", str(FPS), "-i", str(overlay)]
-            graph += ";[base][1:v]overlay=0:0:format=auto[v]"
-        else:
-            graph += ";[base]null[v]"
-        media.run([*args, "-filter_complex", graph, "-map", "[v]", "-frames:v", str(frames),
+        inputs, graph = _overlay_graph(f"[0:v]{','.join(chain)}", overlays)
+        media.run(["-ss", f"{v.start:.3f}", "-t", f"{v.length:.3f}", "-i", str(v.path), *inputs,
+                   "-filter_complex", graph, "-map", "[v]", "-frames:v", str(frames),
                    "-an", *_SEGMENT_CODEC, str(out)])
         return out
 
@@ -582,6 +608,23 @@ def layout_visuals(visuals: list[Visual], a: float, duration: float | None) -> t
             pieces[i] = min(x, max(0.0, remaining))
             remaining -= pieces[i]
     return d, Layout(pieces, [1.0] * n)
+
+
+def _windows(overlays: list[tuple[Path, float, float]], lo: int, hi: int) -> list[tuple[Path, float, float]]:
+    """The overlays showing during scene frames [lo, hi), in that piece's own time."""
+    start, end = lo / FPS, hi / FPS
+    return [(png, max(a, start) - start, min(b, end) - start) for png, a, b in overlays if min(b, end) > max(a, start)]
+
+
+def _overlay_graph(base: str, overlays: list[tuple[Path, float, float]]) -> tuple[list[str], str]:
+    """ffmpeg inputs and a filter graph compositing time-windowed overlays onto `base`, output [v]."""
+    inputs: list[str] = []
+    graph = f"{base}[v0]"
+    for k, (png, a, b) in enumerate(overlays, 1):
+        inputs += ["-loop", "1", "-framerate", str(FPS), "-i", str(png)]
+        enable = "" if len(overlays) == 1 else f":enable='gte(t,{a:.4f})*lt(t,{b:.4f})'"
+        graph += f";[v{k - 1}][{k}:v]overlay=0:0:format=auto{enable}[v{k}]"
+    return inputs, graph + f";[v{len(overlays)}]null[v]"
 
 
 def allocate_frames(frames: int, pieces: list[float]) -> list[int]:

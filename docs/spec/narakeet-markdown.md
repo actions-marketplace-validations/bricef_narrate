@@ -906,8 +906,13 @@ examples disagree. The proposals favour what the official examples imply.
    - `trim`: cuts the sequence in order.
    - `loop` / `trim-or-loop`: repeat the whole sequence.
    - Clip soundtracks play where their clip does.
-7. **Several slides in one scene.** Show them in sequence with equal shares,
-   like images.
+7. **Several slides in one scene.** *Implemented (narrate #3).* The slides
+   share the scene's time equally, independently of the visuals.
+   - With as many slides as images (and no clips), slide *i* shows over
+     image *i*.
+   - An image is split where its slide changes.
+   - Over clips, and over a looping sequence, each slide is an overlay shown
+     during its share.
 8. **Duration-only `transition: N`.** Use the header's transition type if one
    is set, otherwise `crossfade`, for N seconds.
 9. **Transition timing.** *Answered by Narakeet's own render (§17): total

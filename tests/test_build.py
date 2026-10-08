@@ -197,3 +197,43 @@ def test_mixed_sequence_end_to_end(project):
     media.extract_frame(result.video, 2.5, middle)
     r, g, b = Image.open(middle).convert("RGB").getpixel((160, 90))
     assert b > r + 40  # the steel-blue image, between the two test-pattern clips
+
+
+def frame_at(video: Path, t: float, tmp: Path):
+    import numpy as np
+
+    png = tmp / f"frame-{t}.png"
+    media.extract_frame(video, t, png)
+    return np.asarray(Image.open(png).convert("L"), dtype=float)
+
+
+def test_slides_take_turns_in_a_scene(project):
+    result = build(project, "---\nsize: 320x180\n---\n\n```\nONE\n```\n\n```\nTWO\n```\n\n(duration: 2)\n",
+                   name="turns")
+    assert result.duration == pytest.approx(2.0, abs=1 / FPS)
+    first, second = frame_at(result.video, 0.5, project), frame_at(result.video, 1.5, project)
+    assert abs(first - second).mean() > 1  # different text
+
+
+def test_two_slides_split_an_image_and_window_over_a_clip(project, tmp_path):
+    from narrate.frames import FrameRenderer
+
+    media.run(["-loop", "1", "-i", str(project / "blue.png"), "-t", "2", "-c:v", "libx264",
+               "-pix_fmt", "yuv420p", "-vf", "scale=320:180", str(project / "still.mp4")])
+    script = parse("---\nsize: 320x180\n---\n\n![](blue.png)\n\n```\nONE\n```\n\n```\nTWO\n```\n\n(duration: 2)\n\n"
+                   "---\n\n![](still.mp4)\n\n```\nONE\n```\n\n```\nTWO\n```\n", project / "s.md")
+    builder = Builder(script, SilentSynth(), log=lambda _: None)
+    with FrameRenderer(320, 180, tmp_path) as renderer:
+        image_plan = builder.plan_scene(script.scenes[0], tmp_path)
+        assert len(builder._render_scene(image_plan, 60, renderer, tmp_path)) == 2
+        clip_plan = builder.plan_scene(script.scenes[1], tmp_path)
+        (segment,) = builder._render_scene(clip_plan, 60, renderer, tmp_path)
+    first, second = frame_at(segment, 0.5, tmp_path), frame_at(segment, 1.5, tmp_path)
+    assert abs(first - second).mean() > 1
+
+
+def test_overlay_windows_are_in_piece_time():
+    from narrate.build import _windows
+
+    overlays = [(Path("a.png"), 0.0, 1.0), (Path("b.png"), 1.0, 2.0)]
+    assert _windows(overlays, 15, 45) == [(Path("a.png"), 0.0, 0.5), (Path("b.png"), 0.5, 1.0)]
