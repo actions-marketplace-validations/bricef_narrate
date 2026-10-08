@@ -178,6 +178,7 @@ class SynthCache:
 
 class Synth(Protocol):
     name: str
+    speed_range: tuple[float, float]  # speeds the engine renders natively; narrate stretches the rest
 
     def resolve(self, name: str | None, lang: str | None, notes: set[str]) -> Voice:
         """Pick this backend's voice for a script voice name and optional language override."""
@@ -192,8 +193,17 @@ MODEL_URL = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model
 MODEL_FILES = ("kokoro-v1.0.onnx", "voices-v1.0.bin")
 
 
+def tools_dir() -> Path:
+    """Downloaded tools (Kokoro model, ffmpeg): kept apart from the speech cache,
+    so pointing NARRATE_CACHE somewhere fresh doesn't trigger new downloads."""
+    root = os.environ.get("NARRATE_TOOLS") or os.path.join(
+        os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "narrate"
+    )
+    return Path(root)
+
+
 def model_dir() -> Path:
-    return cache_dir() / "models" / "kokoro-v1.0"
+    return tools_dir() / "models" / "kokoro-v1.0"
 
 
 def ensure_models(log=lambda msg: print(msg, file=sys.stderr)) -> Path:
@@ -246,6 +256,7 @@ class SilentSynth:
 
     name = "silent"
     seconds_per_char = 0.065
+    speed_range = (0.01, 100.0)
 
     def resolve(self, name: str | None, lang: str | None, notes: set[str]) -> Voice:
         return kokoro_resolve(name, lang, set())
@@ -265,6 +276,7 @@ class KokoroSynth:
     """
 
     name = "kokoro"
+    speed_range = (0.5, 2.0)
 
     def __init__(self) -> None:
         self._models = ensure_models()
@@ -320,6 +332,7 @@ class LanguageRejected(Exception):
 class ElevenLabsSynth:
     name = "elevenlabs"
     url = "https://api.elevenlabs.io/v1/text-to-speech/{voice}?output_format=pcm_24000"
+    speed_range = ELEVENLABS_SPEED
     # Simultaneous requests: the free plan allows 2; raise it for larger plans
     concurrency = int(os.environ.get("NARRATE_ELEVENLABS_CONCURRENCY", 2))
 
@@ -415,6 +428,7 @@ class Prefetching:
 
         self.backend = backend
         self.name = backend.name
+        self.speed_range = backend.speed_range
         self._pool = ThreadPoolExecutor(getattr(backend, "concurrency", 1))
         self._futures = {r: self._pool.submit(backend.synth, *r, notes) for r in dict.fromkeys(requests)}
 

@@ -28,7 +28,7 @@ def fake_release(binary: bytes, checksum: str | None = None):
 
 @pytest.fixture
 def cache(tmp_path, monkeypatch):
-    monkeypatch.setenv("NARRATE_CACHE", str(tmp_path))
+    monkeypatch.setenv("NARRATE_TOOLS", str(tmp_path))
     return tmp_path
 
 

@@ -45,6 +45,8 @@ uv run playwright install chromium   # slides and frames are rendered by headles
   - It doesn't use an installed ffmpeg, because ffmpeg 7.0 crashes
     intermittently on narrate's transition graphs (#37).
   - `$NARRATE_FFMPEG` overrides it.
+  - Downloaded tools live under `~/.cache/narrate` (`$NARRATE_TOOLS`); speech
+    audio is cached apart from them (`$NARRATE_CACHE`).
   - `uv run narrate doctor` checks the whole setup.
 - **Kokoro:** the model (about 350 MB) downloads on first use, or ahead of time
   with `uv run narrate models`.
