@@ -1010,3 +1010,46 @@ time appears only in scenes that also contain a text slide. Narakeet's renders
 date from different years, so this may be version drift rather than a rule.
 narrate keeps pauses exact and offers no "Narakeet timing" mode, since there's
 no consistent behaviour to reproduce.
+
+---
+
+## 18. narrate extensions
+
+Features narrate adds to the format. Narakeet doesn't have them, so scripts
+that use them build only with narrate.
+
+### 18.1 Render blocks
+
+A fenced code block whose info string starts with `render:` is not a slide. A
+renderer turns it into a picture, which is placed as a media reference (§5)
+would be.
+
+```
+render-block := fence "render:" NAME [ token ]* NL [ frontmatter ] body fence
+frontmatter  := "---" NL yaml-mapping NL "---" NL      ; at the very top of the body
+```
+
+- **`NAME`** picks the renderer, case-insensitively. An unknown name is an
+  error that lists the known renderers.
+- **Tokens** after the name are alt-text tokens (§5.2): size, animated size,
+  position, sync, segment and `mute`.
+- **Frontmatter** is parsed as typed YAML, unlike the header, because
+  renderer settings may pass through to other tools.
+  - The keys `size`, `position`, `sync`, `segment` and `volume` place the
+    output, as in an `(image:)` or `(video:)` map, and win over tokens.
+  - Every other key belongs to the renderer, with its case kept. A renderer
+    rejects keys it doesn't take.
+- **Body:** the rest of the block, what the renderer draws.
+- **Placement:** the output joins the scene's visuals in script order, sharing
+  the scene's time and taking callouts, slides and transitions as an image
+  would. Audio builds ignore it.
+- **Rendering:** each block is drawn at the frame size with the theme and canvas
+  in effect at its position in the scene. The output is cached by a hash of the
+  renderer, its settings, the body, the frame size, the theme and the canvas.
+
+| Renderer | Draws | Settings |
+| --- | --- | --- |
+| `placeholder` | a card labelled with the body (or "Placeholder") and the frame size | `background`, `color` |
+
+Planned renderers: `mermaid` diagrams (narrate #40), and AI-generated pictures
+and clips (#41, #42).

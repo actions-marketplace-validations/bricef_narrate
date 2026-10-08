@@ -1,6 +1,7 @@
-"""Inspect and prune the speech cache (`narrate cache`).
+"""Inspect and prune the speech and render caches (`narrate cache`).
 
-Entries are .npy files under <cache>/tts/<engine>/; a cache hit refreshes the
+Entries are .npy files under <cache>/tts/<engine>/, and rendered pictures
+under <cache>/render/<renderer>/; a cache hit refreshes the
 file's modification time, so pruning by age or size removes the least
 recently used first. Entries used within `protect` seconds are never removed,
 which keeps anything a running build depends on.
@@ -48,6 +49,10 @@ def entries(root: Path | None = None) -> list[Entry]:
         # Files directly under tts/ predate per-engine folders
         engine = "legacy" if path.parent == tts else path.parent.name
         found.append(Entry(path, engine, stat.st_size, stat.st_mtime))
+    # Render block outputs (<cache>/render/<renderer>/), refreshed on every hit too
+    for path in ((root or cache_dir()) / "render").glob("*/*.png"):
+        stat = path.stat()
+        found.append(Entry(path, f"render:{path.parent.name}", stat.st_size, stat.st_mtime))
     return found
 
 

@@ -3,7 +3,8 @@
 Implements docs/spec/narakeet-markdown.md §2 (structure), §5 (media references)
 and §7 (stage directions), including the lenient forms found in Narakeet's own
 example scripts (stacked directives, directives straight after a fence or a
-separator).
+separator). Also narrate's own `render:` code blocks (spec §18), which become
+media blocks that the builder renders.
 """
 
 from __future__ import annotations
@@ -23,6 +24,8 @@ SIZES = {"fit", "contain", "cover"}
 ANIMATED_SIZES = {"zoom", "zoomout", "pan", "panzoom", "panzoomout"}
 POSITIONS = {"center", "top-left", "left", "right", "top", "bottom"}
 SYNCS = {"freeze", "match", "trim", "loop", "trim-or-loop", "loop-audio"}
+# Frontmatter keys of a render block that place its output, as in (image: …) / (video: …)
+PLACEMENT = {"size", "position", "sync", "segment", "volume"}
 
 DIRECTIVES = {
     "audio", "callout", "canvas", "duration", "font-size", "image", "image-size",
@@ -54,9 +57,18 @@ class Directive:
 
 
 @dataclass
+class Render:
+    """What a `render:NAME` code block asks for; the builder turns it into a file."""
+
+    name: str  # the renderer, e.g. "mermaid"
+    body: str
+    settings: dict[str, Any] = field(default_factory=dict)  # frontmatter keys the renderer owns
+
+
+@dataclass
 class Media:
     kind: str  # "image" | "video" | "audio"
-    path: str
+    path: str  # for a render block, empty until the builder renders it
     line: int
     size: str | None = None
     position: str | None = None
@@ -64,6 +76,7 @@ class Media:
     # (start, end) as written; end is None for a single still frame
     segment: tuple[str, str | None] | None = None
     volume: float | None = None
+    render: Render | None = None
 
 
 @dataclass
@@ -254,7 +267,10 @@ def _parse_blocks(chunk: list[Line], warnings: list[str]) -> list[Block]:
             if i >= len(chunk):
                 warnings.append(f"line {n}: code fence is never closed")
             lang = info.split()[0].lower() if info else ""
-            blocks.append(Slide(lang=lang, text="\n".join(body), line=n))
+            if lang.startswith("render:"):
+                blocks.append(_render_block(info.split(), body, n, warnings))
+            else:
+                blocks.append(Slide(lang=lang, text="\n".join(body), line=n))
             i += 1
             continue
 
@@ -354,7 +370,13 @@ def _media_from_alt(alt: str, target: str, line: int, warnings: list[str]) -> Me
         warnings.append(f"line {line}: unsupported media type for {path!r}, read as narration")
         return None
     media = Media(kind=kind, path=path, line=line)
-    for token in alt.split():
+    _apply_tokens(media, alt.split(), line, warnings)
+    return media
+
+
+def _apply_tokens(media: Media, tokens: list[str], line: int, warnings: list[str]) -> None:
+    """Options written as words, as in an image's alt text."""
+    for token in tokens:
         t = token.lower()
         if t in SIZES or t in ANIMATED_SIZES:
             media.size = t
@@ -368,7 +390,6 @@ def _media_from_alt(alt: str, target: str, line: int, warnings: list[str]) -> Me
             media.segment = seg
         else:
             warnings.append(f"line {line}: unknown media option {token!r} ignored")
-    return media
 
 
 def _media_from_directive(key: str, value: Any, line: int, warnings: list[str]) -> Media | None:
@@ -384,6 +405,12 @@ def _media_from_directive(key: str, value: Any, line: int, warnings: list[str]) 
         warnings.append(f"line {line}: ({key}: …) has no file")
         return None
     media = Media(kind=key, path=path, line=line)
+    _apply_props(media, props, key, line, warnings)
+    return media
+
+
+def _apply_props(media: Media, props: dict[str, Any], what: str, line: int, warnings: list[str]) -> None:
+    """Options written as a map, as in (image: {file: …, size: …})."""
     for prop, raw in props.items():
         val = str(raw).strip()
         low = val.lower()
@@ -401,7 +428,36 @@ def _media_from_directive(key: str, value: Any, line: int, warnings: list[str]) 
             except ValueError:
                 warnings.append(f"line {line}: invalid volume {val!r} ignored")
         else:
-            warnings.append(f"line {line}: unknown or invalid {key} property {prop}: {val!r} ignored")
+            warnings.append(f"line {line}: unknown or invalid {what} property {prop}: {val!r} ignored")
+
+
+def _render_block(info: list[str], body: list[str], line: int, warnings: list[str]) -> Media:
+    """A ```render:NAME [tokens] block, with optional YAML frontmatter between --- lines."""
+    name = info[0][len("render:"):].lower()
+    if not name:
+        raise ScriptError("a render block needs a renderer, as in ```render:mermaid", line)
+    settings: dict[str, Any] = {}
+    if body and body[0].strip() == "---":
+        end = next((k for k in range(1, len(body)) if body[k].strip() == "---"), None)
+        if end is None:
+            raise ScriptError("render block frontmatter is not closed with ---", line + 1)
+        text = "\n".join(body[1:end])
+        try:
+            # Typed YAML, unlike the header: renderer settings pass through to
+            # tools such as Mermaid, whose numbers and booleans must survive
+            data = yaml.safe_load(text) if text.strip() else {}
+        except yaml.YAMLError as e:
+            raise ScriptError(f"invalid YAML in render block frontmatter: {e}", line + 1) from None
+        if not isinstance(data, dict):
+            raise ScriptError("render block frontmatter must be a map of key: value lines", line + 1)
+        # Key case is kept: renderer settings such as Mermaid's displayMode are camelCase
+        settings = {str(k).strip(): v for k, v in data.items()}
+        body = body[end + 1:]
+    media = Media(kind="image", path="", line=line)
+    _apply_tokens(media, info[1:], line, warnings)
+    placement = {k.lower(): settings.pop(k) for k in list(settings) if k.lower() in PLACEMENT}
+    _apply_props(media, placement, f"render:{name}", line, warnings)
+    media.render = Render(name, "\n".join(body).strip("\n"), settings)
     return media
 
 

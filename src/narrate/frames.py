@@ -213,6 +213,7 @@ class FrameRenderer:
         self.width, self.height, self.workdir = width, height, workdir
         self._count = 0
         self._pw = self._browser = self._page = None
+        self._pages: dict[int, Any] = {}  # pages for render blocks, by device scale
 
     def __enter__(self) -> FrameRenderer:
         from playwright.sync_api import sync_playwright
@@ -238,11 +239,29 @@ class FrameRenderer:
             self._pw.stop()
 
     def render(self, spec: FrameSpec, out: Path) -> Path:
-        self._count += 1
-        page_path = self.workdir / f"frame-{self._count:04d}.html"
-        page_path.write_text(frame_html(spec, self.width, self.height), encoding="utf-8")
-        self._page.goto(page_path.as_uri(), wait_until="load")
-        self._page.evaluate("document.fonts.ready.then(() => true)")
+        self._load(self._page, frame_html(spec, self.width, self.height))
         self._page.evaluate(_SHRINK_JS)
         self._page.screenshot(path=str(out), omit_background=spec.over_video, type="png")
         return out
+
+    def screenshot(self, page_html: str, out: Path, *, scale: int = 1, script: str | None = None,
+                   arg: Any = None) -> Any:
+        """Any page at the frame size, for render blocks: load it, run `script` (a JS
+        function given `arg`), then capture it at `scale` pixels per CSS pixel.
+        Returns what the script returned."""
+        if scale not in self._pages:
+            self._pages[scale] = self._browser.new_page(
+                viewport={"width": self.width, "height": self.height}, device_scale_factor=scale)
+        page = self._pages[scale]
+        self._load(page, page_html)
+        result = page.evaluate(script, arg) if script else None
+        page.evaluate("document.fonts.ready.then(() => true)")
+        page.screenshot(path=str(out), type="png")
+        return result
+
+    def _load(self, page, page_html: str) -> None:
+        self._count += 1
+        page_path = self.workdir / f"frame-{self._count:04d}.html"
+        page_path.write_text(page_html, encoding="utf-8")
+        page.goto(page_path.as_uri(), wait_until="load")
+        page.evaluate("document.fonts.ready.then(() => true)")

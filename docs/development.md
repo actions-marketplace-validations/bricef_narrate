@@ -168,6 +168,8 @@ Some choices worth knowing when changing behaviour:
     phonetic alphabets.
   - `tts.py` and `voicemap.py`: speech engines, voices and `voices.yaml`.
   - `frames.py` and `motion.py`: Chromium frames, and pan and zoom.
+  - `render.py`: render blocks, their cache, and the renderers
+    (`render:placeholder`).
   - `subtitles.py` and `stt.py`: subtitle cues, and speech-to-text for
     recordings.
   - `media.py`: ffmpeg.

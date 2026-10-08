@@ -19,6 +19,7 @@ speech. [Building videos](building.md) covers the commands.
 - [Use recorded audio](#use-recorded-audio)
 - [Show pictures](#show-pictures)
 - [Play video clips](#play-video-clips)
+- [Generate pictures from code blocks](#generate-pictures-from-code-blocks)
 - [Show text slides](#show-text-slides)
 - [Style slides with a theme](#style-slides-with-a-theme)
 - [Add subtitles](#add-subtitles)
@@ -307,6 +308,45 @@ The clip loops under this narration, with its own sound at 30 percent.
 - **Clip sound:** `mute`, or a `volume` multiplier in the directive form
   (`0.5`, `2`). The clip's sound plays under the narration.
 - Fit and position work as for pictures.
+
+## Generate pictures from code blocks
+
+````markdown
+```render:placeholder
+Product shot goes here
+```
+
+The finished video will show the product here.
+
+---
+
+```render:placeholder cover
+---
+background: navy
+color: white
+---
+Chart: sales by region
+```
+
+(duration: 2)
+````
+
+- **`render:NAME`:** a code block whose first word is `render:` and a
+  renderer's name is turned into a picture. It is then shown exactly like
+  `![…](file)`: same timing, fit, pan and zoom, callouts and slides on top. It
+  is not shown as code.
+- **Options:** words after the name are the picture options from alt text
+  (`cover top`, `panzoom left`).
+- **Settings:** an optional block between `---` lines at the top holds the
+  renderer's settings. `size` and `position` there work as in `(image: …)`.
+- **Renderers:**
+  - `render:placeholder` draws a card labelled with the block's text and the
+    video's size, standing in for a picture still to come. `background` and
+    `color` set its colours.
+- Pictures are drawn at the video's size and cached, so an unchanged block
+  isn't drawn again.
+- `narrate check` reports unknown renderers and settings.
+- These blocks are narrate's own; Narakeet would show them as code.
 
 ## Show text slides
 
@@ -641,6 +681,9 @@ name it with `--source`.
   Narakeet sometimes overruns.
 - **Not supported:** PowerPoint, Google Slides and Keynote input; Narakeet's
   REST API and web editor.
+- **narrate only:** [render blocks](#generate-pictures-from-code-blocks)
+  generate pictures from code blocks. Narakeet would show them as code
+  ([§18](spec/narakeet-markdown.md#18-narrate-extensions)).
 - **Open questions:** where Narakeet's documentation is silent or
   contradicts itself, narrate makes a choice;
   [§16](spec/narakeet-markdown.md#16-gaps-and-how-narrate-resolves-them) lists each

@@ -280,6 +280,7 @@ narrate fetches some files on first use and caches synthesised speech:
 | Speech-to-text model, for subtitles on recordings | `~/.cache/narrate/stt/` | about 460 MB |
 | Built-in music | `~/.cache/narrate/music/` | a few MB |
 | Synthesised speech and transcripts | `~/.cache/narrate/tts/`, `stt/` | grows with use |
+| Pictures drawn from render blocks | `~/.cache/narrate/render/` | grows with use |
 
 - **Download ahead of time**, for example before going offline:
   `narrate models`.
@@ -289,8 +290,8 @@ narrate fetches some files on first use and caches synthesised speech:
 - **Move them:** `NARRATE_TOOLS` sets where downloads go, and `NARRATE_CACHE`
   where speech is cached. Both default to `~/.cache/narrate`, or
   `$XDG_CACHE_HOME/narrate`.
-- **The speech cache is never pruned on its own:**
-  - `narrate cache` shows its size per engine.
+- **The speech and render caches are never pruned on their own:**
+  - `narrate cache` shows their size per engine and renderer.
   - `narrate cache --prune --max-size 500M` removes the least recently used
     entries until it fits.
   - `narrate cache --prune --older-than 90` removes entries unused for 90 days.
@@ -368,7 +369,7 @@ models and the ElevenLabs key, and prints a fix for each problem.
 | `narrate voices [SCRIPT]` | list voices, and a script's `voices.yaml` pins |
 | `narrate models` | download the voice, speech-to-text and ffmpeg files now |
 | `narrate doctor` | check the setup |
-| `narrate cache [--prune …]` | show or prune the speech cache |
+| `narrate cache [--prune …]` | show or prune the speech and render caches |
 | `narakeet-api-client …` | Narakeet's command-line client, building locally |
 
 `build` and `audio` take `--tts`, `--tts-model`, `--jobs` and `-q`; `build` also

@@ -24,7 +24,7 @@ from typing import Any, Callable
 
 import numpy as np
 
-from . import media, motion, music, subtitles, voicemap
+from . import media, motion, music, render, subtitles, voicemap
 from .config import (
     BUILTIN_MUSIC, FPS, TRANSITIONS, ConfigError, Settings, SubtitleConfig, parse_pitch, parse_transition, parse_color, parse_number, parse_speed,
     parse_time, parse_volume, settings_from_header,
@@ -402,7 +402,28 @@ class Builder:
                       for a, b, text in stt.captions(phrases, self.settings.subtitles.break_chars)]
         return spans
 
+    def _render_blocks(self, frames: FrameRenderer) -> None:
+        """Render every render block, with its scene's theme and canvas, and point it at the output."""
+        s = self.settings
+        for scene in self.script.scenes:
+            theme, canvas = self._theme(s.theme, 0) if s.theme else "default", s.canvas
+            for block in scene.blocks:
+                try:
+                    if isinstance(block, Directive) and block.key == "theme":
+                        theme = self._theme(str(block.value), block.line)
+                    elif isinstance(block, Directive) and block.key == "canvas":
+                        canvas = parse_color(block.value, "canvas")
+                    elif isinstance(block, Media) and block.render and not block.path:
+                        block.kind = render.renderer(block.render.name).kind
+                        ctx = render.Context(s.width, s.height, theme, canvas, frames)
+                        block.path = str(render.output(block, ctx))
+                except (ConfigError, render.RenderError) as e:
+                    raise BuildError(str(e), getattr(e, "line", None) or block.line) from None
+
     def _visual(self, m: Media, workdir: Path) -> Visual:
+        if m.render and not m.path:
+            # Audio builds and the speech prefetch plan timing only; they don't render
+            return Visual("still", None, m.size or self.settings.asset_resize, m.position or "center")
         path = self._path(m.path, m.line)
         size = m.size or self.settings.asset_resize
         animation = None
@@ -535,6 +556,7 @@ class Builder:
         frame = 0
         # Scene k's segments encode in the pool while scene k+1 is narrated
         with ThreadPoolExecutor(self.jobs) as pool, FrameRenderer(s.width, s.height, work) as renderer:
+            self._render_blocks(renderer)
             for plan in self.plans(scenes, work):
                 self.log(f"scene {plan.index}/{len(scenes)}")
                 plans.append(plan)
