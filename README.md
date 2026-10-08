@@ -58,6 +58,7 @@ uv run playwright install chromium   # slides and frames are rendered by headles
 ```sh
 uv run narrate build script.md -o video.mp4   # or: just build script.md
 uv run narrate build project.zip              # a .zip of the script and its assets (--source picks the script)
+uv run narrate audio script.md -o out.mp3     # narration only: .mp3, .m4a, .ogg, .opus, .flac or .wav
 uv run narrate check script.md                # parse and check files, no rendering
 uv run narrate voices                         # voices per engine
 just demo                                     # examples/demo rendered with both engines into out/
@@ -76,6 +77,7 @@ point at narrate unchanged:
 - `--repository-type local-dir|local-zip|zip-url|github`, `--repository`,
   `--source`, and `--output` (default `result.mp4`).
 - `--github-token` and `--github-sha`.
+- `--project-type audio` (writes `result.mp3`).
 - `--api-key` is accepted and ignored.
 
 GitHub projects are fetched file by file under the script's folder rather than

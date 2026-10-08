@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import dataclasses
 import os
+from contextlib import contextmanager
 import shutil
 import sys
 from concurrent.futures import Future, ThreadPoolExecutor, wait
@@ -43,6 +44,15 @@ NARRATION_KEYS = {"voice", "voice-speed", "voice-volume", "voice-pitch", "voice-
                   "narration-language", "narration-mode", "pause", "pause-until"}
 DEFAULT_STILL_SECONDS = 1.0
 MAX_PAUSE_UNTIL = 600.0
+AUDIO_CODECS = {
+    ".mp3": ["-c:a", "libmp3lame", "-b:a", "192k", "-ar", "44100"],
+    ".m4a": ["-c:a", "aac", "-b:a", "192k", "-ar", "48000"],
+    ".aac": ["-c:a", "aac", "-b:a", "192k", "-ar", "48000"],
+    ".ogg": ["-c:a", "libopus", "-b:a", "128k", "-ar", "48000"],
+    ".opus": ["-c:a", "libopus", "-b:a", "128k", "-ar", "48000"],
+    ".flac": ["-c:a", "flac"],
+    ".wav": ["-c:a", "pcm_s16le"],
+}
 TARGETS = {  # x264 preset, crf, faststart
     "offline": ("medium", 16, False),
     "online": ("medium", 18, True),
@@ -104,8 +114,8 @@ class ScenePlan:
 
 @dataclass
 class BuildResult:
-    video: Path
-    poster: Path
+    video: Path  # the audio file, for an audio build
+    poster: Path | None
     subtitle_files: list[Path]
     duration: float
     notes: list[str]
@@ -430,19 +440,67 @@ class Builder:
                 shutil.rmtree(work, ignore_errors=True)
 
     def _build(self, out: Path, work: Path) -> BuildResult:
-        s = self.settings
-        scenes = self.script.scenes
-        if not scenes:
+        if not self.script.scenes:
             raise BuildError("the script has no scenes")
+        with self._speech(work):
+            return self._render_all(out, work)
+
+    @contextmanager
+    def _speech(self, work: Path):
+        """Synthesise speech ahead in the background when the engine can work concurrently."""
         backend = self.synth
         if getattr(backend, "concurrency", 1) > 1:
             self.synth = self._prefetch_speech(work)
         try:
-            return self._render_all(out, work)
+            yield
         finally:
             if isinstance(self.synth, Prefetching):
                 self.synth.close()
             self.synth = backend
+
+    def build_audio(self, out: Path, *, workdir: Path | None = None) -> BuildResult:
+        """Narration (with recorded audio, clip soundtracks and music) as an audio file, no video."""
+        codec = AUDIO_CODECS.get(out.suffix.lower())
+        if codec is None:
+            raise BuildError(f"unsupported audio format {out.suffix!r} (use {', '.join(sorted(AUDIO_CODECS))})")
+        if not self.script.scenes:
+            raise BuildError("the script has no scenes")
+        own_workdir = workdir is None
+        work = Path(tempfile.mkdtemp(prefix="narrate-")) if own_workdir else workdir
+        work.mkdir(parents=True, exist_ok=True)
+        try:
+            with self._speech(work):
+                parts: list[np.ndarray] = []
+                cues: list[Cue] = []
+                scene_samples: list[int] = []
+                for plan in self.plans(self.script.scenes, work):
+                    if plan.visuals or plan.slides or plan.spec.callouts:
+                        self.notes.add("images, videos, slides and callouts (ignored in audio output)")
+                    n = int(round(plan.duration * SR))
+                    offset = sum(scene_samples) / SR
+                    cues += [Cue(c.start + offset, c.end + offset, c.text) for c in plan.cues]
+                    parts.append(fit_length(plan.audio, n))
+                    scene_samples.append(n)
+            audio = np.concatenate(parts)
+            if self.settings.background:
+                audio = audio + self._music(len(audio), scene_samples)
+            peak = float(np.abs(audio).max()) if len(audio) else 0.0
+            if peak > 0.99:
+                audio = audio * (0.99 / peak)
+            wav = work / "audio.wav"
+            _write_wav(wav, audio)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            media.run(["-i", str(wav), *codec, str(out)])
+            files: list[Path] = []
+            if self.settings.subtitles.mode != "none" and cues:
+                srt, vtt = out.with_suffix(".srt"), out.with_suffix(".vtt")
+                srt.write_text(subtitles.to_srt(cues), encoding="utf-8")
+                vtt.write_text(subtitles.to_vtt(cues), encoding="utf-8")
+                files = [srt, vtt]
+            return BuildResult(out, None, files, len(audio) / SR, sorted(self.notes))
+        finally:
+            if own_workdir:
+                shutil.rmtree(work, ignore_errors=True)
 
     def _render_all(self, out: Path, work: Path) -> BuildResult:
         s = self.settings
