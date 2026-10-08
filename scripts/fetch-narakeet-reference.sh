@@ -2,9 +2,13 @@
 # Refresh the git-ignored Narakeet reference snapshot that
 # docs/spec/narakeet-markdown.md was written from:
 #   reference/narakeet-docs/  doc pages and news posts, converted to Markdown
-#   reference/examples/       scripts and CSS from github.com/narakeet/examples (no media)
+#   reference/examples/       scripts and CSS from github.com/narakeet/examples
+#                             (--media also fetches their media and Narakeet's rendered result.mp4, ~136 MB)
 # Neither source is licensed for redistribution, so the snapshot stays local.
 set -euo pipefail
+
+with_media=0
+[[ "${1:-}" == "--media" ]] && with_media=1
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 ref="$root/reference"
@@ -49,7 +53,13 @@ uv run -q --no-project --with markdownify --with beautifulsoup4 \
 rm -rf "$ref/examples"
 gh api 'repos/narakeet/examples/git/trees/master?recursive=1' \
   --jq '.tree[] | select(.type=="blob") | .path' |
-  grep -E '(script/[^/]+\.(md|txt|css)|/video\.md|/theme\.css)$' |
+  if ((with_media)); then
+    # Everything but repo furniture, including each project's result.mp4: the
+    # video Narakeet rendered from that script, a reference to compare against
+    grep -v -E '(^|/)(README\.md|\.gitignore|\.github/|credits/)'
+  else
+    grep -E '(script/[^/]+\.(md|txt|css)|/video\.md|/theme\.css)$' | grep -v '/credits/'
+  fi |
   while read -r p; do
     mkdir -p "$ref/examples/$(dirname "$p")"
     curl -sSf -o "$ref/examples/$p" "https://raw.githubusercontent.com/narakeet/examples/master/$p"

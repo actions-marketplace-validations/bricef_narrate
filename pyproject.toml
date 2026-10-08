@@ -1,0 +1,30 @@
+[project]
+name = "narrate"
+version = "0.1.0"
+description = "Local Markdown-to-video tool compatible with Narakeet's script format"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "imageio-ffmpeg>=0.5",
+    "kokoro-onnx>=0.4",
+    "markdown-it-py>=4.2.0",
+    "numpy>=1.26",
+    "pillow>=10",
+    "playwright>=1.63.0",
+    "pygments>=2.21.0",
+    "pyyaml>=6",
+]
+
+[project.scripts]
+narrate = "narrate.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["kokoro: needs the Kokoro model files (slow; deselect with -m 'not kokoro')"]

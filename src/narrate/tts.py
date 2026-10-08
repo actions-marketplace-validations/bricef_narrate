@@ -1,0 +1,364 @@
+"""Speech synthesis backends, voice resolution and the synthesis cache.
+
+Voice names in scripts can come from three catalogues: Kokoro ids
+(`bf_emma`), ElevenLabs default voices (`George`) and Narakeet voices
+(`Brian`). Each known name has a profile (language/accent and gender). A
+backend uses a name directly when it is one of its own voices, and otherwise
+picks its voice for the name's profile, so a script written for one engine (or
+for Narakeet) still renders sensibly on another.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+import sys
+import time
+import urllib.error
+import urllib.request
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Protocol
+
+import numpy as np
+
+SAMPLE_RATE = 24000
+
+
+@dataclass(frozen=True)
+class Profile:
+    lang: str  # lowercase, e.g. "en-us", "en-gb", "de"
+    gender: str  # "f" | "m"
+
+
+@dataclass(frozen=True)
+class Voice:
+    id: str
+    lang: str | None  # in the backend's own convention; None lets the engine decide
+
+
+# Narakeet voice names (as used in its docs and examples) by language and gender
+NARAKEET_PROFILES: dict[str, tuple[str, str]] = {
+    **dict.fromkeys(
+        "joanna jennifer kimberly salli kendra ivy ruth danielle jackie julia linda betty mimi "
+        "missy holly debbie cindy mandy kerry harmony sandy maria clara diana catherine hannah "
+        "veronica jenna donna paige martha naomi whitney maya alicia anita jodie lonnie kimmy "
+        "cherry candace ellen katie melinda penny".split(), ("en-us", "f")),
+    **dict.fromkeys(
+        "matt joey justin kevin matthew stephen gregory mike rodney ronald john peter nick michael "
+        "max raymond gary jonah brandon spike duncan wesley zach samuel sebastian benjamin andrew "
+        "blake grant derek stanley darren warren darius clayton franklin jared brady patrick dalton "
+        "jimmy burton wally randy fred barney".split(), ("en-us", "m")),
+    **dict.fromkeys("amy emma victoria daisy beatrice amelia".split(), ("en-gb", "f")),
+    **dict.fromkeys("brian benedict edward anton william alfred arthur".split(), ("en-gb", "m")),
+    **dict.fromkeys("monika vicki marlene gertrud".split(), ("de", "f")),
+    **dict.fromkeys("helmut hans florian dietrich".split(), ("de", "m")),
+    **dict.fromkeys("carmen lucia conchita lupe mia blanca elvira paquita ramona".split(), ("es", "f")),
+    **dict.fromkeys("enrique sergio andres ricardo javier".split(), ("es", "m")),
+    **dict.fromkeys("celine lea lucienne audrey".split(), ("fr", "f")),
+    **dict.fromkeys("alain mathieu jacques victor antoine".split(), ("fr", "m")),
+    **dict.fromkeys("alessandra carla gina".split(), ("it", "f")),
+    **dict.fromkeys("giorgio giovanni pietro giulio".split(), ("it", "m")),
+    **dict.fromkeys("camila vitoria leandra".split(), ("pt-br", "f")),
+    **dict.fromkeys("murilo".split(), ("pt-br", "m")),
+    **dict.fromkeys("mizuki tomoka".split(), ("ja", "f")),
+    **dict.fromkeys("takumi toshiro".split(), ("ja", "m")),
+    **dict.fromkeys("aditi kajal".split(), ("hi", "f")),
+    **dict.fromkeys("zhiyu mei".split(), ("zh", "f")),
+}
+
+# -- Kokoro ---------------------------------------------------------------------
+
+KOKORO_VOICES = (
+    "af_alloy af_aoede af_bella af_heart af_jessica af_kore af_nicole af_nova af_river af_sarah "
+    "af_sky am_adam am_echo am_eric am_fenrir am_liam am_michael am_onyx am_puck am_santa "
+    "bf_alice bf_emma bf_isabella bf_lily bm_daniel bm_fable bm_george bm_lewis ef_dora em_alex "
+    "em_santa ff_siwis hf_alpha hf_beta hm_omega hm_psi if_sara im_nicola jf_alpha jf_gongitsune "
+    "jf_nezumi jf_tebukuro jm_kumo pf_dora pm_alex pm_santa zf_xiaobei zf_xiaoni zf_xiaoxiao "
+    "zf_xiaoyi zm_yunjian zm_yunxi zm_yunxia zm_yunyang"
+).split()
+# Kokoro id prefix letter -> profile language, and the espeak code that phonemizes it
+KOKORO_PREFIX_LANG = {"a": "en-us", "b": "en-gb", "e": "es", "f": "fr", "h": "hi",
+                      "i": "it", "j": "ja", "p": "pt-br", "z": "zh"}
+KOKORO_LANG_PREFIX = {lang: prefix for prefix, lang in KOKORO_PREFIX_LANG.items()}
+ESPEAK = {"en": "en-us", "en-us": "en-us", "en-gb": "en-gb", "fr": "fr-fr", "pt": "pt-br",
+          "pt-br": "pt-br", "zh": "cmn", "zh-cn": "cmn", "cmn": "cmn"}
+KOKORO_DEFAULT = "af_heart"
+KOKORO_BY_PROFILE = {
+    ("en-us", "f"): "af_heart", ("en-us", "m"): "am_michael", ("en-gb", "f"): "bf_emma",
+    ("en-gb", "m"): "bm_george", ("es", "f"): "ef_dora", ("es", "m"): "em_alex",
+    ("fr", "f"): "ff_siwis", ("fr", "m"): "ff_siwis", ("it", "f"): "if_sara",
+    ("it", "m"): "im_nicola", ("pt-br", "f"): "pf_dora", ("pt-br", "m"): "pm_alex",
+    ("hi", "f"): "hf_alpha", ("hi", "m"): "hm_omega", ("ja", "f"): "jf_alpha",
+    ("ja", "m"): "jm_kumo", ("zh", "f"): "zf_xiaoxiao", ("zh", "m"): "zm_yunxi",
+}
+
+# -- ElevenLabs -----------------------------------------------------------------
+
+# Default voices usable on every plan (library voices need a paid plan)
+ELEVENLABS_VOICES: dict[str, tuple[str, tuple[str, str]]] = {
+    "sarah": ("EXAVITQu4vr4xnSDxMaL", ("en-us", "f")),
+    "laura": ("FGY2WhTYpPnrIDTdsKH5", ("en-us", "f")),
+    "jessica": ("cgSgspJ2msm6clMCkdW9", ("en-us", "f")),
+    "matilda": ("XrExE9yKIg1WjnnlVkGX", ("en-us", "f")),
+    "river": ("SAz9YHcvj6GT2YYXdXww", ("en-us", "f")),
+    "alice": ("Xb7hH8MSUJpSbSDYk0k2", ("en-gb", "f")),
+    "lily": ("pFZP5JQG7iQjIQuC4Bku", ("en-gb", "f")),
+    "brian": ("nPczCjzI2devNBz1zQrb", ("en-us", "m")),
+    "eric": ("cjVigY5qzO86Huf0OWal", ("en-us", "m")),
+    "chris": ("iP95p4xoKVk53GoZ742B", ("en-us", "m")),
+    "will": ("bIHbv24MWmeRgasZH58o", ("en-us", "m")),
+    "liam": ("TX3LPaxmHKxFdv7VOQHJ", ("en-us", "m")),
+    "roger": ("CwhRBWXzGAHq8TQ4Fs17", ("en-us", "m")),
+    "adam": ("pNInz6obpgDQGcFmaJgB", ("en-us", "m")),
+    "george": ("JBFqnCBsd6RMkjVDRZzb", ("en-gb", "m")),
+    "daniel": ("onwK4e9ZLuTAKqWW03F9", ("en-gb", "m")),
+    "callum": ("N2lVS1w4EtoT3dr4eOWO", ("en-gb", "m")),
+    "charlie": ("IKne3meq5aSn9XLyUdCD", ("en-au", "m")),
+}
+ELEVENLABS_DEFAULT = "george"
+# ElevenLabs voices are multilingual: an accent match matters for English only
+ELEVENLABS_BY_PROFILE = {
+    ("en-us", "f"): "sarah", ("en-us", "m"): "eric", ("en-gb", "f"): "alice",
+    ("en-gb", "m"): "george", ("en-au", "m"): "charlie",
+}
+ELEVENLABS_BY_GENDER = {"f": "sarah", "m": "george"}
+ELEVENLABS_MODEL = "eleven_multilingual_v2"
+# Models that accept an explicit language_code; the others detect the language
+ELEVENLABS_LANGUAGE_MODELS = {"eleven_turbo_v2_5", "eleven_flash_v2_5"}
+ELEVENLABS_SPEED = (0.7, 1.2)
+_ELEVENLABS_ID_RE = re.compile(r"^[A-Za-z0-9]{20}$")
+
+
+def profile_of(name: str) -> Profile | None:
+    key = name.strip().lower()
+    if key in KOKORO_VOICES:
+        return Profile(KOKORO_PREFIX_LANG[key[0]], key[1])
+    if key in ELEVENLABS_VOICES:
+        return Profile(*ELEVENLABS_VOICES[key][1])
+    if key in NARAKEET_PROFILES:
+        return Profile(*NARAKEET_PROFILES[key])
+    return None
+
+
+def split_voice(name: str | None) -> tuple[str | None, str | None]:
+    """`xenobot/de-DE` -> ("xenobot", "de-de")."""
+    if not name:
+        return None, None
+    base, _, lang = name.strip().partition("/")
+    return base.strip() or None, lang.strip().lower() or None
+
+
+def cache_dir() -> Path:
+    root = os.environ.get("NARRATE_CACHE") or os.path.join(
+        os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "narrate"
+    )
+    return Path(root)
+
+
+class SynthCache:
+    def __init__(self, backend: str):
+        self.dir = cache_dir() / "tts" / backend
+        self.dir.mkdir(parents=True, exist_ok=True)
+
+    def path(self, *key: object) -> Path:
+        return self.dir / (hashlib.sha256(json.dumps(key).encode()).hexdigest() + ".npy")
+
+
+class Synth(Protocol):
+    name: str
+
+    def resolve(self, name: str | None, lang: str | None, notes: set[str]) -> Voice:
+        """Pick this backend's voice for a script voice name and optional language override."""
+
+    def synth(self, text: str, voice: Voice, speed: float, notes: set[str]) -> np.ndarray:
+        """Mono float32 samples at SAMPLE_RATE."""
+
+
+# -- Kokoro backend -------------------------------------------------------------
+
+MODEL_URL = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/"
+MODEL_FILES = ("kokoro-v1.0.onnx", "voices-v1.0.bin")
+
+
+def model_dir() -> Path:
+    return cache_dir() / "models" / "kokoro-v1.0"
+
+
+def ensure_models(log=lambda msg: print(msg, file=sys.stderr)) -> Path:
+    target = model_dir()
+    target.mkdir(parents=True, exist_ok=True)
+    for name in MODEL_FILES:
+        path = target / name
+        if path.exists():
+            continue
+        log(f"downloading {name} …")
+        part = path.with_suffix(path.suffix + ".part")
+        with urllib.request.urlopen(MODEL_URL + name) as resp, open(part, "wb") as out:
+            while chunk := resp.read(1 << 20):
+                out.write(chunk)
+        part.rename(path)
+    return target
+
+
+def kokoro_resolve(name: str | None, lang: str | None, notes: set[str]) -> Voice:
+    base, suffix_lang = split_voice(name)
+    lang = lang or suffix_lang
+    voice_id = KOKORO_DEFAULT
+    if base:
+        key = base.lower()
+        profile = profile_of(key)
+        same_name = f"{KOKORO_LANG_PREFIX.get(profile.lang, '?')}{profile.gender}_{key}" if profile else ""
+        if key in KOKORO_VOICES:
+            voice_id = key
+        elif same_name in KOKORO_VOICES:
+            voice_id = same_name  # e.g. ElevenLabs "Sarah" -> af_sarah
+            notes.add(f"voice {base!r} matched to Kokoro voice {voice_id}")
+        elif profile and (match := KOKORO_BY_PROFILE.get((profile.lang, profile.gender))):
+            voice_id = match
+            notes.add(f"voice {base!r} approximated by Kokoro voice {voice_id}")
+        else:
+            notes.add(f"voice {base!r} has no Kokoro equivalent; using {KOKORO_DEFAULT}")
+            # Keep the voice's language so the text is still phonemized correctly
+            lang = lang or (profile.lang if profile else None)
+    return Voice(voice_id, espeak_code(lang or KOKORO_PREFIX_LANG[voice_id[0]]))
+
+
+def espeak_code(lang: str) -> str:
+    """An espeak language for Kokoro's phonemizer: keep regions espeak knows, else drop them."""
+    lang = lang.lower()
+    return ESPEAK.get(lang) or ESPEAK.get(lang.split("-")[0]) or lang.split("-")[0]
+
+
+class SilentSynth:
+    """Timing-only backend: silence as long as the speech would roughly be."""
+
+    name = "silent"
+    seconds_per_char = 0.065
+
+    def resolve(self, name: str | None, lang: str | None, notes: set[str]) -> Voice:
+        return kokoro_resolve(name, lang, set())
+
+    def synth(self, text: str, voice: Voice, speed: float, notes: set[str]) -> np.ndarray:
+        seconds = max(0.3, len(text) * self.seconds_per_char / speed)
+        return np.zeros(int(seconds * SAMPLE_RATE), dtype=np.float32)
+
+
+class KokoroSynth:
+    name = "kokoro"
+
+    def __init__(self) -> None:
+        from kokoro_onnx import Kokoro
+
+        models = ensure_models()
+        self._kokoro = Kokoro(str(models / MODEL_FILES[0]), str(models / MODEL_FILES[1]))
+        self._cache = SynthCache(self.name)
+
+    def resolve(self, name: str | None, lang: str | None, notes: set[str]) -> Voice:
+        return kokoro_resolve(name, lang, notes)
+
+    def synth(self, text: str, voice: Voice, speed: float, notes: set[str]) -> np.ndarray:
+        clamped = min(2.0, max(0.5, speed))
+        if clamped != speed:
+            notes.add(f"voice-speed {speed} (Kokoro accepts 0.5–2; clamped)")
+        cached = self._cache.path(MODEL_FILES[0], text, voice.id, voice.lang, round(clamped, 3))
+        if cached.exists():
+            return np.load(cached)
+        audio, sr = self._kokoro.create(text, voice=voice.id, speed=clamped, lang=voice.lang)
+        assert sr == SAMPLE_RATE
+        audio = np.asarray(audio, dtype=np.float32)
+        np.save(cached, audio)
+        return audio
+
+
+# -- ElevenLabs backend ---------------------------------------------------------
+
+
+class ElevenLabsSynth:
+    name = "elevenlabs"
+    url = "https://api.elevenlabs.io/v1/text-to-speech/{voice}?output_format=pcm_24000"
+
+    def __init__(self, model: str | None = None) -> None:
+        self.key = os.environ.get("ELEVENLABS_API_KEY")
+        if not self.key:
+            raise RuntimeError("ELEVENLABS_API_KEY is not set (put it in .env or the environment)")
+        self.model = model or os.environ.get("NARRATE_ELEVENLABS_MODEL") or ELEVENLABS_MODEL
+        self._cache = SynthCache(self.name)
+
+    def resolve(self, name: str | None, lang: str | None, notes: set[str]) -> Voice:
+        base, suffix_lang = split_voice(name)
+        lang = lang or suffix_lang
+        voice_name = ELEVENLABS_DEFAULT
+        voice_id = None
+        if base:
+            key = base.lower()
+            profile = profile_of(key)
+            if _ELEVENLABS_ID_RE.match(base):
+                voice_id = base  # a raw voice id from the user's own library
+            elif key in ELEVENLABS_VOICES:
+                voice_name = key
+            elif profile:
+                voice_name = (ELEVENLABS_BY_PROFILE.get((profile.lang, profile.gender))
+                              or ELEVENLABS_BY_GENDER[profile.gender])
+                notes.add(f"voice {base!r} approximated by ElevenLabs voice {voice_name.title()}")
+                lang = lang or (profile.lang if not profile.lang.startswith("en") else None)
+            else:
+                notes.add(f"voice {base!r} is unknown; using ElevenLabs voice {voice_name.title()}")
+        code = lang.split("-")[0] if lang else None
+        return Voice(voice_id or ELEVENLABS_VOICES[voice_name][0], code)
+
+    def synth(self, text: str, voice: Voice, speed: float, notes: set[str]) -> np.ndarray:
+        lo, hi = ELEVENLABS_SPEED
+        clamped = min(hi, max(lo, speed))
+        if clamped != speed:
+            notes.add(f"voice-speed {speed} (ElevenLabs accepts {lo}–{hi}; clamped)")
+        cached = self._cache.path(self.model, text, voice.id, voice.lang, round(clamped, 3))
+        if cached.exists():
+            return np.load(cached)
+        body: dict = {"text": text, "model_id": self.model}
+        if clamped != 1.0:
+            body["voice_settings"] = {"speed": clamped}
+        if voice.lang:
+            if self.model in ELEVENLABS_LANGUAGE_MODELS:
+                body["language_code"] = voice.lang
+            else:
+                notes.add(f"language hints with {self.model} (the model detects the language itself)")
+        pcm = self._post(voice.id, body)
+        audio = np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32768.0
+        np.save(cached, audio)
+        return audio
+
+    def _post(self, voice_id: str, body: dict) -> bytes:
+        request = urllib.request.Request(
+            self.url.format(voice=voice_id), data=json.dumps(body).encode(), method="POST",
+            headers={"xi-api-key": self.key, "Content-Type": "application/json"},
+        )
+        for attempt in range(5):
+            try:
+                with urllib.request.urlopen(request, timeout=120) as resp:
+                    return resp.read()
+            except urllib.error.HTTPError as e:
+                detail = e.read().decode(errors="replace")
+                if e.code in (429, 500, 502, 503, 504) and attempt < 4:
+                    time.sleep(2 ** attempt)
+                    continue
+                try:
+                    detail = json.loads(detail)["detail"]["message"]
+                except (ValueError, KeyError, TypeError):
+                    pass
+                raise RuntimeError(f"ElevenLabs request failed ({e.code}): {detail}") from None
+        raise RuntimeError("ElevenLabs request failed after retries")
+
+
+def make_synth(name: str, model: str | None = None) -> Synth:
+    if name == "auto":
+        name = "elevenlabs" if os.environ.get("ELEVENLABS_API_KEY") else "kokoro"
+    if name == "kokoro":
+        return KokoroSynth()
+    if name == "elevenlabs":
+        return ElevenLabsSynth(model)
+    if name == "silent":
+        return SilentSynth()
+    raise ValueError(f"unknown TTS backend {name!r}")

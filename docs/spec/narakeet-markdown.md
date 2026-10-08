@@ -903,9 +903,10 @@ examples disagree. The proposals favour what the official examples imply.
    like images.
 8. **Duration-only `transition: N`.** Use the header's transition type if one
    is set, otherwise `crossfade`, for N seconds.
-9. **Transition timing.** Overlap the scenes (the `xfade` model). Total length
-   = sum of scenes − sum of transitions. Clamp each transition to half the
-   shorter neighbouring scene.
+9. **Transition timing.** *Answered by Narakeet's own render (§17): total
+   length = sum of scenes.* A transition plays inside the scene boundary
+   without shortening the video. Clamp each transition to half the shorter
+   neighbouring scene.
 10. **Poster default.** 50% of the duration (explicitly stated, and the later
     of the two statements).
 11. **`voice-pitch` numbers.** Read −150…150 as percent of the base pitch, as
@@ -935,3 +936,21 @@ examples disagree. The proposals favour what the official examples imply.
 24. **SSML.** Accept the subset the local engine supports. Strip unknown tags
     with a warning.
 25. **Callout mask colour.** Opaque black. `alpha` doesn't apply to masks.
+
+---
+
+## 17. Observations from Narakeet's renders
+
+Every project in `github.com/narakeet/examples` includes `result.mp4`, the video
+Narakeet rendered from that script. Measured with ffprobe and ffmpeg
+scene-change detection (2026-10-08):
+
+| Example | Narakeet | What it shows |
+| --- | --- | --- |
+| `slides` | 14.04 s | Text slide without audio = 1 s; `duration: 2` = 2 s exactly; a video with no narration plays in full (5 s). This matches §4.2. |
+| `transition-types` | 25.08 s | 25 scenes of `duration: 1` with 24 transitions of 0.5 s. Transitions do **not** shorten the video (gap 9). |
+| `image-sizing` | 12.60 s | Scene cuts every 2.52 s for `(pause: 2)`. Narakeet pads a pause by about 0.5 s, most likely silence added by its speech engine around a break. |
+| `video-segments` | 11.71 s | Cuts at 5.0 s (the full 5 s clip under short narration, `freeze`) and 7.005 s (a still frame with `duration: 2`). About 0.7 s more than the rules predict lands in the last two scenes; unexplained. |
+
+The pause padding is an implementation artefact, not a format rule. narrate
+keeps pauses exact.

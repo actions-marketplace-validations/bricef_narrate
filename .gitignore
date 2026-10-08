@@ -2,3 +2,16 @@
 # Regenerate with scripts/fetch-narakeet-reference.sh.
 /reference/narakeet-docs/
 /reference/examples/
+
+# Local secrets (ELEVENLABS_API_KEY)
+.env
+
+# Build output
+/out/
+*.mp4
+!/examples/**/*.mp4
+
+# Python
+__pycache__/
+.venv/
+.pytest_cache/
