@@ -24,6 +24,7 @@ from .config import (
     BUILTIN_MUSIC, FPS, ConfigError, Settings, SubtitleConfig, parse_color, parse_number, parse_speed,
     parse_time, parse_volume, settings_from_header,
 )
+from .doctor import find_font
 from .frames import FrameRenderer, FrameSpec, SlideSpec
 from .script import ANIMATED_SIZES, POSITIONS, SIZES, Directive, Media, Narration, Quote, Script, Slide
 from .subtitles import Cue
@@ -487,9 +488,9 @@ class Builder:
         fonts = work / "fonts"
         fonts.mkdir(exist_ok=True)
         font_name = "DejaVu Sans"
-        for candidate in _SYSTEM_FONTS:
-            if candidate.is_file():
-                shutil.copy(candidate, fonts / candidate.name)
+        for name in ("DejaVuSans.ttf", "DejaVuSans-Bold.ttf"):
+            if (found := find_font(name)) is not None:
+                shutil.copy(found, fonts / name)
         if cfg.font:
             font_path = self._path(cfg.font, 0)
             shutil.copy(font_path, fonts / font_path.name)
@@ -501,8 +502,6 @@ class Builder:
 
 _SEGMENT_CODEC = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "12", "-pix_fmt", "yuv420p",
                   "-r", str(FPS), "-video_track_timescale", "15360"]
-_SYSTEM_FONTS = [Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
-                 Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")]
 
 
 def _choice(value: Any, allowed: set[str], what: str) -> str:

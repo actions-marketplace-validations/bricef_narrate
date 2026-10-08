@@ -1,7 +1,7 @@
 # Local snapshot of Narakeet's docs and examples; not licensed for redistribution.
 # Regenerate with scripts/fetch-narakeet-reference.sh.
-/reference/narakeet-docs/
-/reference/examples/
+/reference/narakeet-docs
+/reference/examples
 
 # Local secrets (ELEVENLABS_API_KEY)
 .env

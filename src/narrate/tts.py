@@ -194,7 +194,7 @@ def ensure_models(log=lambda msg: print(msg, file=sys.stderr)) -> Path:
         path = target / name
         if path.exists():
             continue
-        log(f"downloading {name} …")
+        log(f"downloading Kokoro model file {name} (first use only) …")
         part = path.with_suffix(path.suffix + ".part")
         with urllib.request.urlopen(MODEL_URL + name) as resp, open(part, "wb") as out:
             while chunk := resp.read(1 << 20):
