@@ -852,7 +852,9 @@ def transition_graph(frames: list[int], transitions: list[tuple[str, float] | No
             pads.append(f"tpad=start_mode=clone:start_duration={before(k) / FPS:.6f}")
         if after(k):
             pads.append(f"tpad=stop_mode=clone:stop_duration={after(k) / FPS:.6f}")
-        parts.append(f"[{k}:v]" + ",".join([f"settb=AVTB,fps={FPS}", *pads]) + f"[p{k}]")
+        # One timebase for every input (set after fps, which changes it), so xfade
+        # and concat outputs always match the next scene's input (#38)
+        parts.append(f"[{k}:v]" + ",".join([f"fps={FPS}", *pads, "settb=AVTB"]) + f"[p{k}]")
     current, length = "p0", frames[0] + after(0)
     for k in range(1, n):
         padded = frames[k] + before(k) + after(k)
