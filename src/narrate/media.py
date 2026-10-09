@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import platform
 import re
@@ -234,6 +235,34 @@ def loudness(samples: np.ndarray, sample_rate: int) -> float | None:
     if proc.returncode != 0 or not m or m.group(1) == "-inf" or float(m.group(1)) <= -70:
         return None
     return float(m.group(1))
+
+
+def normalise_loudness(samples: np.ndarray, sample_rate: int, target: float, true_peak: float = -1.5) -> np.ndarray:
+    """Mono float32 audio brought to `target` LUFS integrated, peaks under `true_peak` dBTP.
+
+    ffmpeg's loudnorm in two passes: measure, then apply the measured values
+    in linear mode (one gain for the whole mix where the peak ceiling allows).
+    loudnorm works at 192 kHz internally, so the result is resampled back to
+    `sample_rate`. Audio too short or quiet to measure comes back unchanged."""
+    raw = np.asarray(samples, dtype="<f4").tobytes()
+    head = [ffmpeg(), "-hide_banner", "-nostats", "-f", "f32le", "-ar", str(sample_rate), "-ac", "1", "-i", "-"]
+    first = subprocess.run([*head, "-af", f"loudnorm=I={target}:TP={true_peak}:LRA=11:print_format=json",
+                            "-f", "null", "-"], input=raw, capture_output=True)
+    found = re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", first.stderr.decode(errors="replace"), re.S)
+    if first.returncode != 0 or not found:
+        return samples
+    measured = json.loads(found.group(0))
+    if not all(re.fullmatch(r"-?\d+(\.\d+)?", str(measured[k]).strip())
+               for k in ("input_i", "input_tp", "input_lra", "input_thresh", "target_offset")):
+        return samples  # silence measures as -inf
+    lra = min(50.0, max(11.0, float(measured["input_lra"])))  # a target below the input's range forces dynamic mode
+    second = (f"loudnorm=I={target}:TP={true_peak}:LRA={lra}:measured_I={measured['input_i']}"
+              f":measured_TP={measured['input_tp']}:measured_LRA={measured['input_lra']}"
+              f":measured_thresh={measured['input_thresh']}:offset={measured['target_offset']}:linear=true,"
+              f"aresample={sample_rate}")
+    out = run(["-f", "f32le", "-ar", str(sample_rate), "-ac", "1", "-i", "-", "-af", second,
+               "-ar", str(sample_rate), "-f", "f32le", "-"], input=raw)
+    return np.frombuffer(out, dtype=np.float32).copy()
 
 
 def time_stretch(samples: np.ndarray, sample_rate: int, tempo: float) -> np.ndarray:

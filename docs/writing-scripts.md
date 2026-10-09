@@ -26,6 +26,7 @@ speech. [Building videos](building.md) covers the commands.
 - [Style slides with a theme](#style-slides-with-a-theme)
 - [Add subtitles](#add-subtitles)
 - [Add background music](#add-background-music)
+- [Set the overall loudness](#set-the-overall-loudness)
 - [Add transitions](#add-transitions)
 - [Highlight part of the frame](#highlight-part-of-the-frame)
 - [Set the size, poster and file size](#set-the-size-poster-and-file-size)
@@ -660,6 +661,30 @@ Music plays under the whole video, at half volume, fading in and out.
 - **Your own recordings under those names:** name each file after its track
   (`ukulele-1.mp3`; WAV, MP3, M4A, AAC, OGG or FLAC), put them in one folder,
   and point `$NARRATE_MUSIC_DIR` at it.
+
+## Set the overall loudness
+
+````markdown
+---
+loudness: web
+---
+
+![](photo.jpg)
+
+Every video from this script comes out equally loud, whichever voice reads it.
+````
+
+- **`loudness`** (narrate only) brings the finished mix to an integrated
+  loudness:
+  - `web` (−16 LUFS), the usual level for streaming sites and podcasts;
+  - `broadcast` (−23 LUFS, EBU R 128);
+  - or a number in LUFS, such as `-14`.
+- The narration, recordings, clip sound and music are measured together and
+  adjusted as one, with peaks kept below −1.5 dB.
+- Without it, the mix keeps each voice's own level, which varies by engine and
+  voice.
+- `voice-volume: normalized` is different: it evens out the voices within a
+  video, not the level of the whole.
 
 ## Add transitions
 
