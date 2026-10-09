@@ -567,6 +567,8 @@ class Builder:
             audio = np.concatenate(parts)
             if self.settings.background:
                 audio = audio + self._music(len(audio), scene_samples)
+            if self.settings.loudness is not None:
+                audio = media.normalise_loudness(audio, SR, self.settings.loudness)
             peak = float(np.abs(audio).max()) if len(audio) else 0.0
             if peak > 0.99:
                 audio = audio * (0.99 / peak)
@@ -621,6 +623,8 @@ class Builder:
         audio = np.concatenate(audio_parts)
         if s.background:
             audio = audio + self._music(len(audio), scene_samples)
+        if s.loudness is not None:
+            audio = media.normalise_loudness(audio, SR, s.loudness)
         peak = float(np.abs(audio).max()) if len(audio) else 0.0
         if peak > 0.99:
             audio = audio * (0.99 / peak)

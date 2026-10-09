@@ -1105,3 +1105,15 @@ animated page (narrate #44).
   fades from black at the start and to black at the end, after burned-in
   subtitles. The mixed sound fades linearly over the same time, in audio
   builds as well. The length is unchanged.
+
+### 18.4 Loudness (narrate #48)
+
+Header `loudness`: an integrated loudness in LUFS (−70 to −5), or `web` (−16)
+or `broadcast` (−23).
+- **Measured:** the finished mix (narration, recordings, clip sound and
+  music), in two passes of ffmpeg's `loudnorm`.
+- **Applied** in linear mode where the true-peak ceiling of −1.5 dBTP allows,
+  otherwise dynamically.
+- **Applied before** the header fades, in video and audio builds.
+- **Silence**, and audio too short to measure, are left unchanged.
+- **Absent:** the mix is only peak-limited, as before.

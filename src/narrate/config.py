@@ -193,6 +193,7 @@ class Settings:
     target: str = "offline"
     fade_in: float = 0.0  # seconds from black at the start (narrate extension)
     fade_out: float = 0.0  # seconds to black at the end
+    loudness: float | None = None  # integrated LUFS for the finished mix (narrate extension)
 
 
 def parse_subtitles(value: Any) -> SubtitleConfig:
@@ -269,6 +270,7 @@ def settings_from_header(header: dict[str, Any], warnings: list[str]) -> Setting
         "target": lambda v: setattr(s, "target", _choice(v, TARGETS, "target")),
         "fade-in": lambda v: setattr(s, "fade_in", _seconds(v, "fade-in")),
         "fade-out": lambda v: setattr(s, "fade_out", _seconds(v, "fade-out")),
+        "loudness": lambda v: setattr(s, "loudness", parse_loudness(v)),
     }
     for key, value in header.items():
         handler = handlers.get(key)
@@ -280,6 +282,20 @@ def settings_from_header(header: dict[str, Any], warnings: list[str]) -> Setting
         except ConfigError as e:
             raise ConfigError(f"header {key}: {e}") from None
     return s
+
+
+LOUDNESS_PRESETS = {"web": -16.0, "broadcast": -23.0}  # streaming norm; EBU R 128
+
+
+def parse_loudness(value: Any) -> float:
+    """`-16`, `web` or `broadcast`: the integrated loudness to bring the finished mix to, in LUFS."""
+    text = str(value).strip().lower()
+    if text in LOUDNESS_PRESETS:
+        return LOUDNESS_PRESETS[text]
+    lufs = parse_number(text.removesuffix("lufs").strip(), "loudness")
+    if not -70 <= lufs <= -5:
+        raise ConfigError(f"loudness {lufs} is outside -70 to -5 LUFS")
+    return lufs
 
 
 def _seconds(value: Any, what: str) -> float:
