@@ -704,6 +704,35 @@ transition: crossfade 0.5
   - **Slice:** `slice-right`, `slice-left`, `slice-up`, `slice-down`.
   - **Pixel:** `dissolve`, `pixelize`.
   - **Shape:** `radial`, `circle`, `rect`, `reveal`.
+  - **Dip** (narrate only): `fade-black` and `fade-white`. The outgoing
+    picture fades to the colour over the first half, and the next scene fades
+    in over the second. A 0.6 s dip is 0.3 s out and 0.3 s in.
+
+### Fade in and out of the whole video
+
+````markdown
+---
+transition: fade-black 0.6
+fade-in: 0.5
+fade-out: 1
+---
+
+![](photo.jpg)
+
+(duration: 2)
+
+---
+
+![](forest.jpg)
+
+(duration: 2)
+````
+
+- **`fade-in: N` and `fade-out: N`** (narrate only) fade the video from black
+  at the start, and to black at the end, over N seconds.
+- **Sound:** the narration and music fade with the picture, in audio builds
+  too.
+- The video's length doesn't change.
 
 ## Highlight part of the frame
 
