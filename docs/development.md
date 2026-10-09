@@ -193,8 +193,8 @@ Some choices worth knowing when changing behaviour:
   - `doctor.py`: the `doctor` command.
 - `tests/`: pytest. The `test_conformance.py` and `test_docs.py` suites are
   described above.
-- `docs/`: these guides, and `spec/narakeet-markdown.md`, the format
-  specification.
+- `docs/`: these guides, `spec/narakeet-markdown.md` (the format
+  specification) and `design/` (design records, such as the studio's).
 - `examples/demo/`: the demo script. `make_assets.py` generates its pictures
   and clip.
 - `scripts/`: the reference download (`fetch-narakeet-reference.sh`) and its
