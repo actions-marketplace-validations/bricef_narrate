@@ -210,3 +210,34 @@ def test_a_paragraph_plays_from_its_button(tmp_path, page):
         server.end_streams()
         server.should_exit = True
         thread.join(5)
+
+
+# -- builds (#55) ----------------------------------------------------------------------
+
+def test_build_and_watch(tmp_path, page, monkeypatch):
+    from narrate.studio.server import create_app as make
+
+    monkeypatch.setenv("NARRATE_CACHE", str(tmp_path / "cache"))
+    script = tmp_path / "s.md"
+    script.write_text("---\nsize: 320x180\n---\n\nBuilt from the studio.\n")
+    server = studio_server(make(script, "silent"), "127.0.0.1", 0)
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    while not server.started:
+        time.sleep(0.05)
+    try:
+        page.goto(f"http://127.0.0.1:{server.servers[0].sockets[0].getsockname()[1]}/")
+        expect(page.locator(".cm-content")).to_contain_text("Built from the studio.")
+        page.get_by_text("Built from the studio.").first.click()
+        page.keyboard.press("End")
+        page.keyboard.type(" Edited first.")
+        page.get_by_role("button", name="Build video").click()
+        video = page.get_by_test_id("video")
+        expect(video).to_be_visible(timeout=60000)  # the Video tab opens when it's done
+        assert "Edited first." in script.read_text()  # the build saved the script first
+        assert script.with_suffix(".mp4").exists()
+        expect(page.get_by_test_id("build")).to_contain_text("Built")
+    finally:
+        server.end_streams()
+        server.should_exit = True
+        thread.join(5)

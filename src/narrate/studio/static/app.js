@@ -87,8 +87,33 @@ function momentAt(analysis, line) {
   return { scene: scene.index, time, start: scene.start };
 }
 
+/** Build progress, and Cancel while it runs (#55). */
+function BuildStatus({ build, onCancel }) {
+  if (!build || build.state === "idle") return null;
+  const text = {
+    starting: "Starting the build…",
+    running: build.of ? `Building: scene ${build.scene} of ${build.of}` : "Building…",
+    done: `Built${build.summary ? `: ${build.summary.split(" (")[1]?.split(",")[0] || ""}` : ""}`,
+    failed: "The build failed",
+    cancelled: "Build cancelled",
+  }[build.state] || build.state;
+  return html`<span class=${`build-status ${build.state}`} data-testid="build">${text}
+    ${(build.state === "running" || build.state === "starting") && html`<button class="quiet" onClick=${onCancel}>Cancel</button>`}
+  </span>`;
+}
+
+/** The last build's video, with its notes. */
+function Player({ build }) {
+  if (!build || build.state !== "done") return html`<p class="muted">Build the video to watch it here.</p>`;
+  return html`<div class="player">
+    <video controls src=${build.video} poster=${build.poster} data-testid="video"></video>
+    ${build.notes && build.notes.length > 0 && html`<details class="notes"><summary>Notes from the build</summary>
+      <ul>${build.notes.map((n) => html`<li>${n}</li>`)}</ul></details>`}
+  </div>`;
+}
+
 /** The frame at the cursor's moment, at the video's size, scaled to fit the pane. */
-function Preview({ analysis, shown, moment, error, playback, onPlay, onStop }) {
+function Preview({ analysis, shown, moment, error, playback, onPlay, onStop, tab, onTab, build }) {
   const box = useRef(null);
   const [scale, setScale] = useState(0.4);
   const [w, h] = (analysis && analysis.size) || [1280, 720];
@@ -100,6 +125,11 @@ function Preview({ analysis, shown, moment, error, playback, onPlay, onStop }) {
   }, [w]);
   const frameStyle = `width:${w}px;height:${h}px;transform:scale(${scale})`;
   return html`<aside class="preview" aria-label="preview">
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected=${tab === "frame"} onClick=${() => onTab("frame")}>Frame</button>
+      <button role="tab" aria-selected=${tab === "video"} onClick=${() => onTab("video")}>Video</button>
+    </div>
+    ${tab === "video" ? html`<${Player} build=${build} />` : html`<div class="frame-tab">
     <div class="screen" ref=${box} style=${`height:${h * scale}px`}>
       ${shown && shown.kind === "frame" && html`<iframe title="frame" srcdoc=${shown.html} style=${frameStyle} tabindex="-1"></iframe>`}
       ${shown && shown.kind === "page" && html`<iframe title="frame" src=${shown.url} style=${frameStyle} tabindex="-1"></iframe>`}
@@ -116,7 +146,7 @@ function Preview({ analysis, shown, moment, error, playback, onPlay, onStop }) {
         playback.state === "synthesising" ? `Synthesising scene ${playback.scene}…`
         : playback.state === "playing" ? `Playing scene ${playback.scene}: ${seconds(playback.time)} of ${seconds(playback.duration)}`
         : ""}</span>
-    </div>
+    </div></div>`}
     ${error && html`<p class="preview-error">${error}</p>`}
   </aside>`;
 }
@@ -144,6 +174,8 @@ function App() {
   const audio = useRef(null);
   const sceneAudio = useRef(new Map());  // "analysis id:scene" -> {url, paragraphs, duration}
   const [playback, setPlayback] = useState({ state: "idle" });
+  const [build, setBuild] = useState(null);
+  const [tab, setTab] = useState("frame");
   const cursorMoment = analysis ? momentAt(analysis, cursorLine) : null;
   // While narration plays, the preview follows it paragraph by paragraph
   const playingMoment = playback.state === "playing" && playback.paragraphs
@@ -251,20 +283,34 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: editor.current.text(), version: base }),
       });
-      if (status === 409) { setNotice({ kind: "conflict" }); return; }
-      if (status !== 200) { setError(body.error || `saving failed (${status})`); return; }
+      if (status === 409) { setNotice({ kind: "conflict" }); return false; }
+      if (status !== 200) { setError(body.error || `saving failed (${status})`); return false; }
       version.current = body.version;
       setDirty(false);
       setNotice(null);
       setError(null);
+      return true;
     } catch (e) {
       setError(`saving failed: ${e.message}`);
+      return false;
     } finally {
       setSaving(false);
     }
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // The last build survives a reload
+  useEffect(() => { getJSON("/api/build").then(({ body }) => setBuild(body)).catch(() => {}); }, []);
+
+  const startBuild = useCallback(async () => {
+    if (dirtyRef.current && !(await save(false))) return;  // builds the file on disk, so save first
+    const { status, body } = await getJSON("/api/build", { method: "POST" });
+    if (status !== 202) setError(body.error || `can't build (${status})`);
+    else setBuild(body);
+  }, [save]);
+
+  const cancelBuild = useCallback(() => getJSON("/api/build/cancel", { method: "POST" }), []);
 
   // A paragraph's play button (editor.js) plays its scene from there
   useEffect(() => {
@@ -292,6 +338,11 @@ function App() {
     const events = new EventSource("/api/events");
     events.addEventListener("open", () => setOnline(true));
     events.addEventListener("error", () => setOnline(false));
+    events.addEventListener("build", (e) => {
+      const status = JSON.parse(e.data);
+      setBuild(status);
+      if (status.state === "done") setTab("video");
+    });
     events.addEventListener("script-changed", (e) => {
       const changed = JSON.parse(e.data);
       if (changed.version === version.current) return;  // our own save
@@ -328,16 +379,26 @@ function App() {
       ${engine && html`<${EnginePicker} engine=${engine} onPick=${pickEngine} />`}
       <${Cost} analysis=${analysis} />
       <span class=${`status ${dirty ? "unsaved" : ""} ${online ? "" : "offline"}`} data-testid="status">${status}</span>
-      <button class="primary" onClick=${() => save(false)} disabled=${saving || !dirty}>Save</button>
+      <button onClick=${() => save(false)} disabled=${saving || !dirty}>Save</button>
+      <${BuildStatus} build=${build} onCancel=${cancelBuild} />
+      <button class="primary" onClick=${startBuild}
+        disabled=${build && (build.state === "running" || build.state === "starting")}>Build video</button>
     </header>
     <${Notice} notice=${notice} onReload=${load} onOverwrite=${() => save(true)} onDismiss=${() => setNotice(null)} />
     ${error && html`<div class="notice error" role="alert">${error}</div>`}
+    ${build && build.state === "failed" && html`<div class="notice error" role="alert" data-testid="build-errors">
+      <span>The build failed:</span>
+      ${build.errors.map((e) => e.line
+        ? html`<button class="quiet" onClick=${() => goToLine(editor.current.view, e.line)}>line ${e.line}: ${e.message}</button>`
+        : html`<span class="build-error">${e.message}</span>`)}
+    </div>`}
     <main class="workspace">
       <${Outline} analysis=${analysis} current=${sceneAt(analysis, cursorLine)}
         onPick=${(line) => goToLine(editor.current.view, line)} />
       <section class="editor" ref=${host} aria-label="script"></section>
       <${Preview} analysis=${analysis} shown=${shown} moment=${moment} error=${previewError} playback=${playback}
-        onPlay=${() => cursorMoment && play(cursorMoment.scene, cursorLine)} onStop=${stop} />
+        onPlay=${() => cursorMoment && play(cursorMoment.scene, cursorLine)} onStop=${stop}
+        tab=${tab} onTab=${setTab} build=${build} />
     </main>`;
 }
 

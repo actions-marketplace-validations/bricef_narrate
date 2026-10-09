@@ -54,6 +54,7 @@ class Session:
         self._synth = None
         self._listeners: set[asyncio.Queue] = set()
         self.analyses: OrderedDict = OrderedDict()  # the last few analyses by text id, for previews
+        self.build = None  # the latest BuildRun (#55)
         self.scratch = Path(tempfile.mkdtemp(prefix="narrate-studio-"))  # clip stills, copies of renders
 
     def remember(self, analysis) -> None:
@@ -212,6 +213,24 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
             return JSONResponse({"error": str(e)}, status_code=502)
         return JSONResponse(result)
 
+    async def start_build(request: Request) -> Response:
+        from .builds import BuildRun
+
+        if session.build is not None and session.build.running:
+            return JSONResponse({"error": "a build is already running"}, status_code=409)
+        session.build = BuildRun(session)
+        app.state.build_task = asyncio.create_task(session.build.run())
+        return JSONResponse(session.build.status, status_code=202)
+
+    async def build_status(request: Request) -> Response:
+        return JSONResponse(session.build.status if session.build else {"state": "idle"})
+
+    async def cancel_build(request: Request) -> Response:
+        if session.build is None or not session.build.running:
+            return JSONResponse({"error": "no build is running"}, status_code=409)
+        session.build.cancel()
+        return JSONResponse({"state": "cancelling"})
+
     async def scratch_file(request: Request) -> Response:
         path = (session.scratch / request.path_params["name"]).resolve()
         if not path.is_relative_to(session.scratch) or not path.is_file():
@@ -253,6 +272,8 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
             yield
         finally:
             watcher.cancel()
+            if session.build is not None:
+                session.build.cancel()  # don't leave a build running after the studio stops
             shutil.rmtree(session.scratch, ignore_errors=True)
 
     app = Starlette(routes=[
@@ -263,6 +284,9 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
         Route("/api/frame", preview, methods=["POST"]),
         Route("/api/engine", set_engine, methods=["POST"]),
         Route("/api/scenes/{index:int}/audio", scene_audio, methods=["POST"]),
+        Route("/api/build", start_build, methods=["POST"]),
+        Route("/api/build", build_status, methods=["GET"]),
+        Route("/api/build/cancel", cancel_build, methods=["POST"]),
         Route("/scratch/{name}", scratch_file),
         Route("/api/events", events),
         Route("/files/{path:path}", project_file),
