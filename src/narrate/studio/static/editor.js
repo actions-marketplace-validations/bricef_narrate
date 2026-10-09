@@ -1,7 +1,7 @@
 // The script editor: CodeMirror 6 with narrate's own line kinds highlighted.
 import {
-  Annotation, Decoration, EditorView, HighlightStyle, RangeSetBuilder, ViewPlugin, basicSetup, indentWithTab, keymap,
-  markdown, syntaxHighlighting, tags,
+  Annotation, Decoration, EditorView, HighlightStyle, RangeSetBuilder, StateEffect, StateField, ViewPlugin, WidgetType,
+  basicSetup, indentWithTab, keymap, lintGutter, markdown, setDiagnostics, syntaxHighlighting, tags,
 } from "./vendor/codemirror.js";
 
 // Changes that came from disk rather than the keyboard: they don't make the script unsaved
@@ -94,8 +94,77 @@ const theme = EditorView.theme({
   ".cm-foldPlaceholder": { backgroundColor: "transparent", border: "1px solid var(--line)", color: "var(--muted)" },
 });
 
+// -- what the server's analysis says about the script (#52) ----------------------
+
+class Label extends WidgetType {
+  constructor(text, className, title) { super(); this.text = text; this.className = className; this.title = title; }
+  eq(other) { return other.text === this.text && other.className === this.className && other.title === this.title; }
+  toDOM() {
+    const span = document.createElement("span");
+    span.className = this.className;
+    span.textContent = this.text;
+    if (this.title) span.title = this.title;
+    return span;
+  }
+  ignoreEvent() { return true; }
+}
+
+const setLabels = StateEffect.define();
+
+// Labels move with the text as it's edited, until the next analysis replaces them
+const labels = StateField.define({
+  create: () => Decoration.none,
+  update(value, tr) {
+    value = value.map(tr.changes);
+    for (const effect of tr.effects) if (effect.is(setLabels)) value = effect.value;
+    return value;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
+export const seconds = (s) => (s < 60 ? `${s.toFixed(1)} s` : `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`);
+
+/** Show an analysis: scene labels on separators, paragraph lengths, and problems as diagnostics. */
+export function showAnalysis(view, analysis) {
+  const doc = view.state.doc;
+  const widgets = [];
+  const lineEnd = (n) => (n >= 1 && n <= doc.lines ? doc.line(n).to : null);
+  for (const scene of analysis.scenes) {
+    // The separator before the scene (its own first line for the first scene)
+    const at = lineEnd(scene.index > 1 ? scene.line - 1 : scene.line);
+    const length = scene.duration == null ? "can't be timed" : seconds(scene.duration);
+    if (at != null) widgets.push(Decoration.widget({
+      widget: new Label(`scene ${scene.index} · ${scene.title} · ${length}`, "cm-narrate-scene-label"), side: 1,
+    }).range(at));
+    for (const p of scene.paragraphs) {
+      const end = lineEnd(p.line);
+      if (end == null) continue;
+      const length = seconds(p.end - p.start);
+      widgets.push(Decoration.widget({
+        widget: new Label(p.estimated ? `≈ ${length}` : length, `cm-narrate-length${p.estimated ? " estimated" : ""}`,
+          p.estimated ? "estimated from the text: not synthesised yet" : "from the synthesised speech"),
+        side: 1,
+      }).range(end));
+    }
+  }
+  widgets.sort((a, b) => a.from - b.from);
+  const diagnostics = analysis.problems.filter((p) => p.line >= 1 && p.line <= doc.lines).map((p) => {
+    const line = doc.line(p.line);
+    return { from: line.from, to: line.to, severity: p.severity, message: p.message };
+  });
+  view.dispatch(setDiagnostics(view.state, diagnostics));
+  view.dispatch({ effects: setLabels.of(Decoration.set(widgets)) });
+}
+
+/** Put the cursor on `line` and bring it into view. */
+export function goToLine(view, line) {
+  const target = view.state.doc.line(Math.max(1, Math.min(line, view.state.doc.lines)));
+  view.dispatch({ selection: { anchor: target.from }, scrollIntoView: true });
+  view.focus();
+}
+
 /** An editor in `parent` holding `text`; calls onChange() on typing and onSave() on Mod-S. */
-export function createEditor(parent, text, { onChange, onSave, extensions = [] }) {
+export function createEditor(parent, text, { onChange, onSave, onCursor = () => {}, extensions = [] }) {
   const view = new EditorView({
     parent,
     doc: text,
@@ -105,10 +174,15 @@ export function createEditor(parent, text, { onChange, onSave, extensions = [] }
       syntaxHighlighting(highlight),
       theme,
       narrateLines,
+      labels,
+      lintGutter(),
       EditorView.lineWrapping,
       keymap.of([indentWithTab, { key: "Mod-s", preventDefault: true, run: () => { onSave(); return true; } }]),
       EditorView.updateListener.of((update) => {
         if (update.docChanged && !update.transactions.some((t) => t.annotation(fromDisk))) onChange(update);
+        if (update.docChanged || update.selectionSet) {
+          onCursor(update.state.doc.lineAt(update.state.selection.main.head).number, update.docChanged);
+        }
       }),
       ...extensions,
     ],

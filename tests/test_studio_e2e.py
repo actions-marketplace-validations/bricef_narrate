@@ -109,3 +109,47 @@ def test_the_event_stream_announces_outside_edits(studio):
         script.write_text("Changed.\n")
         assert next(lines) == "event: script-changed"
         assert '"type": "script-changed"' in next(lines)
+
+
+# -- live analysis (#52) ------------------------------------------------------------
+
+def test_scenes_timing_and_problems_follow_the_text(tmp_path, page):
+    from narrate.studio.server import create_app as make
+
+    (tmp_path / "photo.jpg").write_bytes(b"")  # exists; the analysis only checks for the file
+    script = tmp_path / "s.md"
+    script.write_text("![](photo.jpg)\n\nThe first scene.\n\n---\n\nThe second scene, a little longer.\n")
+    server = studio_server(make(script, "silent"), "127.0.0.1", 0)
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    while not server.started:
+        time.sleep(0.05)
+    try:
+        page.goto(f"http://127.0.0.1:{server.servers[0].sockets[0].getsockname()[1]}/")
+        outline = page.get_by_role("navigation", name="scenes")
+        expect(outline.locator("li")).to_have_count(2)
+        expect(outline).to_contain_text("photo.jpg")
+        expect(page.locator(".cm-narrate-scene-label")).to_have_count(2)
+        expect(page.locator(".cm-narrate-length")).to_have_count(2)
+        total = page.get_by_test_id("total").inner_text()
+
+        page.locator(".cm-line:not(.cm-narrate-scene)", has_text="The second scene").click(position={"x": 4, "y": 4})
+        page.keyboard.press("End")
+        page.keyboard.type(" And now it goes on for quite a while longer than it did before.")
+        expect(page.get_by_test_id("total")).not_to_have_text(total)  # re-timed as you type
+        expect(outline.locator("li.current")).to_contain_text("2")  # the scene with the cursor
+
+        page.keyboard.press("Enter")
+        page.keyboard.press("Enter")
+        page.keyboard.type("![](nowhere.png)")
+        expect(page.locator(".cm-lint-marker-error")).to_have_count(1)  # the missing file, in the gutter
+        expect(outline).to_contain_text("1 problem to fix")  # once, though the scene can't find its picture
+        expect(outline.locator("li").nth(1)).to_contain_text("nowhere.png")
+        expect(outline.locator("li").nth(1)).not_to_contain_text("?")  # still timed, with a stand-in
+
+        outline.locator("li").first.get_by_role("button").click()
+        expect(outline.locator("li.current")).to_contain_text("1")  # the cursor jumped to scene 1
+    finally:
+        server.end_streams()
+        server.should_exit = True
+        thread.join(5)

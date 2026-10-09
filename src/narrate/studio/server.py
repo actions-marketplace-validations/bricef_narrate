@@ -16,6 +16,7 @@ import tempfile
 from pathlib import Path
 
 from starlette.applications import Starlette
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from starlette.routing import Mount, Route
@@ -40,13 +41,23 @@ class Conflict(Exception):
 
 
 class Session:
-    """The script being edited, and everyone listening for changes to it."""
+    """The script being edited, the engine it's previewed with, and everyone listening for changes."""
 
-    def __init__(self, script: Path):
+    def __init__(self, script: Path, engine: str = "kokoro"):
         self.script = script.resolve()
         self.project = self.script.parent
         self.version = version_of(self.script)
+        self.engine = engine
+        self._synth = None
         self._listeners: set[asyncio.Queue] = set()
+
+    def synth(self):
+        """The session's speech engine (Kokoro by default, D10), made on first use."""
+        if self._synth is None:
+            from ..tts import make_synth
+
+            self._synth = make_synth(self.engine)
+        return self._synth
 
     def read(self) -> dict:
         # The version is taken from the file now, not remembered: whoever loads it has this version
@@ -116,8 +127,8 @@ class Session:
         return path
 
 
-def create_app(script: Path) -> Starlette:
-    session = Session(script)
+def create_app(script: Path, engine: str = "kokoro") -> Starlette:
+    session = Session(script, engine)
 
     async def index(request: Request) -> Response:
         return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache"})
@@ -133,6 +144,17 @@ def create_app(script: Path) -> Starlette:
             return JSONResponse({"error": "the script changed on disk", "version": version_of(session.script)},
                                 status_code=409)
         return JSONResponse({"version": version})
+
+    async def analyse(request: Request) -> Response:
+        from .analysis import analyse as run
+
+        body = await request.json()
+        try:
+            synth = session.synth()
+        except RuntimeError as e:  # e.g. ElevenLabs without a key
+            return JSONResponse({"error": str(e)}, status_code=503)
+        result = await run_in_threadpool(run, str(body.get("text", "")), session.script, synth)
+        return JSONResponse({**result, "engine": session.engine})
 
     async def events(request: Request) -> Response:
         queue = session.subscribe()
@@ -174,6 +196,7 @@ def create_app(script: Path) -> Starlette:
         Route("/", index),
         Route("/api/script", get_script, methods=["GET"]),
         Route("/api/script", put_script, methods=["PUT"]),
+        Route("/api/analyse", analyse, methods=["POST"]),
         Route("/api/events", events),
         Route("/files/{path:path}", project_file),
         Mount("/static", StaticFiles(directory=STATIC), name="static"),
@@ -203,11 +226,11 @@ def server(app: Starlette, host: str, port: int):
                                        timeout_graceful_shutdown=2))
 
 
-def serve(script: Path, host: str, port: int, open_browser: bool = False) -> None:
+def serve(script: Path, host: str, port: int, open_browser: bool = False, engine: str = "kokoro") -> None:
     url = f"http://{'127.0.0.1' if host in ('0.0.0.0', '::') else host}:{port}/"
     print(f"narrate studio: {script} at {url} (Ctrl-C to stop)", flush=True)
     if open_browser:
         import webbrowser
 
         webbrowser.open(url)
-    server(create_app(script), host, port).run()
+    server(create_app(script, engine), host, port).run()

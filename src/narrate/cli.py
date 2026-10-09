@@ -136,7 +136,7 @@ def cmd_studio(args: argparse.Namespace) -> int:
     if not script.parent.resolve().is_dir():
         print(f"error: no folder {script.parent}", file=sys.stderr)
         return 2
-    serve(script, args.host, args.port, args.open)
+    serve(script, args.host, args.port, args.open, args.tts)
     return 0
 
 
@@ -262,6 +262,8 @@ def main(argv: list[str] | None = None) -> int:
                              "with no access control)")
     studio.add_argument("--port", type=int, default=8787, help="port to listen on (default 8787)")
     studio.add_argument("--open", action="store_true", help="open the studio in a browser")
+    studio.add_argument("--tts", choices=["auto", "kokoro", "elevenlabs", "silent"], default="kokoro",
+                        help="speech engine for previews and builds (default kokoro, which is free)")
     studio.set_defaults(func=cmd_studio)
 
     check = sub.add_parser("check", help="parse a script and check its files, without rendering")
