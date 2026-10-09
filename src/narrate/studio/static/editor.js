@@ -97,13 +97,27 @@ const theme = EditorView.theme({
 // -- what the server's analysis says about the script (#52) ----------------------
 
 class Label extends WidgetType {
-  constructor(text, className, title) { super(); this.text = text; this.className = className; this.title = title; }
-  eq(other) { return other.text === this.text && other.className === this.className && other.title === this.title; }
+  constructor(text, className, title, playLine = null) {
+    super(); this.text = text; this.className = className; this.title = title; this.playLine = playLine;
+  }
+  eq(other) {
+    return other.text === this.text && other.className === this.className && other.title === this.title
+      && other.playLine === this.playLine;
+  }
   toDOM() {
     const span = document.createElement("span");
     span.className = this.className;
     span.textContent = this.text;
     if (this.title) span.title = this.title;
+    if (this.playLine != null) {
+      // A paragraph's length doubles as its play button (#54): the app listens for narrate-play
+      span.setAttribute("role", "button");
+      span.dataset.line = String(this.playLine);
+      span.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("narrate-play", { detail: { line: this.playLine } }));
+      });
+    }
     return span;
   }
   ignoreEvent() { return true; }
@@ -141,8 +155,9 @@ export function showAnalysis(view, analysis) {
       if (end == null) continue;
       const length = seconds(p.end - p.start);
       widgets.push(Decoration.widget({
-        widget: new Label(p.estimated ? `≈ ${length}` : length, `cm-narrate-length${p.estimated ? " estimated" : ""}`,
-          p.estimated ? "estimated from the text: not synthesised yet" : "from the synthesised speech"),
+        widget: new Label(`▶ ${p.estimated ? "≈ " : ""}${length}`, `cm-narrate-length${p.estimated ? " estimated" : ""}`,
+          `play the scene from here (${p.estimated ? "estimated from the text: not synthesised yet" : "synthesised"})`,
+          p.line),
         side: 1,
       }).range(end));
     }

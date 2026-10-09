@@ -113,3 +113,11 @@ button.quiet { border-color: transparent; color: var(--muted); }
 .preview .caption { display: flex; justify-content: space-between; gap: 8px; margin: 8px 2px; color: var(--muted);
                     font-size: 12px; font-variant-numeric: tabular-nums; }
 .preview-error { color: var(--error); font-size: 12px; }
+
+/* narration playback (#54) */
+.engine select { font: inherit; font-size: 13px; color: var(--fg); background: var(--panel);
+                 border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; }
+.cm-narrate-length[role="button"] { cursor: pointer; }
+.cm-narrate-length[role="button"]:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.transport { display: flex; align-items: center; gap: 10px; margin: 4px 2px; }
+.playback { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }

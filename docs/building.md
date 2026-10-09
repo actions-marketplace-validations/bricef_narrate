@@ -56,12 +56,22 @@ The studio is a web app for writing a script, served from your computer.
   - **HTML scenes** show the page itself, playing.
   - **Render blocks** show what the last build drew, or a card until a build
     has drawn them.
-- **Engine:** `--tts` chooses the one used for timing and, later, previews:
-  Kokoro by default, which is free. The header shows how many paragraphs it
-  still has to synthesise, and how many characters that is; with
-  ElevenLabs, that's what a build would spend.
-- **Coming next:** narration playback and builds (narrate #28; the design
-  is in [design/studio.md](design/studio.md)).
+- **Listening:** each paragraph's length is also its ▶ button, and plays
+  the scene from there.
+  - **Synthesis:** the scene is synthesised on first play. It's the same
+    narration a build uses, clip sound included, and it's cached, so the
+    timing turns exact and building later costs nothing more.
+  - **Controls:** **Play scene** and **Stop** sit under the preview, which
+    follows the narration paragraph by paragraph.
+- **Engine:** chosen in the header, or with `--tts` when starting. Kokoro
+  is the default, and free.
+  - **Cost:** the header shows how many paragraphs it still has to
+    synthesise, and how many characters that is; with ElevenLabs, that's what
+    playing or building would spend.
+  - **Asking first:** with ElevenLabs, the studio asks before synthesising a
+    scene.
+- **Coming next:** builds (narrate #28; the design is in
+  [design/studio.md](design/studio.md)).
 
 **On another machine,** such as a server you reach over a VPN:
 `narrate studio script.md --host 0.0.0.0`, then open port 8787 on that
