@@ -89,6 +89,7 @@ class Visual:
     frames: int = 0
     motion: str | None = None  # pan/zoom animation of a still image
     viewport: tuple[int, int] | None = None  # an HTML scene's design size
+    zoom: float | None = None  # how far a pan/zoom moves, if not motion.ZOOM / PAN_ZOOM
 
 
 @dataclass
@@ -471,7 +472,8 @@ class Builder:
             length = pages.natural_length(self._pages(), path, viewport) if natural else 0.0
             return Visual("page", path, size, position, length=length or DEFAULT_STILL_SECONDS, viewport=viewport)
         if m.kind == "image" and not media.is_animated_gif(path):
-            return Visual("still", path, size, position, motion=animation)
+            return Visual("still", path, size, position, motion=animation,
+                          zoom=m.zoom or self.settings.image_zoom if animation else None)
         if animation:
             self.notes.add(f"{animation} on a video clip (ignored; pan/zoom applies to images)")
         info = media.probe(path)
@@ -776,7 +778,7 @@ class Builder:
         w, h = self.settings.width, self.settings.height
         inputs, graph = _overlay_graph("[0:v]setsar=1", overlays)
         return media.encode_frames(
-            motion.frames(v.path, v.motion, v.position, w, h, frames), w, h, FPS,
+            motion.frames(v.path, v.motion, v.position, w, h, frames, v.zoom), w, h, FPS,
             [*inputs, "-filter_complex", graph, "-map", "[v]", "-frames:v", str(frames), "-an", *_SEGMENT_CODEC],
             out,
         )

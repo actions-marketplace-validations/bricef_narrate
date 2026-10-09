@@ -1035,7 +1035,7 @@ frontmatter  := "---" NL yaml-mapping NL "---" NL      ; at the very top of the 
   position, sync, segment and `mute`.
 - **Frontmatter** is parsed as typed YAML, unlike the header, because
   renderer settings may pass through to other tools.
-  - The keys `size`, `position`, `sync`, `segment` and `volume` place the
+  - The keys `size`, `position`, `sync`, `segment`, `volume` and `zoom` place the
     output, as in an `(image:)` or `(video:)` map, and win over tokens.
   - Every other key belongs to the renderer, with its case kept. A renderer
     rejects keys it doesn't take.
@@ -1117,3 +1117,13 @@ or `broadcast` (−23).
 - **Applied before** the header fades, in video and audio builds.
 - **Silence**, and audio too short to measure, are left unchanged.
 - **Absent:** the mix is only peak-limited, as before.
+
+### 18.5 Zoom amount (narrate #49)
+
+- **Per picture:** `zoom` in an `(image:)` map, or in a render block's
+  frontmatter, sets how far an animated size moves. It must be above 1.
+  - For `zoom`, `zoomout`, `panzoom` and `panzoomout`, it is the zoom reached
+    over the scene (default 1.25).
+  - For `pan`, it is the fixed zoom the pan travels at (default 1.15).
+- **Default:** the header's `image-zoom` sets it for every picture.
+- **Precedence:** the picture's own value wins over the header's.
