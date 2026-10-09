@@ -125,3 +125,33 @@ def test_accents_fall_back_to_a_related_one():
     notes: set[str] = set()
     assert kokoro_resolve("Nicole", None, notes).id == "bf_emma"  # Australian -> British
     assert kokoro_resolve("Prabhat", None, notes).id == "bm_george"  # Indian English -> British
+
+
+# -- models without a speed setting (#47) ------------------------------------------
+
+@pytest.mark.parametrize("model, speeds", [("eleven_multilingual_v2", (0.7, 1.2)), ("eleven_v3", (1.0, 1.0)),
+                                           ("eleven_v4", (1.0, 1.0)), ("eleven_v3_alpha", (1.0, 1.0))])
+def test_v3_and_v4_have_no_native_speed(monkeypatch, model, speeds):
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "test-key")
+    assert ElevenLabsSynth(model).speed_range == speeds
+
+
+def test_the_builder_stretches_v4_speech_instead_of_asking_for_a_speed(monkeypatch, tmp_path):
+    from narrate.build import Builder
+    from narrate.script import parse_file
+
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "test-key")
+    monkeypatch.setenv("NARRATE_CACHE", str(tmp_path / "cache"))
+    script = tmp_path / "s.md"
+    script.write_text("---\nvoice: George\nvoice-speed: 1.2\n---\n\nHello there.\n")
+    seconds = {}
+    for model in ("eleven_multilingual_v2", "eleven_v4"):
+        synth, bodies = ElevenLabsSynth(model), []
+        monkeypatch.setattr(synth, "_post", lambda voice_id, body: (bodies.append(body),
+                                                                    np.full(24000, 1000, "<i2").tobytes())[1])
+        plan = next(Builder(parse_file(script), synth, log=lambda _: None).plans(parse_file(script).scenes, tmp_path))
+        seconds[model] = plan.duration - 0.4  # less the paragraph pause
+        speeds = [b.get("voice_settings", {}).get("speed") for b in bodies]
+        assert speeds == ([1.2] if model == "eleven_multilingual_v2" else [None])
+    assert seconds["eleven_multilingual_v2"] == pytest.approx(1.0, abs=0.02)  # the engine's own speed
+    assert seconds["eleven_v4"] == pytest.approx(1 / 1.2, abs=0.02)  # stretched by narrate
