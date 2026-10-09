@@ -1,0 +1,77 @@
+:root {
+  --bg: #f7f7f5;
+  --panel: #ffffff;
+  --fg: #1f2328;
+  --muted: #656d76;
+  --line: #d8dee4;
+  --accent: #2f6fdd;
+  --warn: #b35900;
+  --error: #c62828;
+  --scene: #8250df;
+  --directive: #0b7a75;
+  --media: #2f6fdd;
+  --slide: #6e7781;
+  --render: #a3530b;
+  --header: #57606a;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1216;
+    --panel: #161a20;
+    --fg: #e6edf3;
+    --muted: #8b949e;
+    --line: #2d333b;
+    --accent: #6ea8fe;
+    --warn: #e3a34f;
+    --error: #ff7b72;
+    --scene: #c297ff;
+    --directive: #56d4c8;
+    --media: #79b8ff;
+    --slide: #a0a8b3;
+    --render: #f0a35e;
+    --header: #9aa4ae;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+             font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+#app { height: 100%; display: flex; flex-direction: column; }
+
+.bar { display: flex; align-items: center; gap: 14px; padding: 8px 16px; border-bottom: 1px solid var(--line);
+       background: var(--panel); }
+.brand { font-weight: 600; letter-spacing: .2px; }
+.file { font-family: ui-monospace, monospace; color: var(--muted); }
+.status { margin-left: auto; color: var(--muted); font-size: 13px; }
+.status.unsaved { color: var(--warn); }
+.status.offline { color: var(--error); }
+
+button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--fg);
+         border-radius: 6px; padding: 4px 12px; cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.quiet { border-color: transparent; color: var(--muted); }
+
+.notice { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 8px 16px;
+          border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--warn) 12%, var(--panel)); }
+.notice.error { background: color-mix(in srgb, var(--error) 12%, var(--panel)); }
+
+.workspace { flex: 1; min-height: 0; display: flex; }
+.editor { flex: 1; min-width: 0; overflow: hidden; background: var(--panel); }
+.editor .cm-editor { height: 100%; }
+.editor .cm-scroller { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 14px; }
+.editor .cm-content { max-width: 100ch; }
+
+/* narrate's own line kinds (editor.js) */
+.cm-narrate-header { color: var(--header); }
+.cm-narrate-scene { color: var(--scene); font-weight: 600;
+                    background: color-mix(in srgb, var(--scene) 8%, transparent); }
+.cm-narrate-directive { color: var(--directive); }
+.cm-narrate-media { color: var(--media); }
+.cm-narrate-slide { color: var(--slide); background: color-mix(in srgb, var(--slide) 6%, transparent); }
+.cm-narrate-render { color: var(--render); background: color-mix(in srgb, var(--render) 6%, transparent); }
+.cm-narrate-ssml { color: var(--directive); font-style: italic; }

@@ -13,6 +13,8 @@ dependencies = [
     "playwright>=1.63.0",
     "pygments>=2.21.0",
     "pyyaml>=6",
+    "starlette>=1.7",
+    "uvicorn>=0.54",
 ]
 
 [project.scripts]
@@ -20,7 +22,10 @@ narrate = "narrate.cli:main"
 narakeet-api-client = "narrate.narakeet_cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = [
+    "httpx2>=2.13",
+    "pytest>=8",
+]
 
 [build-system]
 requires = ["hatchling"]

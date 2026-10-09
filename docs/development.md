@@ -108,6 +108,14 @@ The managed ffmpeg for source checkouts is pinned separately, in
 4. Set `MERMAID_VERSION` and `MERMAID_SHA256` in `src/narrate/mermaid.py`.
 5. Run `just test tests/test_mermaid.py tests/test_docs.py`.
 
+## The studio
+
+`narrate studio` serves a browser app from `src/narrate/studio/`. The app's
+own code is plain ES modules, loaded as they are; change a file and reload
+the page. `tests/test_studio.py` covers the server with Starlette's test
+client, and `tests/test_studio_e2e.py` drives the app in headless Chromium
+with Playwright, so neither needs Node.
+
 ## CI and releases
 
 `.github/workflows/image.yml` runs on pushes that touch the code, tests,
@@ -190,6 +198,11 @@ Some choices worth knowing when changing behaviour:
   - `project.py`: ZIP projects.
   - `designer.py`: the callout designer page.
   - `cache.py`: the `cache` command.
+  - `studio/`: `narrate studio` ([design](design/studio.md)):
+    - `server.py`, the Starlette server;
+    - `static/`, the browser app: plain ES modules, no build step;
+    - `static/vendor/`, the vendored Preact (htm) and CodeMirror files, with
+      their sources and hashes in its README.
   - `doctor.py`: the `doctor` command.
 - `tests/`: pytest. The `test_conformance.py` and `test_docs.py` suites are
   described above.
@@ -197,7 +210,11 @@ Some choices worth knowing when changing behaviour:
   specification) and `design/` (design records, such as the studio's).
 - `examples/demo/`: the demo script. `make_assets.py` generates its pictures
   and clip.
-- `scripts/`: the reference download (`fetch-narakeet-reference.sh`) and its
-  HTML-to-Markdown converter.
+- `scripts/`:
+  - the reference download (`fetch-narakeet-reference.sh`) and its
+    HTML-to-Markdown converter;
+  - `vendor-codemirror.sh`, which rebuilds the studio's CodeMirror bundle
+    from the versions pinned in `scripts/codemirror/`. It needs Node, through
+    `mise exec node@24 --` for example, and is only for updating CodeMirror.
 - `Dockerfile`, `action.yml` and `.github/workflows/image.yml`: the image, the
   GitHub Action and CI.

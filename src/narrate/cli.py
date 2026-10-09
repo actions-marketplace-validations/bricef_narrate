@@ -126,6 +126,20 @@ def _check(path: Path) -> int:
     return 1 if missing or problems else 0
 
 
+def cmd_studio(args: argparse.Namespace) -> int:
+    from .studio.server import serve
+
+    script = Path(args.script)
+    if script.suffix.lower() not in (".md", ".mkd", ".txt"):
+        print(f"error: {script} isn't a script (.md, .mkd or .txt)", file=sys.stderr)
+        return 2
+    if not script.parent.resolve().is_dir():
+        print(f"error: no folder {script.parent}", file=sys.stderr)
+        return 2
+    serve(script, args.host, args.port, args.open)
+    return 0
+
+
 def cmd_voices(args: argparse.Namespace) -> int:
     print("Kokoro (--tts kokoro):", " ".join(KOKORO_VOICES))
     print("\nElevenLabs (--tts elevenlabs; a raw voice id also works):")
@@ -240,6 +254,15 @@ def main(argv: list[str] | None = None) -> int:
     callouts.add_argument("-o", "--output", help="the page to write (default: <file>-callouts.html here)")
     callouts.add_argument("--open", action="store_true", help="open the page in a browser")
     callouts.set_defaults(func=cmd_callouts)
+
+    studio = sub.add_parser("studio", help="edit and preview a script in your browser")
+    studio.add_argument("script", help="the .md script to edit (created on first save if it doesn't exist)")
+    studio.add_argument("--host", default="127.0.0.1",
+                        help="address to listen on (default 127.0.0.1; 0.0.0.0 for other machines, "
+                             "with no access control)")
+    studio.add_argument("--port", type=int, default=8787, help="port to listen on (default 8787)")
+    studio.add_argument("--open", action="store_true", help="open the studio in a browser")
+    studio.set_defaults(func=cmd_studio)
 
     check = sub.add_parser("check", help="parse a script and check its files, without rendering")
     check.add_argument("script", help="a .md/.txt script, or a .zip project")

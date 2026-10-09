@@ -1,0 +1,17 @@
+{
+  "name": "narrate-codemirror-vendor",
+  "private": true,
+  "description": "Pins the CodeMirror packages bundled into src/narrate/studio/static/vendor/codemirror.js (scripts/vendor-codemirror.sh)",
+  "dependencies": {
+    "@codemirror/autocomplete": "6.20.3",
+    "@codemirror/commands": "6.11.1",
+    "@codemirror/lang-markdown": "6.5.2",
+    "@codemirror/language": "6.13.1",
+    "@codemirror/lint": "6.9.7",
+    "@codemirror/state": "6.7.6",
+    "@codemirror/view": "6.43.14",
+    "@lezer/highlight": "1.2.5",
+    "codemirror": "6.0.2",
+    "esbuild": "0.28.2"
+  }
+}
