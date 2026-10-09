@@ -1084,3 +1084,12 @@ animated page (narrate #44).
   - A page without scripts whose finite animations have all ended, with no
     infinite ones, is settled: its last frame is reused.
 - **Not captured:** sound, and `<video>` or `<audio>` elements in the page.
+- **Cues** (narrate #45): before the page's scripts run, its root element gets
+  CSS custom properties, and `window.narrate` gets the same values in seconds.
+  - `--narrate-duration`: how long the page is on screen.
+  - `--cue-N`: when the scene's Nth narration block (a paragraph or a
+    recording) starts, after any pause before its first words.
+  - `--cue-NAME`: when an SSML `<mark name="NAME"/>` is reached. A mark splits
+    the run there, and names match `[A-Za-z_][A-Za-z0-9_-]*`.
+  - Times count from the page's start, and may be negative.
+  - Pages in merged scenes get no cues.

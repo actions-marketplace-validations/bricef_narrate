@@ -11,6 +11,7 @@ subset itself and renders it the same way everywhere:
     <lang xml:lang="de-DE">                 a language segment
     <sub alias="...">                       read the alias
     <p>, <s>                                sentence breaks
+    <mark name="x"/>                        a timing point for HTML scenes (--cue-x)
 
 Other tags keep their text and are noted once each.
 """
@@ -82,6 +83,7 @@ class _Builder:
         self.pieces: list[tuple[str, str | None]] = []
         self.prosody = Prosody()
         self.pause = 0.0
+        self.marks: list[str] = []
 
     def flush(self) -> None:
         pieces: list[tuple[str, str | None]] = []
@@ -96,8 +98,10 @@ class _Builder:
             return
         text = " ".join(t for t, _ in pieces) if all(tag is None for _, tag in pieces) else tuple(pieces)
         p = self.prosody
-        self.runs.append(Run(text, p.emphasis, self.pause, rate=p.rate, pitch=p.pitch, gain=p.gain))
+        self.runs.append(Run(text, p.emphasis, self.pause, rate=p.rate, pitch=p.pitch, gain=p.gain,
+                             marks=tuple(self.marks)))
         self.pause = 0.0
+        self.marks = []
 
     def text(self, value: str | None, tag: str | None = None) -> None:
         if value and value.strip():
@@ -109,6 +113,16 @@ class _Builder:
         if name == "break":
             self.flush()
             self.pause += _break(element)
+            self.text(element.tail, tag)
+            return
+        if name == "mark":
+            # The speech splits here, so the mark's time is exact
+            self.flush()
+            mark = (element.get("name") or "").strip()
+            if re.fullmatch(r"[A-Za-z_][\w-]*", mark):
+                self.marks.append(mark)
+            else:
+                self.notes.add(f"SSML <mark name={mark!r}> (ignored: use a name such as \"fleet\")")
             self.text(element.tail, tag)
             return
         if name == "prosody":
@@ -159,4 +173,6 @@ def ssml_runs(ssml: str, lang: str, notes: set[str]) -> list[Run] | None:
     builder = _Builder(lang, notes)
     builder.visit(root, Prosody(), None)
     builder.flush()
+    if builder.marks:  # marks after the last words: a silent run that only carries them
+        builder.runs.append(Run("", pause=builder.pause, marks=tuple(builder.marks)))
     return builder.runs
