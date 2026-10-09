@@ -18,6 +18,7 @@ has finished, so from then on the last frame is reused instead of captured.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -73,13 +74,33 @@ def natural_length(frames: FrameRenderer, path: Path, viewport: tuple[int, int])
     return _lengths[key]
 
 
+def cue_script(duration: float, cues: dict[str, float]) -> str:
+    """What a page learns about the narration (#45), set before its own scripts run.
+
+    CSS custom properties on the root element: --narrate-duration (how long
+    the page is on screen) and --cue-N / --cue-NAME (when the scene's Nth
+    narration block, or an SSML mark, starts, from the page's start); and the
+    same numbers, in seconds, as window.narrate for scripts."""
+    data = {"duration": round(duration, 4), "cues": {k: round(t, 4) for k, t in cues.items()}}
+    props = {"--narrate-duration": f"{duration:.4f}s", **{f"--cue-{k}": f"{t:.4f}s" for k, t in cues.items()}}
+    return f"""window.narrate = Object.freeze({json.dumps(data)});
+(() => {{
+  const props = {json.dumps(props)};
+  const apply = () => {{ for (const [k, v] of Object.entries(props)) document.documentElement.style.setProperty(k, v); }};
+  if (document.documentElement) apply();
+  else new MutationObserver((_, seen) => {{ if (document.documentElement) {{ apply(); seen.disconnect(); }} }})
+    .observe(document, {{childList: true}});
+}})();"""
+
+
 def capture(frames: FrameRenderer, path: Path, viewport: tuple[int, int], scale: float, count: int, fps: int,
-            stats: Callable[[int], None] | None = None) -> Iterator[bytes]:
+            stats: Callable[[int], None] | None = None, init_script: str | None = None) -> Iterator[bytes]:
     """`count` PNG frames of the page at `fps`, starting from the moment it loaded.
 
-    `stats` is told how many frames were actually captured (the rest reused)."""
+    `stats` is told how many frames were actually captured (the rest reused);
+    `init_script` runs before the page's own (cue_script)."""
     captured = 0
-    with frames.page(path, viewport, scale) as page:
+    with frames.page(path, viewport, scale, init_script) as page:
         last = b""
         settled = False
         for i in range(count):

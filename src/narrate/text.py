@@ -105,6 +105,7 @@ class Run:
     rate: float = 1.0  # SSML prosody on top of the paragraph's voice settings
     pitch: float = 1.0  # frequency ratio
     gain: float = 0.0  # dB
+    marks: tuple[str, ...] = ()  # SSML <mark> names at its start, timed for HTML scenes
 
 
 def speech_runs(text: str, lang: str, notes: set[str]) -> list[Run]:

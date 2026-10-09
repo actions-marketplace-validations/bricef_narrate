@@ -205,6 +205,7 @@ The word [Schadenfreude]{de} keeps its German pronunciation.
   - `<say-as interpret-as="characters">`
   - `<phoneme>`, `<lang>` and `<sub alias>`
   - `<p>` and `<s>`
+  - `<mark name>`, a timing point for [HTML scenes](#time-a-page-to-the-narration)
 
   Other tags are read as plain text, with a note.
 - **Russian stress:** `^` before a vowel (`гвозд^ики`) marks the stressed
@@ -405,7 +406,9 @@ sequenceDiagram
 ````markdown
 ![](scene.html)
 
-The title appears first, then its subtitle, while this sentence is read.
+The title appears first.
+
+Then its subtitle, as this paragraph begins.
 
 ---
 
@@ -425,7 +428,7 @@ The title appears first, then its subtitle, while this sentence is read.
   @keyframes up { to { opacity: 1; transform: none; } }
 </style>
 <h1 class="up" style="animation-delay: .3s">factor-q</h1>
-<p class="up" style="animation-delay: 1.2s">Agents that run continuously.</p>
+<p class="up" style="animation-delay: var(--cue-2, 1.2s)">Agents that run continuously.</p>
 ```
 
 - **Any web page** in the project folder can be a scene, with its CSS, fonts,
@@ -450,6 +453,39 @@ The title appears first, then its subtitle, while this sentence is read.
   captured or kept in time. Keep its files local; anything fetched from the
   network slows capture and ties the build to the network.
 - HTML scenes are narrate's own; Narakeet would read the line as narration.
+
+### Time a page to the narration
+
+The example's subtitle appears when the second paragraph starts, wherever
+that falls, rather than after a fixed delay. narrate gives each page the
+scene's timing as CSS custom properties:
+
+| Property | Holds |
+| --- | --- |
+| `--cue-1`, `--cue-2`, … | when the scene's first, second, … narration block (a paragraph or a recording) starts |
+| `--cue-NAME` | when the voice reaches `<mark name="NAME"/>` |
+| `--narrate-duration` | how long the page is on screen |
+
+````markdown
+![](scene.html)
+
+<speak>Five hundred and thirty-one pull requests merged. <mark name="fleet"/>A hundred and fifty-two by the fleet.</speak>
+````
+
+- **Delays:** use them as animation delays: `animation-delay: var(--cue-fleet)`.
+  A fallback value keeps the page working on its own:
+  `var(--cue-2, 1.2s)`.
+- **Leaving:** `calc(var(--narrate-duration) - .5s)` starts an exit animation
+  half a second before the page goes.
+- **Scripts** get the same numbers, in seconds, before they run:
+  `window.narrate.duration` and `window.narrate.cues["2"]`.
+- **Marks:** a mark splits the speech at that point, so its time is exact.
+  Splitting mid-sentence can add a short join, as emphasis does. Marks work
+  in `<speak>` paragraphs; use names made of letters, digits, `-` and `_`,
+  starting with a letter.
+- **Timing:** times count from the page's start, which matters when it follows
+  another picture in the scene.
+- **Not here:** pages in merged scenes (`narration-mode: merge`) get no cues.
 
 ## Show text slides
 

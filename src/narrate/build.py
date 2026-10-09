@@ -111,6 +111,7 @@ class ScenePlan:
     layout: Layout = field(default_factory=lambda: Layout([], []))
     slides: list[SlideSpec] = field(default_factory=list)  # share the scene's time equally
     transition: tuple[str, float] | None = None  # incoming: Narakeet type, seconds
+    marks: dict[str, float] = field(default_factory=dict)  # cue name -> seconds in, for HTML scenes
 
 
 @dataclass
@@ -291,6 +292,7 @@ class Builder:
         quotes: list[str] = []
         narration_spans: list[tuple[float, float, str]] = []
         recordings: list[tuple[float, Path, str | None]] = []  # start in the track, file, language hint
+        marks: dict[str, float] = {}  # "1", "2", … for each narration block, and SSML mark names
 
         for block in scene.blocks:
             try:
@@ -343,6 +345,7 @@ class Builder:
                 elif isinstance(block, Media):
                     if block.kind == "audio":
                         path = self._path(block.path, block.line)
+                        marks[str(sum(k.isdigit() for k in marks) + 1)] = track.seconds
                         recordings.append((track.seconds, path, lang))
                         track.add(media.decode_audio(path, SR))
                     else:
@@ -365,12 +368,19 @@ class Builder:
                     else:
                         runs = speech_runs(block.text, voice.lang or "en", self.notes)
                     start = track.seconds
+                    block_cue = str(sum(k.isdigit() for k in marks) + 1)
                     for run in runs:
                         track.silence(run.pause)
+                        marks.setdefault(block_cue, track.seconds)  # where the voice starts
+                        for mark in run.marks:
+                            marks[mark] = track.seconds
+                        if not run.text:
+                            continue
                         rate, semitones, gain = EMPHASIS[run.emphasis if run.emphasis != "none" else emphasis]
                         audio = self._speak(run.text, voice, speed * rate * run.rate,
                                             pitch * 2 ** (semitones / 12) * run.pitch)
                         track.add(apply_gain(apply_gain(audio, volume), gain + run.gain))
+                    marks.setdefault(block_cue, start)
                     if runs:
                         caption = subtitle_text(ssml_text(block.text) if block.ssml else block.text)
                         narration_spans.append((start, track.seconds, caption))
@@ -404,7 +414,7 @@ class Builder:
         else:
             cues = []
         return ScenePlan(scene.index, visuals, spec, audio, d, cues, layout,
-                         [SlideSpec(lang=sl.lang, text=sl.text) for sl in slides], transition)
+                         [SlideSpec(lang=sl.lang, text=sl.text) for sl in slides], transition, marks)
 
     def _transcripts(self, recordings: list[tuple[float, Path, str | None]]) -> list[tuple[float, float, str]]:
         """Phrases spoken in a scene's recordings, placed where each recording plays."""
@@ -689,8 +699,11 @@ class Builder:
             if v.kind == "page":
                 # Captured here, since Chromium stays on this thread, and streamed to ffmpeg as it goes
                 windows = [] if layout.repeat else _windows(overlays(), lo, hi)
+                # Cues count from the page's own start, which may be negative: a negative CSS
+                # delay starts an animation part-way through
+                cues = {k: t - lo / FPS for k, t in plan.marks.items()}
                 segments.append(_run_now(self._encode_page, v, count, windows, plan.spec.canvas, renderer,
-                                         name(f"{i}.mp4")))
+                                         name(f"{i}.mp4"), pages.cue_script(count / FPS, cues)))
                 continue
             if v.motion:
                 # One continuous animation, with slides overlaid rather than splitting it
@@ -780,7 +793,7 @@ class Builder:
         return out
 
     def _encode_page(self, v: Visual, frames: int, overlays: list[tuple[Path, float, float]], canvas: str | None,
-                     renderer: FrameRenderer, out: Path) -> Path:
+                     renderer: FrameRenderer, out: Path, init_script: str | None = None) -> Path:
         """An HTML scene captured frame by frame (pages.py), as exactly `frames` frames."""
         w, h = self.settings.width, self.settings.height
         vw, vh = v.viewport
@@ -789,7 +802,8 @@ class Builder:
         chain = [*_resize_filters(v.fit, v.position, w, h, canvas or "#000000"), "setsar=1"]
         inputs, graph = _overlay_graph(f"[0:v]{','.join(chain)}", overlays)
         captured: list[int] = []
-        with closing(pages.capture(renderer, v.path, v.viewport, scale, frames, FPS, captured.append)) as images:
+        with closing(pages.capture(renderer, v.path, v.viewport, scale, frames, FPS, captured.append,
+                                   init_script)) as images:
             media.encode_images(images, FPS, [*inputs, "-filter_complex", graph, "-map", "[v]",
                                               "-frames:v", str(frames), "-an", *_SEGMENT_CODEC], out)
         if captured and captured[0] < frames:
