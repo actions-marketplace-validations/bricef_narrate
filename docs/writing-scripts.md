@@ -21,6 +21,7 @@ speech. [Building videos](building.md) covers the commands.
 - [Play video clips](#play-video-clips)
 - [Generate pictures from code blocks](#generate-pictures-from-code-blocks)
 - [Draw diagrams](#draw-diagrams)
+- [Show animated HTML scenes](#show-animated-html-scenes)
 - [Show text slides](#show-text-slides)
 - [Style slides with a theme](#style-slides-with-a-theme)
 - [Add subtitles](#add-subtitles)
@@ -399,6 +400,57 @@ sequenceDiagram
 - The first diagram downloads Mermaid itself (about 5 MB); the Docker image
   already has it.
 
+## Show animated HTML scenes
+
+````markdown
+![](scene.html)
+
+The title appears first, then its subtitle, while this sentence is read.
+
+---
+
+(html: {file: scene.html, viewport: 1280x720, size: contain})
+
+(duration: 4)
+````
+
+`scene.html`, next to the script:
+
+```html
+<!doctype html>
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; background: #0d1117; color: #e6edf3;
+               font: 48px sans-serif; display: grid; place-content: center; text-align: center; }
+  .up { opacity: 0; transform: translateY(14px); animation: up .5s ease-out forwards; }
+  @keyframes up { to { opacity: 1; transform: none; } }
+</style>
+<h1 class="up" style="animation-delay: .3s">factor-q</h1>
+<p class="up" style="animation-delay: 1.2s">Agents that run continuously.</p>
+```
+
+- **Any web page** in the project folder can be a scene, with its CSS, fonts,
+  pictures, SVG and JavaScript.
+- **Animations play on the video's clock:**
+  - CSS animations and transitions;
+  - SVG animations;
+  - JavaScript timers, `requestAnimationFrame` and `Date`.
+
+  narrate captures the page frame by frame rather than recording it, so every
+  build gives the same video however fast the computer is.
+- **Timing:** the page starts with its scene and lasts as long as the scene.
+  With no narration and no `(duration:)`, the scene lasts until the page's last
+  animation ends (one that repeats forever doesn't count).
+- **Size:** the page is laid out at the video's size, unless `viewport` gives
+  the size it was designed for. It is then drawn sharply at the video's size,
+  with `size` and `position` as for pictures when the shapes differ.
+- **On top:** callouts, slides, subtitles and transitions work over pages.
+- **Speed:** capture runs at about twice real time. A page without scripts
+  stops being captured once its animations have finished.
+- **Limits:** a page's own sound, and `<video>` or `<audio>` inside it, aren't
+  captured or kept in time. Keep its files local; anything fetched from the
+  network slows capture and ties the build to the network.
+- HTML scenes are narrate's own; Narakeet would read the line as narration.
+
 ## Show text slides
 
 ````markdown
@@ -732,9 +784,11 @@ name it with `--source`.
   Narakeet sometimes overruns.
 - **Not supported:** PowerPoint, Google Slides and Keynote input; Narakeet's
   REST API and web editor.
-- **narrate only:** [render blocks](#generate-pictures-from-code-blocks)
-  generate pictures from code blocks. Narakeet would show them as code
-  ([§18](spec/narakeet-markdown.md#18-narrate-extensions)).
+- **narrate only** ([§18](spec/narakeet-markdown.md#18-narrate-extensions)):
+  - [render blocks](#generate-pictures-from-code-blocks) generate pictures
+    from code blocks, which Narakeet would show as code;
+  - [HTML scenes](#show-animated-html-scenes) animate web pages, which
+    Narakeet would read out as narration.
 - **Open questions:** where Narakeet's documentation is silent or
   contradicts itself, narrate makes a choice;
   [§16](spec/narakeet-markdown.md#16-gaps-and-how-narrate-resolves-them) lists each

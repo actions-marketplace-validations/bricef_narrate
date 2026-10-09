@@ -10,6 +10,7 @@ Narakeet themes that style `body`, headings, lists or `.backdrop` apply directly
 from __future__ import annotations
 
 import html
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -261,6 +262,26 @@ class FrameRenderer:
         page = self._render_page(1)
         self._load(page, page_html)
         return page.evaluate(script, arg)
+
+    @contextmanager
+    def page(self, path: Path, viewport: tuple[int, int], scale: float = 1.0, init_script: str | None = None):
+        """An HTML scene loaded in a page of its own, with its clock paused at the start.
+
+        Time in the page moves only when the caller advances it, so timers,
+        requestAnimationFrame and Date are deterministic (see pages.py)."""
+        context = self._browser.new_context(viewport={"width": viewport[0], "height": viewport[1]},
+                                            device_scale_factor=scale)
+        try:
+            page = context.new_page()
+            page.clock.install(time=0)
+            page.clock.pause_at(1)  # until now the clock ran in real time; from here it waits for us
+            if init_script:
+                page.add_init_script(init_script)
+            page.goto(path.resolve().as_uri(), wait_until="load")
+            page.evaluate("document.fonts.ready.then(() => true)")
+            yield page
+        finally:
+            context.close()
 
     def _render_page(self, scale: int):
         if scale not in self._pages:

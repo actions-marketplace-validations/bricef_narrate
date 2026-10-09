@@ -180,6 +180,7 @@ Some choices worth knowing when changing behaviour:
   - `frames.py` and `motion.py`: Chromium frames, and pan and zoom.
   - `render.py`: render blocks, their cache, and `render:placeholder`.
   - `mermaid.py`: `render:mermaid`, and the pinned mermaid.js.
+  - `pages.py`: HTML scenes, captured frame by frame.
   - `subtitles.py` and `stt.py`: subtitle cues, and speech-to-text for
     recordings.
   - `media.py`: ffmpeg.
