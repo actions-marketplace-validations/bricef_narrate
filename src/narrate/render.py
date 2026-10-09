@@ -109,24 +109,37 @@ def check(blocks: list[Media]) -> list[list[str]]:
     return problems
 
 
+def location(block: Render, ctx: Context) -> Path:
+    """Where a render block's output is kept: the project for stored renderers, else the cache."""
+    r = renderer(block.name)
+    key = json.dumps([r.name, r.version, block.body, block.settings, *(getattr(ctx, k) for k in r.context_keys)],
+                     sort_keys=True, default=str)
+    digest = hashlib.sha256(key.encode()).hexdigest()[:24]
+    if r.stored and ctx.project is not None:
+        return ctx.project / ".narrate" / "generated" / r.name / f"{digest}.png"
+    return cache_dir() / "render" / r.name / f"{digest}.png"
+
+
+def existing(block: Render, ctx: Context) -> Path | None:
+    """The output a build already made for this block, if any (the studio's preview shows it)."""
+    try:
+        path = location(block, ctx)
+    except RenderError:
+        return None
+    return path if path.exists() else None
+
+
 def output(media: Media, ctx: Context) -> Path:
     """The rendered file for a render block, from the cache when it's there."""
     r = renderer(media.render.name)
     problems = r.check(media.render)
     if problems:
         raise RenderError("; ".join(problems), media.line)
-    key = json.dumps([r.name, r.version, media.render.body, media.render.settings,
-                      *(getattr(ctx, k) for k in r.context_keys)], sort_keys=True, default=str)
-    digest = hashlib.sha256(key.encode()).hexdigest()[:24]
-    if r.stored and ctx.project is not None:
-        path = ctx.project / ".narrate" / "generated" / r.name / f"{digest}.png"
-        if path.exists() and not ctx.regenerate:
-            return path
-    else:
-        path = cache_dir() / "render" / r.name / f"{digest}.png"
-        if path.exists():
+    path = location(media.render, ctx)
+    if path.exists() and not (r.stored and ctx.regenerate):
+        if not r.stored:
             path.touch()
-            return path
+        return path
     path.parent.mkdir(parents=True, exist_ok=True)
     part = path.with_name(f"{path.stem}.part.png")
     try:
@@ -166,7 +179,10 @@ class Placeholder(Renderer):
         return problems
 
     def render(self, block: Render, ctx: Context, out: Path) -> None:
-        w, h = ctx.width, ctx.height
+        ctx.frames.screenshot(self.page(block, ctx.width, ctx.height), out)
+
+    def page(self, block: Render, w: int, h: int) -> str:
+        """The card as an HTML page at w×h (the studio's preview shows it as it is)."""
         background, fg = colour(block, "background", "#d9d9d9"), colour(block, "color", "#4d4d4d")
         label = html.escape(block.body.strip()) or "Placeholder"
         size = round(min(w, h) * 0.07)
@@ -184,7 +200,7 @@ svg {{ position: absolute; inset: 0; }}
 <line x1="0" y1="0" x2="{w}" y2="{h}"/><line x1="{w}" y1="0" x2="0" y2="{h}"/></g></svg>
 <div class="label"><span>{label}</span><span class="size">{w} × {h}</span></div>
 </body></html>"""
-        ctx.frames.screenshot(page, out)
+        return page
 
 
 from . import mermaid, web  # noqa: E402,F401 -- register render:mermaid and render:web

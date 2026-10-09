@@ -153,3 +153,32 @@ def test_scenes_timing_and_problems_follow_the_text(tmp_path, page):
         server.end_streams()
         server.should_exit = True
         thread.join(5)
+
+
+# -- frame preview (#53) --------------------------------------------------------------
+
+def test_the_preview_follows_the_cursor(tmp_path, page):
+    from PIL import Image
+
+    from narrate.studio.server import create_app as make
+
+    for name, colour in (("red.png", "red"), ("blue.png", "blue")):
+        Image.new("RGB", (640, 360), colour).save(tmp_path / name)
+    script = tmp_path / "s.md"
+    script.write_text("![](red.png)\n\nThe red scene.\n\n---\n\n![](blue.png)\n\nThe blue scene.\n")
+    server = studio_server(make(script, "silent"), "127.0.0.1", 0)
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    while not server.started:
+        time.sleep(0.05)
+    try:
+        page.goto(f"http://127.0.0.1:{server.servers[0].sockets[0].getsockname()[1]}/")
+        picture = page.frame_locator("iframe[title=frame]").locator("img.media")
+        expect(picture).to_have_attribute("src", "/files/red.png")
+        page.locator(".cm-line:not(.cm-narrate-scene)", has_text="The blue scene").click(position={"x": 4, "y": 4})
+        expect(picture).to_have_attribute("src", "/files/blue.png")
+        expect(page.get_by_test_id("moment")).to_contain_text("scene 2")
+    finally:
+        server.end_streams()
+        server.should_exit = True
+        thread.join(5)

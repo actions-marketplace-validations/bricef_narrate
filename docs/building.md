@@ -48,12 +48,20 @@ The studio is a web app for writing a script, served from your computer.
   Click one to go there.
 - **Problems:** missing files, unknown directions and bad values are marked
   on their lines as you type.
+- **Preview:** the frame at the cursor, composed by the same code a build uses,
+  with pictures, slides, callouts and theme.
+  - **The moment shown** is the start of the paragraph the cursor is in.
+  - **Clips** show a still from that point, and pan and zoom the crop
+    reached by then.
+  - **HTML scenes** show the page itself, playing.
+  - **Render blocks** show what the last build drew, or a card until a build
+    has drawn them.
 - **Engine:** `--tts` chooses the one used for timing and, later, previews:
   Kokoro by default, which is free. The header shows how many paragraphs it
   still has to synthesise, and how many characters that is; with
   ElevenLabs, that's what a build would spend.
-- **Coming next:** frame previews, narration playback and builds (narrate
-  #28; the design is in [design/studio.md](design/studio.md)).
+- **Coming next:** narration playback and builds (narrate #28; the design
+  is in [design/studio.md](design/studio.md)).
 
 **On another machine,** such as a server you reach over a VPN:
 `narrate studio script.md --host 0.0.0.0`, then open port 8787 on that

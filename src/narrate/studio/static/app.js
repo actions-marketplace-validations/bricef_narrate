@@ -3,6 +3,7 @@ import { html, render, useCallback, useEffect, useRef, useState } from "./vendor
 import { createEditor, goToLine, seconds, showAnalysis } from "./editor.js";
 
 const ANALYSE_AFTER_MS = 300;
+const PREVIEW_AFTER_MS = 150;
 
 async function getJSON(url, options) {
   const response = await fetch(url, options);
@@ -68,6 +69,41 @@ function sceneAt(analysis, line) {
   return found;
 }
 
+/** The moment the cursor points at: its scene, and the start of the paragraph it's in or after. */
+function momentAt(analysis, line) {
+  const index = sceneAt(analysis, line);
+  const scene = analysis && analysis.scenes.find((s) => s.index === index);
+  if (!scene || scene.duration == null) return null;
+  let time = 0;
+  for (const p of scene.paragraphs) if (p.line <= line) time = p.start;
+  return { scene: scene.index, time, start: scene.start };
+}
+
+/** The frame at the cursor's moment, at the video's size, scaled to fit the pane. */
+function Preview({ analysis, shown, moment, error }) {
+  const box = useRef(null);
+  const [scale, setScale] = useState(0.4);
+  const [w, h] = (analysis && analysis.size) || [1280, 720];
+  useEffect(() => {
+    if (!box.current) return;
+    const observer = new ResizeObserver(([entry]) => setScale(entry.contentRect.width / w));
+    observer.observe(box.current);
+    return () => observer.disconnect();
+  }, [w]);
+  const frameStyle = `width:${w}px;height:${h}px;transform:scale(${scale})`;
+  return html`<aside class="preview" aria-label="preview">
+    <div class="screen" ref=${box} style=${`height:${h * scale}px`}>
+      ${shown && shown.kind === "frame" && html`<iframe title="frame" srcdoc=${shown.html} style=${frameStyle} tabindex="-1"></iframe>`}
+      ${shown && shown.kind === "page" && html`<iframe title="frame" src=${shown.url} style=${frameStyle} tabindex="-1"></iframe>`}
+    </div>
+    <p class="caption" data-testid="moment">
+      ${moment ? `scene ${moment.scene} · ${seconds(moment.time)} into it · ${seconds(moment.start + moment.time)} in the video` : "No scene here"}
+      <span class="size">${w} × ${h}</span>
+    </p>
+    ${error && html`<p class="preview-error">${error}</p>`}
+  </aside>`;
+}
+
 function App() {
   const host = useRef(null);
   const editor = useRef(null);
@@ -82,6 +118,10 @@ function App() {
   const [analysis, setAnalysis] = useState(null);
   const [cursorLine, setCursorLine] = useState(1);
   const analyseTimer = useRef(null);
+  const [shown, setShown] = useState(null);
+  const [previewError, setPreviewError] = useState(null);
+  const previewTimer = useRef(null);
+  const moment = analysis ? momentAt(analysis, cursorLine) : null;
 
   const setDirty = (value) => { dirtyRef.current = value; setDirtyState(value); };
 
@@ -146,6 +186,21 @@ function App() {
 
   useEffect(() => { load(); }, [load]);
 
+  // The preview follows the cursor, and a new analysis
+  useEffect(() => {
+    clearTimeout(previewTimer.current);
+    if (!analysis || !moment) return;
+    previewTimer.current = setTimeout(async () => {
+      const { status, body } = await getJSON("/api/frame", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: analysis.id, scene: moment.scene, time: moment.time }),
+      }).catch(() => ({ status: 0, body: {} }));
+      if (status === 200) { setShown(body); setPreviewError(null); }
+      else if (status === 409) scheduleAnalysis();
+      else if (status) setPreviewError(body.error || `no preview (${status})`);
+    }, PREVIEW_AFTER_MS);
+  }, [analysis, moment && moment.scene, moment && moment.time]);
+
   useEffect(() => {
     const events = new EventSource("/api/events");
     events.addEventListener("open", () => setOnline(true));
@@ -193,6 +248,7 @@ function App() {
       <${Outline} analysis=${analysis} current=${sceneAt(analysis, cursorLine)}
         onPick=${(line) => goToLine(editor.current.view, line)} />
       <section class="editor" ref=${host} aria-label="script"></section>
+      <${Preview} analysis=${analysis} shown=${shown} moment=${moment} error=${previewError} />
     </main>`;
 }
 
