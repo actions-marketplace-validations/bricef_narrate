@@ -9,13 +9,15 @@ planned is reported and skipped, so one bad line doesn't blank the outline.
 
 from __future__ import annotations
 
+import hashlib
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from .. import render
-from ..build import Builder, BuildError, merge_groups
-from ..config import ConfigError
+from ..build import Builder, BuildError, ScenePlan, merge_groups
+from ..config import ConfigError, Settings
 from ..script import Media, Narration, Render, Scene, ScriptError, Slide, parse
 from ..tts import EstimatingSynth
 
@@ -47,12 +49,31 @@ def _title(scene: Scene) -> str:
     return "pause"
 
 
+@dataclass
+class Analysis:
+    """The report the studio shows, and the plans behind it (the preview composes frames from them)."""
+
+    report: dict
+    plans: dict[int, ScenePlan] = field(default_factory=dict)  # by scene index
+    settings: Settings | None = None
+
+
+def text_id(text: str) -> str:
+    return hashlib.sha256(text.encode()).hexdigest()[:16]
+
+
 def analyse(text: str, script: Path, synth: Any) -> dict:
     """Problems, scenes and timing for `text`, as if saved at `script`. `synth` is the engine to time with."""
+    return run(text, script, synth).report
+
+
+def run(text: str, script: Path, synth: Any) -> Analysis:
+    """analyse(), keeping the scene plans for previews."""
     try:
         parsed = parse(text, script)
     except ScriptError as e:
-        return {"problems": [_problem(e.line, str(e))], "scenes": [], "duration": None, "missing": None}
+        return Analysis({"id": text_id(text), "problems": [_problem(e.line, str(e))], "scenes": [], "duration": None,
+                         "missing": None})
     titles = {scene.index: _title(scene) for scene in parsed.scenes}  # before any stand-ins replace pictures
     problems: list[dict] = []
     for block in (b for scene in parsed.scenes for b in scene.blocks):
@@ -72,10 +93,11 @@ def analyse(text: str, script: Path, synth: Any) -> dict:
         builder = Builder(parsed, estimator, log=lambda _: None, measure_pages=False)
     except BuildError as e:
         problems.append(_problem(e.line, str(e)))
-        return {"problems": problems + [_warning(w) for w in parsed.warnings], "scenes": [], "duration": None,
-                "missing": None}
+        return Analysis({"id": text_id(text), "problems": problems + [_warning(w) for w in parsed.warnings],
+                         "scenes": [], "duration": None, "missing": None})
 
     scenes: list[dict] = []
+    kept: dict[int, ScenePlan] = {}
     start = 0.0
     for group in merge_groups(parsed.scenes):
         try:
@@ -92,6 +114,7 @@ def analyse(text: str, script: Path, synth: Any) -> dict:
             entry = {"index": scene.index, "line": scene.line, "title": titles[scene.index], "start": round(start, 3),
                      "duration": None, "paragraphs": []}
             if plan is not None:
+                kept[scene.index] = plan
                 entry["duration"] = round(plan.duration, 3)
                 entry["paragraphs"] = [{"line": p.line, "start": round(p.start, 3), "end": round(p.end, 3),
                                         "estimated": p.estimated} for p in plan.paragraphs]
@@ -99,10 +122,12 @@ def analyse(text: str, script: Path, synth: Any) -> dict:
             scenes.append(entry)
     builder.close()
     problems += [_warning(w) for w in parsed.warnings]
-    return {
+    return Analysis({
+        "id": text_id(text),
+        "size": [builder.settings.width, builder.settings.height],
         "problems": sorted(problems, key=lambda p: p["line"]),
         "scenes": scenes,
         "duration": round(start, 3),
         "missing": {"paragraphs": estimator.estimates, "characters": estimator.missing_chars},
         "notes": sorted(builder.notes),
-    }
+    }, kept, builder.settings)

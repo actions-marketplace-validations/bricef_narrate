@@ -31,7 +31,7 @@ from .config import (
 )
 from .doctor import find_font
 from .frames import FrameRenderer, FrameSpec, SlideSpec
-from .script import ANIMATED_SIZES, POSITIONS, SIZES, Directive, Media, Narration, Quote, Scene, Script, Slide
+from .script import ANIMATED_SIZES, POSITIONS, SIZES, Directive, Media, Narration, Quote, Render, Scene, Script, Slide
 from .subtitles import Cue
 from .ssml import ssml_runs
 from .text import Run, speech_runs, ssml_text, subtitle_text
@@ -90,6 +90,7 @@ class Visual:
     motion: str | None = None  # pan/zoom animation of a still image
     viewport: tuple[int, int] | None = None  # an HTML scene's design size
     zoom: float | None = None  # how far a pan/zoom moves, if not motion.ZOOM / PAN_ZOOM
+    render: Render | None = None  # a render block not drawn yet (planning without rendering)
 
 
 @dataclass
@@ -477,7 +478,7 @@ class Builder:
     def _visual(self, m: Media, workdir: Path, natural: bool = False) -> Visual:
         if m.render and not m.path:
             # Audio builds and the speech prefetch plan timing only; they don't render
-            return Visual("still", None, m.size or self.settings.asset_resize, m.position or "center")
+            return Visual("still", None, m.size or self.settings.asset_resize, m.position or "center", render=m.render)
         path = self._path(m.path, m.line)
         size = m.size or self.settings.asset_resize
         animation = None

@@ -12,7 +12,9 @@ import asyncio
 import contextlib
 import json
 import os
+import shutil
 import tempfile
+from collections import OrderedDict
 from pathlib import Path
 
 from starlette.applications import Starlette
@@ -50,6 +52,14 @@ class Session:
         self.engine = engine
         self._synth = None
         self._listeners: set[asyncio.Queue] = set()
+        self.analyses: OrderedDict = OrderedDict()  # the last few analyses by text id, for previews
+        self.scratch = Path(tempfile.mkdtemp(prefix="narrate-studio-"))  # clip stills, copies of renders
+
+    def remember(self, analysis) -> None:
+        self.analyses[analysis.report["id"]] = analysis
+        self.analyses.move_to_end(analysis.report["id"])
+        while len(self.analyses) > 4:
+            self.analyses.popitem(last=False)
 
     def synth(self):
         """The session's speech engine (Kokoro by default, D10), made on first use."""
@@ -146,15 +156,39 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
         return JSONResponse({"version": version})
 
     async def analyse(request: Request) -> Response:
-        from .analysis import analyse as run
+        from .analysis import run
 
         body = await request.json()
         try:
             synth = session.synth()
         except RuntimeError as e:  # e.g. ElevenLabs without a key
             return JSONResponse({"error": str(e)}, status_code=503)
-        result = await run_in_threadpool(run, str(body.get("text", "")), session.script, synth)
-        return JSONResponse({**result, "engine": session.engine})
+        analysis = await run_in_threadpool(run, str(body.get("text", "")), session.script, synth)
+        session.remember(analysis)
+        return JSONResponse({**analysis.report, "engine": session.engine})
+
+    async def preview(request: Request) -> Response:
+        from .preview import Files, frame
+
+        body = await request.json()
+        analysis = session.analyses.get(str(body.get("id")))
+        if analysis is None:
+            return JSONResponse({"error": "analyse the script again"}, status_code=409)
+        plan = analysis.plans.get(int(body.get("scene", 0)))
+        if plan is None:
+            return JSONResponse({"error": "that scene can't be shown"}, status_code=404)
+        try:
+            shown = await run_in_threadpool(frame, plan, float(body.get("time", 0)), analysis.settings,
+                                            Files(session.project, session.scratch))
+        except Exception as e:  # noqa: BLE001 - a preview never takes the studio down
+            return JSONResponse({"error": f"couldn't preview this moment: {e}"}, status_code=500)
+        return JSONResponse(shown)
+
+    async def scratch_file(request: Request) -> Response:
+        path = (session.scratch / request.path_params["name"]).resolve()
+        if not path.is_relative_to(session.scratch) or not path.is_file():
+            return Response("not found", status_code=404)
+        return FileResponse(path)
 
     async def events(request: Request) -> Response:
         queue = session.subscribe()
@@ -191,12 +225,15 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
             yield
         finally:
             watcher.cancel()
+            shutil.rmtree(session.scratch, ignore_errors=True)
 
     app = Starlette(routes=[
         Route("/", index),
         Route("/api/script", get_script, methods=["GET"]),
         Route("/api/script", put_script, methods=["PUT"]),
         Route("/api/analyse", analyse, methods=["POST"]),
+        Route("/api/frame", preview, methods=["POST"]),
+        Route("/scratch/{name}", scratch_file),
         Route("/api/events", events),
         Route("/files/{path:path}", project_file),
         Mount("/static", StaticFiles(directory=STATIC), name="static"),

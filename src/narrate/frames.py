@@ -106,6 +106,10 @@ class FrameSpec:
     callouts: list[dict[str, Any]] = field(default_factory=list)
     over_video: bool = False  # transparent overlay for ffmpeg to composite
     backdrop: bool = False  # in an overlay, keep the theme backdrop (over an animated image)
+    # A window onto the image instead of fit/position, in its pixels (x, y, w, h): one moment of
+    # a pan or zoom, for the studio's preview; with image_size, the image's own (w, h)
+    crop: tuple[float, float, float, float] | None = None
+    image_size: tuple[int, int] | None = None
 
 
 class CodeLight(Style):
@@ -171,7 +175,13 @@ def callout_svg(index: int, props: dict[str, Any], width: int, height: int) -> s
             f'fill="rgba(0,0,0,{alpha})" mask="url(#m{index})"/></svg>')
 
 
-def frame_html(spec: FrameSpec, width: int, height: int) -> str:
+def file_uri(path: Path) -> str:
+    return path.resolve().as_uri()
+
+
+def frame_html(spec: FrameSpec, width: int, height: int, url=file_uri) -> str:
+    """The frame as an HTML page. `url` turns a file into the address the page loads it from:
+    file:// for headless Chromium in a build, the studio's own routes in its preview."""
     custom_css = spec.theme if spec.theme.endswith(".css") else None
     theme = "light" if spec.theme == "light" else "default"
     over = spec.image is not None or spec.over_video
@@ -184,16 +194,21 @@ def frame_html(spec: FrameSpec, width: int, height: int) -> str:
         styles.append(f"body {{ background: {spec.canvas or '#000'}; }}")
     elif spec.canvas:
         styles.append(f"body {{ background: {spec.canvas}; }}")
-    if spec.image is not None:
+    if spec.image is not None and spec.crop and spec.image_size:
+        x, y, w, h = spec.crop
+        sx, sy = width / w, height / h
+        styles.append(f"img.media {{ inset: auto; left: {-x * sx:.2f}px; top: {-y * sy:.2f}px; "
+                      f"width: {spec.image_size[0] * sx:.2f}px; height: {spec.image_size[1] * sy:.2f}px; }}")
+    elif spec.image is not None:
         styles.append(f"img.media {{ object-fit: {OBJECT_FIT[spec.fit]}; "
                       f"object-position: {OBJECT_POSITION[spec.position]}; }}")
     head = f"<style>{''.join(styles)}</style>"
     if custom_css:
-        head += f'<link rel="stylesheet" href="{Path(custom_css).resolve().as_uri()}">'
+        head += f'<link rel="stylesheet" href="{html.escape(url(Path(custom_css)))}">'
 
     parts = []
     if spec.image is not None:
-        parts.append(f'<img class="media" src="{spec.image.resolve().as_uri()}">')
+        parts.append(f'<img class="media" src="{html.escape(url(spec.image))}">')
     if spec.slide is not None:
         dark = over or theme == "light"
         size = f' style="font-size: {spec.font_size}px"' if spec.font_size else ""
