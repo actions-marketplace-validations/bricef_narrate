@@ -39,8 +39,21 @@ The studio is a web app for writing a script, served from your computer.
 - **Edits made elsewhere:** they appear in the studio by themselves when it
   has nothing unsaved. Otherwise it asks whether to load the file or keep
   your version. It never overwrites a newer file without asking.
-- **Coming next:** previews, narration playback, timing and builds
-  (narrate #28; the design is in [design/studio.md](design/studio.md)).
+- **Timing as you type:** each scene separator is labelled with the scene's
+  number and length, and each paragraph with its own.
+  - Speech already synthesised gives exact lengths.
+  - The rest are estimated from the text and marked `≈`. Nothing is
+    synthesised while you type, so nothing is spent.
+- **Outline:** the scenes, with when each starts and how long it lasts.
+  Click one to go there.
+- **Problems:** missing files, unknown directions and bad values are marked
+  on their lines as you type.
+- **Engine:** `--tts` chooses the one used for timing and, later, previews:
+  Kokoro by default, which is free. The header shows how many paragraphs it
+  still has to synthesise, and how many characters that is; with
+  ElevenLabs, that's what a build would spend.
+- **Coming next:** frame previews, narration playback and builds (narrate
+  #28; the design is in [design/studio.md](design/studio.md)).
 
 **On another machine,** such as a server you reach over a VPN:
 `narrate studio script.md --host 0.0.0.0`, then open port 8787 on that
@@ -404,7 +417,7 @@ models and the ElevenLabs key, and prints a fix for each problem.
 
 | Command | Does |
 | --- | --- |
-| `narrate studio SCRIPT [--open]` | edit the script in a web app (`--host`, `--port` to serve elsewhere) |
+| `narrate studio SCRIPT [--open]` | edit the script in a web app (`--tts` for its engine; `--host`, `--port` to serve elsewhere) |
 | `narrate build SCRIPT [-o OUT.mp4]` | render a video (`SCRIPT` may be a `.zip`; `--source` picks the script inside; `--regenerate` retakes web captures) |
 | `narrate audio SCRIPT [-o OUT]` | render the narration only |
 | `narrate check SCRIPT` | report missing files and problems, without rendering |

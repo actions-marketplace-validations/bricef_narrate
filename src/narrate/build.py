@@ -102,6 +102,16 @@ class Layout:
 
 
 @dataclass
+class ParagraphTiming:
+    """When a narration block (a paragraph or a recording) plays in its scene."""
+
+    line: int
+    start: float
+    end: float
+    estimated: bool = False  # its length is a guess from the text (a preview's EstimatingSynth)
+
+
+@dataclass
 class ScenePlan:
     index: int
     visuals: list[Visual]
@@ -113,6 +123,7 @@ class ScenePlan:
     slides: list[SlideSpec] = field(default_factory=list)  # share the scene's time equally
     transition: tuple[str, float] | None = None  # incoming: Narakeet type, seconds
     marks: dict[str, float] = field(default_factory=dict)  # cue name -> seconds in, for HTML scenes
+    paragraphs: list[ParagraphTiming] = field(default_factory=list)
 
 
 @dataclass
@@ -175,8 +186,9 @@ def apply_gain(samples: np.ndarray, volume: float | str) -> np.ndarray:
 
 class Builder:
     def __init__(self, script: Script, synth: Synth, *, log: Callable[[str], None] | None = None,
-                 jobs: int | None = None, regenerate: bool = False):
+                 jobs: int | None = None, regenerate: bool = False, measure_pages: bool = True):
         self.script = script
+        self.measure_pages = measure_pages  # load HTML scenes to time them (the studio's previews don't)
         self.regenerate = regenerate  # make stored render outputs (render:web) again
         self.synth = synth
         # Encodes run in a thread pool alongside narration; x264 threads each one too
@@ -236,6 +248,8 @@ class Builder:
         lo, hi = self.synth.speed_range
         native = min(hi, max(lo, speed))
         audio = self.synth.synth(text, voice, native, self.notes)
+        if not audio.any():  # silence (a preview's estimate): only its length matters
+            return np.zeros(int(len(audio) * native / speed), dtype=np.float32)
         if abs(speed / native - 1.0) > 1e-3 and len(audio):
             audio = media.time_stretch(audio, SR, speed / native)
         if abs(pitch - 1.0) > 1e-3 and len(audio):
@@ -295,6 +309,7 @@ class Builder:
         narration_spans: list[tuple[float, float, str]] = []
         recordings: list[tuple[float, Path, str | None]] = []  # start in the track, file, language hint
         marks: dict[str, float] = {}  # "1", "2", … for each narration block, and SSML mark names
+        paragraphs: list[ParagraphTiming] = []
 
         for block in scene.blocks:
             try:
@@ -349,7 +364,9 @@ class Builder:
                         path = self._path(block.path, block.line)
                         marks[str(sum(k.isdigit() for k in marks) + 1)] = track.seconds
                         recordings.append((track.seconds, path, lang))
+                        start = track.seconds
                         track.add(media.decode_audio(path, SR))
+                        paragraphs.append(ParagraphTiming(block.line, start, track.seconds))
                     else:
                         if block.size is None and image_size and block.kind == "image":
                             block.size = image_size
@@ -370,6 +387,7 @@ class Builder:
                     else:
                         runs = speech_runs(block.text, voice.lang or "en", self.notes)
                     start = track.seconds
+                    estimates = getattr(self.synth, "estimates", 0)
                     block_cue = str(sum(k.isdigit() for k in marks) + 1)
                     for run in runs:
                         track.silence(run.pause)
@@ -383,6 +401,8 @@ class Builder:
                                             pitch * 2 ** (semitones / 12) * run.pitch)
                         track.add(apply_gain(apply_gain(audio, volume), gain + run.gain))
                     marks.setdefault(block_cue, start)
+                    paragraphs.append(ParagraphTiming(block.line, marks[block_cue], track.seconds,
+                                                      getattr(self.synth, "estimates", 0) > estimates))
                     if runs:
                         caption = subtitle_text(ssml_text(block.text) if block.ssml else block.text)
                         narration_spans.append((start, track.seconds, caption))
@@ -416,7 +436,7 @@ class Builder:
         else:
             cues = []
         return ScenePlan(scene.index, visuals, spec, audio, d, cues, layout,
-                         [SlideSpec(lang=sl.lang, text=sl.text) for sl in slides], transition, marks)
+                         [SlideSpec(lang=sl.lang, text=sl.text) for sl in slides], transition, marks, paragraphs)
 
     def _transcripts(self, recordings: list[tuple[float, Path, str | None]]) -> list[tuple[float, float, str]]:
         """Phrases spoken in a scene's recordings, placed where each recording plays."""
@@ -471,7 +491,7 @@ class Builder:
                 viewport = parse_size(m.viewport) if m.viewport else (self.settings.width, self.settings.height)
             except ConfigError as e:
                 raise BuildError(f"viewport: {e}", m.line) from None
-            length = pages.natural_length(self._pages(), path, viewport) if natural else 0.0
+            length = pages.natural_length(self._pages(), path, viewport) if natural and self.measure_pages else 0.0
             return Visual("page", path, size, position, length=length or DEFAULT_STILL_SECONDS, viewport=viewport)
         if m.kind == "image" and not media.is_animated_gif(path):
             return Visual("still", path, size, position, motion=animation,

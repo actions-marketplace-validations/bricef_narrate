@@ -304,9 +304,35 @@ class SilentSynth:
     def resolve(self, name: str | None, lang: str | None, notes: set[str]) -> Voice:
         return kokoro_resolve(name, lang, set())
 
-    def synth(self, text, voice: Voice, speed: float, notes: set[str]) -> np.ndarray:
+    def synth(self, text, voice: Voice, speed: float, notes: set[str], only_cached: bool = False) -> np.ndarray:
         seconds = max(0.3, len(speech_text(text)) * self.seconds_per_char / speed)
         return np.zeros(int(seconds * SAMPLE_RATE), dtype=np.float32)
+
+
+class EstimatingSynth:
+    """Speech from `real`'s cache where it's there, and an estimate from the text's length where it isn't.
+
+    For previews (the studio's timing): nothing is synthesised, so nothing is
+    spent. `estimates` counts the requests that weren't cached, and
+    `missing_chars` what synthesising them would send to the engine."""
+
+    def __init__(self, real: "Synth"):
+        self.real = real
+        self.name = real.name
+        self.speed_range = real.speed_range
+        self.estimates = 0
+        self.missing_chars = 0
+
+    def resolve(self, name: str | None, lang: str | None, notes: set[str]) -> Voice:
+        return self.real.resolve(name, lang, notes)
+
+    def synth(self, text, voice: Voice, speed: float, notes: set[str]) -> np.ndarray:
+        hit = self.real.synth(text, voice, speed, notes, only_cached=True)
+        if hit is not None:
+            return hit
+        self.estimates += 1
+        self.missing_chars += len(speech_text(text))
+        return SilentSynth().synth(text, voice, speed, notes)
 
 
 class KokoroSynth:
@@ -322,7 +348,7 @@ class KokoroSynth:
     speed_range = (0.5, 2.0)
 
     def __init__(self) -> None:
-        self._models = ensure_models()
+        self._models: Path | None = None  # fetched on first synthesis, not just to look in the cache
         cores = os.cpu_count() or 1
         self.concurrency = max(1, int(os.environ.get("NARRATE_KOKORO_WORKERS", 0)) or min(4, cores // 2))
         self._threads = max(1, cores // self.concurrency)
@@ -334,6 +360,10 @@ class KokoroSynth:
         if not hasattr(self._local, "kokoro"):
             import onnxruntime as rt
             from kokoro_onnx import Kokoro
+
+            with self._phonemize:  # one download, whichever thread gets here first
+                if self._models is None:
+                    self._models = ensure_models()
 
             options = rt.SessionOptions()
             options.intra_op_num_threads = self._threads
@@ -348,12 +378,13 @@ class KokoroSynth:
     def resolve(self, name: str | None, lang: str | None, notes: set[str]) -> Voice:
         return kokoro_resolve(name, lang, notes)
 
-    def synth(self, text: str, voice: Voice, speed: float, notes: set[str]) -> np.ndarray:
+    def synth(self, text: str, voice: Voice, speed: float, notes: set[str],
+              only_cached: bool = False) -> np.ndarray | None:
         clamped = min(2.0, max(0.5, speed))
         if clamped != speed:
             notes.add(f"voice-speed {speed} (Kokoro accepts 0.5–2; clamped)")
         cached = self._cache.path(MODEL_FILES[0], text, voice.id, voice.lang, round(clamped, 3))
-        if (hit := self._cache.load(cached)) is not None:
+        if (hit := self._cache.load(cached)) is not None or only_cached:
             return hit
         kokoro = self._engine()
         segments = [(text, None)] if isinstance(text, str) else text
@@ -430,13 +461,18 @@ class ElevenLabsSynth:
         code = lang.split("-")[0] if lang else None
         return Voice(voice_id or ELEVENLABS_VOICES[voice_name][0], code)
 
-    def synth(self, text: str, voice: Voice, speed: float, notes: set[str]) -> np.ndarray:
+    def synth(self, text: str, voice: Voice, speed: float, notes: set[str],
+              only_cached: bool = False) -> np.ndarray | None:
         if not isinstance(text, str):
             # One request per segment, each with its own language hint; phonetic
             # segments go to a model that reads IPA
-            parts = [self._synth_phonetic(to_ipa(part, tag), voice, speed, notes) if tag in PHONETIC_STYLES
-                     else self.synth(part, Voice(voice.id, tag.split("-")[0] if tag else voice.lang), speed, notes)
+            parts = [self._synth_phonetic(to_ipa(part, tag), voice, speed, notes, only_cached)
+                     if tag in PHONETIC_STYLES
+                     else self.synth(part, Voice(voice.id, tag.split("-")[0] if tag else voice.lang), speed, notes,
+                                     only_cached)
                      for part, tag in text]
+            if any(p is None for p in parts):
+                return None
             gap = np.zeros(int(JOIN_SECONDS * SAMPLE_RATE), dtype=np.float32)
             return np.concatenate([p for part in parts for p in (part, gap)][:-1])
         lo, hi = self.speed_range
@@ -444,7 +480,7 @@ class ElevenLabsSynth:
         if clamped != speed:
             notes.add(f"voice-speed {speed} ({self.model} accepts {lo}–{hi}; clamped)")
         cached = self._cache.path(self.model, text, voice.id, voice.lang, round(clamped, 3))
-        if (hit := self._cache.load(cached)) is not None:
+        if (hit := self._cache.load(cached)) is not None or only_cached:
             return hit
         body: dict = {"text": text, "model_id": self.model}
         if clamped != 1.0:
@@ -463,12 +499,13 @@ class ElevenLabsSynth:
         np.save(cached, audio)
         return audio
 
-    def _synth_phonetic(self, ipa: str, voice: Voice, speed: float, notes: set[str]) -> np.ndarray:
+    def _synth_phonetic(self, ipa: str, voice: Voice, speed: float, notes: set[str],
+                        only_cached: bool = False) -> np.ndarray | None:
         """A word given in IPA, via a <phoneme> tag (only the flash/turbo v2 models read them)."""
         lo, hi = ELEVENLABS_SPEED
         clamped = min(hi, max(lo, speed))
         cached = self._cache.path(ELEVENLABS_PHONEME_MODEL, "ipa", ipa, voice.id, round(clamped, 3))
-        if (hit := self._cache.load(cached)) is not None:
+        if (hit := self._cache.load(cached)) is not None or only_cached:
             return hit
         notes.add(f"phonetic spans on ElevenLabs are voiced by {ELEVENLABS_PHONEME_MODEL}, "
                   "the model family that reads IPA")

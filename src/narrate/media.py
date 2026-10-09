@@ -155,8 +155,19 @@ class Probe:
     has_subtitles: bool
 
 
-@cache
+_probes: dict[tuple, "Probe"] = {}  # per file version: a studio session outlives edits to its media
+
+
 def probe(path: Path) -> Probe:
+    """A media file's length and streams, remembered per file version (the studio asks often)."""
+    stat = path.stat()
+    key = (str(path.resolve()), stat.st_mtime_ns, stat.st_size)
+    if key not in _probes:
+        _probes[key] = _probe(path)
+    return _probes[key]
+
+
+def _probe(path: Path) -> Probe:
     if path.suffix.lower() == ".gif":
         return _probe_gif(path)
     proc = subprocess.run([ffmpeg(), "-hide_banner", "-i", str(path)], capture_output=True)
