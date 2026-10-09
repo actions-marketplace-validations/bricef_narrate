@@ -56,6 +56,7 @@ class Analysis:
     report: dict
     plans: dict[int, ScenePlan] = field(default_factory=dict)  # by scene index
     settings: Settings | None = None
+    text: str = ""  # what was analysed (narration playback synthesises from it)
 
 
 def text_id(text: str) -> str:
@@ -73,7 +74,7 @@ def run(text: str, script: Path, synth: Any) -> Analysis:
         parsed = parse(text, script)
     except ScriptError as e:
         return Analysis({"id": text_id(text), "problems": [_problem(e.line, str(e))], "scenes": [], "duration": None,
-                         "missing": None})
+                         "missing": None}, text=text)
     titles = {scene.index: _title(scene) for scene in parsed.scenes}  # before any stand-ins replace pictures
     problems: list[dict] = []
     for block in (b for scene in parsed.scenes for b in scene.blocks):
@@ -94,12 +95,13 @@ def run(text: str, script: Path, synth: Any) -> Analysis:
     except BuildError as e:
         problems.append(_problem(e.line, str(e)))
         return Analysis({"id": text_id(text), "problems": problems + [_warning(w) for w in parsed.warnings],
-                         "scenes": [], "duration": None, "missing": None})
+                         "scenes": [], "duration": None, "missing": None}, text=text)
 
     scenes: list[dict] = []
     kept: dict[int, ScenePlan] = {}
     start = 0.0
     for group in merge_groups(parsed.scenes):
+        missing_before = estimator.missing_chars
         try:
             plans = list(builder.plans(group, script.parent))
         except (BuildError, ConfigError) as e:
@@ -112,7 +114,9 @@ def run(text: str, script: Path, synth: Any) -> Analysis:
             plans = [None] * len(group)
         for scene, plan in zip(group, plans):
             entry = {"index": scene.index, "line": scene.line, "title": titles[scene.index], "start": round(start, 3),
-                     "duration": None, "paragraphs": []}
+                     "duration": None, "paragraphs": [],
+                     # characters the engine would still be sent for this scene (merged scenes share one count)
+                     "missing_chars": estimator.missing_chars - missing_before}
             if plan is not None:
                 kept[scene.index] = plan
                 entry["duration"] = round(plan.duration, 3)
@@ -130,4 +134,4 @@ def run(text: str, script: Path, synth: Any) -> Analysis:
         "duration": round(start, 3),
         "missing": {"paragraphs": estimator.estimates, "characters": estimator.missing_chars},
         "notes": sorted(builder.notes),
-    }, kept, builder.settings)
+    }, kept, builder.settings, text)

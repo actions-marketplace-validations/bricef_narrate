@@ -25,6 +25,7 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
 STATIC = Path(__file__).parent / "static"
+ENGINES = ("auto", "kokoro", "elevenlabs", "silent")
 POLL_SECONDS = 0.5
 KEEPALIVE_SECONDS = 15.0
 
@@ -184,6 +185,33 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
             return JSONResponse({"error": f"couldn't preview this moment: {e}"}, status_code=500)
         return JSONResponse(shown)
 
+    async def set_engine(request: Request) -> Response:
+        from ..tts import make_synth
+
+        engine = str((await request.json()).get("engine", ""))
+        if engine not in ENGINES:
+            return JSONResponse({"error": f"no engine {engine!r}"}, status_code=400)
+        try:
+            synth = make_synth(engine)  # check it can start before switching (an ElevenLabs key, say)
+        except RuntimeError as e:
+            return JSONResponse({"error": str(e), "engine": session.engine}, status_code=400)
+        session.engine, session._synth = engine, synth
+        return JSONResponse({"engine": engine})
+
+    async def scene_audio(request: Request) -> Response:
+        from .audio import scene_audio as synthesise
+
+        analysis = session.analyses.get(str((await request.json()).get("id")))
+        if analysis is None:
+            return JSONResponse({"error": "analyse the script again"}, status_code=409)
+        try:
+            synth = session.synth()
+            result = await run_in_threadpool(synthesise, analysis.text, session.script, synth,
+                                             int(request.path_params["index"]), session.scratch)
+        except Exception as e:  # noqa: BLE001 - the engine's own message (no key, a refused request) is the answer
+            return JSONResponse({"error": str(e)}, status_code=502)
+        return JSONResponse(result)
+
     async def scratch_file(request: Request) -> Response:
         path = (session.scratch / request.path_params["name"]).resolve()
         if not path.is_relative_to(session.scratch) or not path.is_file():
@@ -233,6 +261,8 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
         Route("/api/script", put_script, methods=["PUT"]),
         Route("/api/analyse", analyse, methods=["POST"]),
         Route("/api/frame", preview, methods=["POST"]),
+        Route("/api/engine", set_engine, methods=["POST"]),
+        Route("/api/scenes/{index:int}/audio", scene_audio, methods=["POST"]),
         Route("/scratch/{name}", scratch_file),
         Route("/api/events", events),
         Route("/files/{path:path}", project_file),

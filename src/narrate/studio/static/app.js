@@ -26,6 +26,14 @@ function Notice({ notice, onReload, onOverwrite, onDismiss }) {
 
 const ENGINE_NAMES = { kokoro: "Kokoro", elevenlabs: "ElevenLabs", silent: "silent", auto: "auto" };
 
+/** The speech engine for timing, playback and builds; switching asks the server first. */
+function EnginePicker({ engine, onPick }) {
+  return html`<label class="engine" title="speech engine for timing, playback and builds">
+    <select value=${engine} onChange=${(e) => onPick(e.target.value)} aria-label="speech engine">
+      ${Object.entries(ENGINE_NAMES).map(([value, name]) => html`<option value=${value}>${name}</option>`)}
+    </select></label>`;
+}
+
 /** What the chosen engine still has to synthesise before a build (D10). */
 function Cost({ analysis }) {
   if (!analysis || !analysis.missing) return null;
@@ -80,7 +88,7 @@ function momentAt(analysis, line) {
 }
 
 /** The frame at the cursor's moment, at the video's size, scaled to fit the pane. */
-function Preview({ analysis, shown, moment, error }) {
+function Preview({ analysis, shown, moment, error, playback, onPlay, onStop }) {
   const box = useRef(null);
   const [scale, setScale] = useState(0.4);
   const [w, h] = (analysis && analysis.size) || [1280, 720];
@@ -100,6 +108,15 @@ function Preview({ analysis, shown, moment, error }) {
       ${moment ? `scene ${moment.scene} · ${seconds(moment.time)} into it · ${seconds(moment.start + moment.time)} in the video` : "No scene here"}
       <span class="size">${w} × ${h}</span>
     </p>
+    <div class="transport">
+      ${playback.state === "playing"
+        ? html`<button onClick=${onStop}>■ Stop</button>`
+        : html`<button onClick=${onPlay} disabled=${!moment || playback.state === "synthesising"}>▶ Play scene</button>`}
+      <span class="playback" data-testid="playback">${
+        playback.state === "synthesising" ? `Synthesising scene ${playback.scene}…`
+        : playback.state === "playing" ? `Playing scene ${playback.scene}: ${seconds(playback.time)} of ${seconds(playback.duration)}`
+        : ""}</span>
+    </div>
     ${error && html`<p class="preview-error">${error}</p>`}
   </aside>`;
 }
@@ -115,13 +132,75 @@ function App() {
   const [online, setOnline] = useState(true);
   const [notice, setNotice] = useState(null);
   const [error, setError] = useState(null);
-  const [analysis, setAnalysis] = useState(null);
+  const [analysis, setAnalysisState] = useState(null);
+  const analysisRef = useRef(null);
+  const setAnalysis = (value) => { analysisRef.current = value; setAnalysisState(value); };
   const [cursorLine, setCursorLine] = useState(1);
   const analyseTimer = useRef(null);
   const [shown, setShown] = useState(null);
   const [previewError, setPreviewError] = useState(null);
   const previewTimer = useRef(null);
-  const moment = analysis ? momentAt(analysis, cursorLine) : null;
+  const [engine, setEngine] = useState(null);
+  const audio = useRef(null);
+  const sceneAudio = useRef(new Map());  // "analysis id:scene" -> {url, paragraphs, duration}
+  const [playback, setPlayback] = useState({ state: "idle" });
+  const cursorMoment = analysis ? momentAt(analysis, cursorLine) : null;
+  // While narration plays, the preview follows it paragraph by paragraph
+  const playingMoment = playback.state === "playing" && playback.paragraphs
+    ? { scene: playback.scene, start: playback.start,
+        time: playback.paragraphs.filter((p) => p.start <= playback.time + 0.05).map((p) => p.start).pop() ?? 0 }
+    : null;
+  const moment = playingMoment || cursorMoment;
+
+  const stop = useCallback(() => {
+    if (audio.current) audio.current.pause();
+    setPlayback({ state: "idle" });
+  }, []);
+
+  /** Play `sceneIndex` from the paragraph on `line` (or its start), synthesising it first if need be. */
+  const play = useCallback(async (sceneIndex, line) => {
+    const current = analysisRef.current;
+    const scene = current && current.scenes.find((s) => s.index === sceneIndex);
+    if (!scene) return;
+    const key = `${current.id}:${sceneIndex}`;
+    let track = sceneAudio.current.get(key);
+    if (!track) {
+      if (current.engine === "elevenlabs" && scene.missing_chars > 0
+          && !window.confirm(`Synthesise scene ${sceneIndex} with ElevenLabs? It sends ${scene.missing_chars} characters.`)) return;
+      setPlayback({ state: "synthesising", scene: sceneIndex });
+      const { status, body } = await getJSON(`/api/scenes/${sceneIndex}/audio`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: current.id }),
+      }).catch((e) => ({ status: 0, body: { error: e.message } }));
+      if (status === 409) { setPlayback({ state: "idle" }); scheduleAnalysis(); return; }
+      if (status !== 200) { setPlayback({ state: "idle" }); setError(body.error || `no narration (${status})`); return; }
+      track = body;
+      sceneAudio.current.set(key, track);
+      scheduleAnalysis();  // the speech is cached now: exact timing replaces the estimates
+    }
+    const from = (track.paragraphs.find((p) => p.line === line) || { start: 0 }).start;
+    if (!audio.current) {
+      audio.current = new Audio();
+      audio.current.addEventListener("timeupdate", () =>
+        setPlayback((pb) => (pb.state === "playing" ? { ...pb, time: audio.current.currentTime } : pb)));
+      audio.current.addEventListener("ended", () => setPlayback({ state: "idle" }));
+    }
+    audio.current.src = track.url;
+    audio.current.currentTime = from;
+    setPlayback({ state: "playing", scene: sceneIndex, start: scene.start, time: from, duration: track.duration,
+                  paragraphs: track.paragraphs });
+    await audio.current.play().catch((e) => { setPlayback({ state: "idle" }); setError(`can't play: ${e.message}`); });
+  }, []);
+
+  const pickEngine = useCallback(async (value) => {
+    const { status, body } = await getJSON("/api/engine", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ engine: value }),
+    });
+    if (status !== 200) { setError(body.error || `can't switch to ${value}`); setEngine(body.engine || engine); return; }
+    setEngine(body.engine);
+    setError(null);
+    sceneAudio.current.clear();
+    scheduleAnalysis();
+  }, [engine]);
 
   const setDirty = (value) => { dirtyRef.current = value; setDirtyState(value); };
 
@@ -136,6 +215,7 @@ function App() {
       if (status !== 200) { setError(body.error || `analysis failed (${status})`); return; }
       showAnalysis(view, body);
       setAnalysis(body);
+      setEngine(body.engine);
     } catch {
       /* offline: the event stream reports it */
     }
@@ -185,6 +265,13 @@ function App() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // A paragraph's play button (editor.js) plays its scene from there
+  useEffect(() => {
+    const listener = (e) => play(sceneAt(analysisRef.current, e.detail.line), e.detail.line);
+    window.addEventListener("narrate-play", listener);
+    return () => window.removeEventListener("narrate-play", listener);
+  }, [play]);
 
   // The preview follows the cursor, and a new analysis
   useEffect(() => {
@@ -238,6 +325,7 @@ function App() {
     <header class="bar">
       <span class="brand">narrate studio</span>
       <span class="file" title="the script being edited">${name}</span>
+      ${engine && html`<${EnginePicker} engine=${engine} onPick=${pickEngine} />`}
       <${Cost} analysis=${analysis} />
       <span class=${`status ${dirty ? "unsaved" : ""} ${online ? "" : "offline"}`} data-testid="status">${status}</span>
       <button class="primary" onClick=${() => save(false)} disabled=${saving || !dirty}>Save</button>
@@ -248,7 +336,8 @@ function App() {
       <${Outline} analysis=${analysis} current=${sceneAt(analysis, cursorLine)}
         onPick=${(line) => goToLine(editor.current.view, line)} />
       <section class="editor" ref=${host} aria-label="script"></section>
-      <${Preview} analysis=${analysis} shown=${shown} moment=${moment} error=${previewError} />
+      <${Preview} analysis=${analysis} shown=${shown} moment=${moment} error=${previewError} playback=${playback}
+        onPlay=${() => cursorMoment && play(cursorMoment.scene, cursorLine)} onStop=${stop} />
     </main>`;
 }
 

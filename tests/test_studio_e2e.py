@@ -182,3 +182,31 @@ def test_the_preview_follows_the_cursor(tmp_path, page):
         server.end_streams()
         server.should_exit = True
         thread.join(5)
+
+
+# -- narration playback (#54) ------------------------------------------------------------
+
+def test_a_paragraph_plays_from_its_button(tmp_path, page):
+    from narrate.studio.server import create_app as make
+
+    script = tmp_path / "s.md"
+    script.write_text("A first paragraph, long enough to take a few seconds to read aloud.\n\n"
+                      "And a second one, which also takes a little while to say.\n")
+    server = studio_server(make(script, "silent"), "127.0.0.1", 0)
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    while not server.started:
+        time.sleep(0.05)
+    try:
+        page.goto(f"http://127.0.0.1:{server.servers[0].sockets[0].getsockname()[1]}/")
+        buttons = page.locator(".cm-narrate-length[role=button]")
+        expect(buttons).to_have_count(2)
+        buttons.nth(1).dispatch_event("mousedown")
+        expect(page.get_by_test_id("playback")).to_contain_text("Playing scene 1")
+        page.get_by_role("button", name="■ Stop").click()
+        expect(page.get_by_role("button", name="▶ Play scene")).to_be_visible()
+        expect(page.get_by_label("speech engine")).to_have_value("silent")
+    finally:
+        server.end_streams()
+        server.should_exit = True
+        thread.join(5)
