@@ -121,3 +121,15 @@ button.quiet { border-color: transparent; color: var(--muted); }
 .cm-narrate-length[role="button"]:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .transport { display: flex; align-items: center; gap: 10px; margin: 4px 2px; }
 .playback { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+/* builds (#55) */
+.build-status { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.build-status.failed { color: var(--error); }
+.build-status.done { color: var(--fg); }
+.build-error { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 12px; }
+.tabs { display: flex; gap: 4px; margin-bottom: 10px; }
+.tabs button { border-radius: 6px 6px 0 0; border-bottom: 2px solid transparent; }
+.tabs button[aria-selected="true"] { border-bottom-color: var(--accent); color: var(--accent); }
+.player video { width: 100%; border-radius: 4px; background: #000; }
+.player .notes { margin-top: 8px; color: var(--muted); font-size: 12px; }
+.preview .muted { color: var(--muted); }

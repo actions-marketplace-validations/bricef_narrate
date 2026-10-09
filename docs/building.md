@@ -70,7 +70,15 @@ The studio is a web app for writing a script, served from your computer.
     playing or building would spend.
   - **Asking first:** with ElevenLabs, the studio asks before synthesising a
     scene.
-- **Coming next:** builds (narrate #28; the design is in
+- **Building:** **Build video** saves the script, then builds it with the
+  studio's engine. It writes the same files as `narrate build`, next to the
+  script.
+  - **Progress:** the header shows how far it has got, with **Cancel**.
+  - **Watching:** the result plays in the **Video** tab.
+  - **Failures:** a failed build lists its errors, and clicking one goes to
+    its line.
+- **What's next:** a timeline, visual inspectors and HTML scene tools are
+  planned (narrate #28; the design is in
   [design/studio.md](design/studio.md)).
 
 **On another machine,** such as a server you reach over a VPN:
