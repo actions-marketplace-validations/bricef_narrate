@@ -6,6 +6,7 @@ the script. The commands below assume narrate is installed (see the
 [README](../README.md#install)). From a source checkout, the README's alias
 makes `narrate` work in any folder.
 
+- [Edit in the studio](#edit-in-the-studio)
 - [Build a video](#build-a-video)
 - [Preview quickly](#preview-quickly)
 - [Make an audio file instead](#make-an-audio-file-instead)
@@ -20,6 +21,40 @@ makes `narrate` work in any folder.
 - [Troubleshoot](#troubleshoot)
 - [Command reference](#command-reference)
 - [Environment variables](#environment-variables)
+
+## Edit in the studio
+
+```sh
+narrate studio script.md              # then open http://127.0.0.1:8787/
+narrate studio script.md --open       # and open it in a browser
+narrate studio new.md                 # a new script, created on the first save
+```
+
+The studio is a web app for writing a script, served from your computer.
+
+- **Editor:** narrate's own syntax is highlighted: scenes, stage directions,
+  pictures and clips, slides, render blocks and SSML.
+- **Saving:** Ctrl-S or **Save**. The file on disk stays the script, so you
+  can still edit it elsewhere, diff it and build it from the command line.
+- **Edits made elsewhere:** they appear in the studio by themselves when it
+  has nothing unsaved. Otherwise it asks whether to load the file or keep
+  your version. It never overwrites a newer file without asking.
+- **Coming next:** previews, narration playback, timing and builds
+  (narrate #28; the design is in [design/studio.md](design/studio.md)).
+
+**On another machine,** such as a server you reach over a VPN:
+`narrate studio script.md --host 0.0.0.0`, then open port 8787 on that
+machine. The studio has no access control yet. Anyone who can reach the port
+can read the files in the script's folder (not hidden ones such as `.env`)
+and change the script, so only expose it on a network you trust, or use an
+SSH tunnel: `ssh -L 8787:127.0.0.1:8787 server`.
+
+**In Docker:**
+
+```sh
+docker run --rm -it --user "$(id -u):$(id -g)" -v "$PWD:/work" -v narrate-cache:/cache \
+    -p 127.0.0.1:8787:8787 ghcr.io/bricef/narrate studio script.md --host 0.0.0.0
+```
 
 ## Build a video
 
@@ -369,6 +404,7 @@ models and the ElevenLabs key, and prints a fix for each problem.
 
 | Command | Does |
 | --- | --- |
+| `narrate studio SCRIPT [--open]` | edit the script in a web app (`--host`, `--port` to serve elsewhere) |
 | `narrate build SCRIPT [-o OUT.mp4]` | render a video (`SCRIPT` may be a `.zip`; `--source` picks the script inside; `--regenerate` retakes web captures) |
 | `narrate audio SCRIPT [-o OUT]` | render the narration only |
 | `narrate check SCRIPT` | report missing files and problems, without rendering |

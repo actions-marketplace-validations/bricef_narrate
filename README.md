@@ -19,7 +19,8 @@ Narakeet projects build unchanged, without uploading anything.
   frame by frame so every build is identical (a narrate extension).
 - **Sound and text:** recorded audio, background music, and subtitles, burned
   in or as files.
-- **Ways to run it:** a command line, a Docker image and a GitHub Action.
+- **Ways to run it:** a command line, a web studio for writing scripts
+  (`narrate studio script.md`), a Docker image and a GitHub Action.
 
 ## Install
 
