@@ -14,8 +14,8 @@ from pathlib import Path
 from PIL import Image, ImageOps
 
 MOTIONS = {"zoom", "zoomout", "pan", "panzoom", "panzoomout"}
-ZOOM = 1.25  # how far zoom/zoomout/panzoom/panzoomout move in
-PAN_ZOOM = 1.15  # fixed zoom for pan, leaving room to travel
+ZOOM = 1.25  # how far zoom/zoomout/panzoom/panzoomout move in, unless a picture says (#49)
+PAN_ZOOM = 1.15  # fixed zoom for pan, leaving room to travel; a picture's zoom replaces it
 OVERSAMPLE = 1.5  # source pixels per output pixel kept after the one-off downscale
 
 Rect = tuple[float, float, float, float]  # x, y, width, height
@@ -35,36 +35,41 @@ def cover_size(image_w: float, image_h: float, out_w: int, out_h: int) -> tuple[
     return out_w * scale, out_h * scale
 
 
-def endpoints(motion: str, position: str, image_w: float, image_h: float, out_w: int, out_h: int) -> tuple[Rect, Rect]:
+def endpoints(motion: str, position: str, image_w: float, image_h: float, out_w: int, out_h: int,
+              zoom: float | None = None) -> tuple[Rect, Rect]:
+    """The first and last windows. `zoom` is how far the motion moves in (for a pan, how far it's zoomed)."""
+    near = zoom or ZOOM
+    pan = zoom or PAN_ZOOM
     image = (0.0, 0.0, image_w, image_h)
     cw, ch = cover_size(image_w, image_h, out_w, out_h)
     centred = _align(cw, ch, image, "center")
     placed = _align(cw, ch, image, position)
     if motion == "zoom":
-        return placed, _align(cw / ZOOM, ch / ZOOM, placed, position)
+        return placed, _align(cw / near, ch / near, placed, position)
     if motion == "zoomout":
-        return _align(cw / ZOOM, ch / ZOOM, placed, position), placed
+        return _align(cw / near, ch / near, placed, position), placed
     if motion == "pan":
-        return (_align(cw / PAN_ZOOM, ch / PAN_ZOOM, image, "center"),
-                _align(cw / PAN_ZOOM, ch / PAN_ZOOM, image, position))
+        return (_align(cw / pan, ch / pan, image, "center"),
+                _align(cw / pan, ch / pan, image, position))
     if motion == "panzoom":
-        return centred, _align(cw / ZOOM, ch / ZOOM, image, position)
+        return centred, _align(cw / near, ch / near, image, position)
     if motion == "panzoomout":
-        return _align(cw / ZOOM, ch / ZOOM, image, "center"), placed
+        return _align(cw / near, ch / near, image, "center"), placed
     raise ValueError(f"unknown motion {motion!r}")
 
 
-def frames(path: Path, motion: str, position: str, width: int, height: int, count: int) -> Iterator[bytes]:
+def frames(path: Path, motion: str, position: str, width: int, height: int, count: int,
+           zoom: float | None = None) -> Iterator[bytes]:
     """`count` RGB24 frames of the animated image at width×height."""
     with Image.open(path) as im:
         source = ImageOps.exif_transpose(im).convert("RGB")
     # One downscale up front keeps every per-frame resize cheap on big photos
     cw, _ = cover_size(source.width, source.height, width, height)
-    shrink = min(1.0, width * OVERSAMPLE / cw)
+    shrink = min(1.0, width * max(OVERSAMPLE, zoom or ZOOM) / cw)  # keep detail for the deepest zoom
     if shrink < 1.0:
         source = source.resize((max(1, round(source.width * shrink)), max(1, round(source.height * shrink))),
                                Image.LANCZOS)
-    start, end = endpoints(motion, position, source.width, source.height, width, height)
+    start, end = endpoints(motion, position, source.width, source.height, width, height, zoom)
     for i in range(count):
         t = i / (count - 1) if count > 1 else 0.0
         x, y, w, h = (a + (b - a) * t for a, b in zip(start, end))

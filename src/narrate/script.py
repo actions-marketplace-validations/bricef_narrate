@@ -26,7 +26,7 @@ ANIMATED_SIZES = {"zoom", "zoomout", "pan", "panzoom", "panzoomout"}
 POSITIONS = {"center", "top-left", "left", "right", "top", "bottom"}
 SYNCS = {"freeze", "match", "trim", "loop", "trim-or-loop", "loop-audio"}
 # Frontmatter keys of a render block that place its output, as in (image: …) / (video: …)
-PLACEMENT = {"size", "position", "sync", "segment", "volume"}
+PLACEMENT = {"size", "position", "sync", "segment", "volume", "zoom"}
 
 DIRECTIVES = {
     "audio", "callout", "canvas", "duration", "font-size", "html", "image", "image-size",
@@ -79,6 +79,7 @@ class Media:
     volume: float | None = None
     render: Render | None = None
     viewport: str | None = None  # an HTML scene's design size, as written ("1280x720")
+    zoom: float | None = None  # how far pan and zoom move (narrate extension, #49)
 
 
 @dataclass
@@ -428,6 +429,13 @@ def _apply_props(media: Media, props: dict[str, Any], what: str, line: int, warn
             media.segment = seg
         elif prop == "viewport" and media.kind == "html":
             media.viewport = val
+        elif prop == "zoom":
+            try:
+                if float(val) <= 1:
+                    raise ValueError
+                media.zoom = float(val)
+            except ValueError:
+                warnings.append(f"line {line}: zoom must be a number above 1, not {val!r}; ignored")
         elif prop == "volume":
             try:
                 media.volume = 0.0 if low == "mute" else float(val)

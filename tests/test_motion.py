@@ -51,3 +51,41 @@ def test_slide_over_an_animated_image_renders(tmp_path):
     assert result.duration == pytest.approx(1.0, abs=1 / 30)
     assert "pan/zoom" not in " ".join(result.notes)
     assert media.probe(result.video).width == 320
+
+
+# -- zoom amount (#49) -------------------------------------------------------------
+
+def test_a_zoom_amount_replaces_the_defaults():
+    start, end = endpoints("zoom", "center", 2560, 1440, 1280, 720, zoom=1.12)
+    assert end[2] == pytest.approx(start[2] / 1.12)
+    _, panned = endpoints("pan", "left", 2560, 1440, 1280, 720, zoom=1.05)
+    assert panned[2] == pytest.approx(2560 / 1.05)
+
+
+def test_frames_end_on_the_centre_of_the_zoom(tmp_path):
+    # Concentric rings: the last frame of a 1.12 zoom shows the centre 1/1.12 of the picture
+    image = Image.new("RGB", (640, 360), "black")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((0, 0, 639, 359), outline="white", width=30)  # cropped away by any zoom past 1.1
+    draw.rectangle((36, 30, 603, 329), outline="grey", width=10)  # inside 1.12's crop, outside 1.25's
+
+    def last(zoom):
+        image = list(frames(tmp_path / "rings.png", "zoom", "center", 320, 180, 10, zoom=zoom))[-1]
+        return np.frombuffer(image, dtype=np.uint8).reshape(180, 320, 3)
+
+    image.save(tmp_path / "rings.png")
+    near, default = last(1.12), last(None)
+    assert near[90, 0].max() < 60 and 100 < near[90, 1:8].max() < 160  # white gone, grey band at the edge
+    assert default[90, :20].max() < 60  # the default 1.25 crops the band too
+    first = np.frombuffer(next(frames(tmp_path / "rings.png", "zoom", "center", 320, 180, 10, zoom=1.12)),
+                          dtype=np.uint8).reshape(180, 320, 3)
+    assert first[90, 0].mean() > 200  # but shows at the start
+
+
+def test_pictures_and_the_header_set_the_zoom(tmp_path):
+    Image.new("RGB", (640, 360), "steelblue").save(tmp_path / "p.png")
+    script = tmp_path / "s.md"
+    script.write_text("---\nimage-zoom: 1.1\n---\n\n![zoom](p.png)\n\n(image: {file: p.png, size: zoom, zoom: 1.3})\n\n"
+                      "![](p.png)\n\nNarration.\n")
+    plan = next(Builder(parse_file(script), SilentSynth(), log=lambda _: None).plans(parse_file(script).scenes, tmp_path))
+    assert [v.zoom for v in plan.visuals] == [1.1, 1.3, None]  # header default, the picture's own, no motion

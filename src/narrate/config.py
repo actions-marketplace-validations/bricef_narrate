@@ -194,6 +194,7 @@ class Settings:
     fade_in: float = 0.0  # seconds from black at the start (narrate extension)
     fade_out: float = 0.0  # seconds to black at the end
     loudness: float | None = None  # integrated LUFS for the finished mix (narrate extension)
+    image_zoom: float | None = None  # how far pan and zoom move by default (narrate extension)
 
 
 def parse_subtitles(value: Any) -> SubtitleConfig:
@@ -271,6 +272,7 @@ def settings_from_header(header: dict[str, Any], warnings: list[str]) -> Setting
         "fade-in": lambda v: setattr(s, "fade_in", _seconds(v, "fade-in")),
         "fade-out": lambda v: setattr(s, "fade_out", _seconds(v, "fade-out")),
         "loudness": lambda v: setattr(s, "loudness", parse_loudness(v)),
+        "image-zoom": lambda v: setattr(s, "image_zoom", parse_zoom(v)),
     }
     for key, value in header.items():
         handler = handlers.get(key)
@@ -296,6 +298,13 @@ def parse_loudness(value: Any) -> float:
     if not -70 <= lufs <= -5:
         raise ConfigError(f"loudness {lufs} is outside -70 to -5 LUFS")
     return lufs
+
+
+def parse_zoom(value: Any) -> float:
+    zoom = parse_number(value, "image-zoom")
+    if zoom <= 1:
+        raise ConfigError(f"image-zoom must be above 1, not {zoom}")
+    return zoom
 
 
 def _seconds(value: Any, what: str) -> float:

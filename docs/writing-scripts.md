@@ -264,6 +264,12 @@ the second zooms in.
 - **Movement:** `zoom`, `zoomout`, `pan`, `panzoom` and `panzoomout` animate a
   picture. Add a position to set the direction of a pan. Use pictures well
   above the video size (1080p or more for a 720p video) for smooth motion.
+- **How far it moves** (narrate only):
+  - **Defaults:** zooms reach 1.25× over the scene, and pans travel at 1.15×.
+  - **One picture:** `(image: {file: photo.jpg, size: zoom, zoom: 1.1})`
+    zooms to 1.1× instead.
+  - **Every picture:** `image-zoom: 1.1` in the header.
+  - Gentler amounts suit short scenes.
 - **Several pictures** in one scene play in turn and share its time equally.
 - **Directive form:** `(image: photo.jpg)`, or a map such as
   `(image: {file: photo.jpg, size: panzoom, position: left})`.
@@ -342,7 +348,8 @@ Chart: sales by region
 - **Options:** words after the name are the picture options from alt text
   (`cover top`, `panzoom left`).
 - **Settings:** an optional block between `---` lines at the top holds the
-  renderer's settings. `size` and `position` there work as in `(image: …)`.
+  renderer's settings. `size`, `position` and `zoom` there work as in
+  `(image: …)`.
 - **Renderers:**
   - `render:mermaid` draws a Mermaid diagram (see [Draw diagrams](#draw-diagrams)).
   - `render:placeholder` draws a card labelled with the block's text and the
