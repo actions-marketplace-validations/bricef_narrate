@@ -19,6 +19,7 @@ import yaml
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".gif"}
 VIDEO_EXT = {".mp4", ".mov", ".m4v", ".webm", ".wmv", ".avi", ".mpeg", ".mpg"}
 AUDIO_EXT = {".wav", ".mp3", ".wma", ".aac", ".m4a"}
+HTML_EXT = {".html", ".htm"}  # animated HTML scenes, a narrate extension (spec §18)
 
 SIZES = {"fit", "contain", "cover"}
 ANIMATED_SIZES = {"zoom", "zoomout", "pan", "panzoom", "panzoomout"}
@@ -28,7 +29,7 @@ SYNCS = {"freeze", "match", "trim", "loop", "trim-or-loop", "loop-audio"}
 PLACEMENT = {"size", "position", "sync", "segment", "volume"}
 
 DIRECTIVES = {
-    "audio", "callout", "canvas", "duration", "font-size", "image", "image-size",
+    "audio", "callout", "canvas", "duration", "font-size", "html", "image", "image-size",
     "image-position", "narration-mode", "narration-language", "pause", "pause-until",
     "theme", "transition", "video", "voice", "voice-emphasis", "voice-pitch",
     "voice-speed", "voice-volume",
@@ -77,6 +78,7 @@ class Media:
     segment: tuple[str, str | None] | None = None
     volume: float | None = None
     render: Render | None = None
+    viewport: str | None = None  # an HTML scene's design size, as written ("1280x720")
 
 
 @dataclass
@@ -355,6 +357,8 @@ def media_kind(path: str) -> str | None:
         return "video"
     if ext in AUDIO_EXT:
         return "audio"
+    if ext in HTML_EXT:
+        return "html"
     return None
 
 
@@ -422,6 +426,8 @@ def _apply_props(media: Media, props: dict[str, Any], what: str, line: int, warn
             media.sync = low
         elif prop == "segment" and (seg := _segment(low)):
             media.segment = seg
+        elif prop == "viewport" and media.kind == "html":
+            media.viewport = val
         elif prop == "volume":
             try:
                 media.volume = 0.0 if low == "mute" else float(val)
@@ -484,7 +490,7 @@ def _directive(text_lines: list[str], line: int, warnings: list[str]) -> list[Bl
             return None
         warnings.append(f"line {line}: unknown stage direction ({key}: …) ignored")
         return []
-    if key in ("image", "video", "audio"):
+    if key in ("image", "video", "audio", "html"):
         media = _media_from_directive(key, value, line, warnings)
         return [media] if media else []
     if isinstance(value, str):

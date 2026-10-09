@@ -1054,3 +1054,33 @@ frontmatter  := "---" NL yaml-mapping NL "---" NL      ; at the very top of the 
 
 `narrate check` also runs each renderer's deeper validation, such as Mermaid's
 parser. Planned renderers: AI-generated pictures and clips (narrate #41, #42).
+
+### 18.2 HTML scenes
+
+An `.html` or `.htm` file is a media reference (§5) of its own kind: an
+animated page (narrate #44).
+
+```
+![<tokens>](scene.html)
+(html: {file: scene.html, viewport: WxH, size: …, position: …})
+```
+
+- **Placement:** like an image. The page joins the scene's visuals in script
+  order and takes callouts, slides, subtitles and transitions as a clip does.
+  Size and position tokens apply when the viewport's shape differs from the
+  frame's; animated sizes are ignored.
+- **`viewport`:** the size the page is laid out at, default the frame size. It is
+  rendered at the pixel density that fits it to the frame, not enlarged
+  afterwards.
+- **Timing:** a page lasts as long as its scene, and is timed like an image
+  (§4.2). A scene with no audio and no `duration` lasts until the page's last
+  finite animation ends; a static page lasts 1 s.
+- **Capture:** frame by frame at the output frame rate.
+  - The page's clock (timers, `requestAnimationFrame`, `Date`) is paused before
+    it loads and advanced one frame at a time.
+  - Every animation in `document.getAnimations()` is paused and seeked to the
+    frame's time, counted from the frame where it first appears. SVG
+    animations are seeked with `setCurrentTime`.
+  - A page without scripts whose finite animations have all ended, with no
+    infinite ones, is settled: its last frame is reused.
+- **Not captured:** sound, and `<video>` or `<audio>` elements in the page.

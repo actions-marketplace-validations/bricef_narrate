@@ -114,16 +114,25 @@ def run(args: list[str], *, input: bytes | None = None) -> bytes:
 
 def encode_frames(frames: Iterable[bytes], width: int, height: int, fps: int, args: list[str], out: Path) -> Path:
     """Encode raw RGB24 frames streamed to ffmpeg's stdin (input 0); `args` holds any further inputs and outputs."""
+    return encode_stream(frames, ["-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{width}x{height}", "-r", str(fps)],
+                         args, out)
+
+
+def encode_images(images: Iterable[bytes], fps: int, args: list[str], out: Path) -> Path:
+    """Encode PNG images streamed to ffmpeg's stdin (input 0), one per frame."""
+    return encode_stream(images, ["-f", "image2pipe", "-framerate", str(fps), "-c:v", "png"], args, out)
+
+
+def encode_stream(chunks: Iterable[bytes], input_args: list[str], args: list[str], out: Path) -> Path:
+    """Feed `chunks` to ffmpeg's stdin as input 0, described by `input_args`."""
     with tempfile.TemporaryFile() as errors:
         proc = subprocess.Popen(
-            [ffmpeg(), "-hide_banner", "-y", "-loglevel", "error",
-             "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{width}x{height}", "-r", str(fps), "-i", "-",
-             *args, str(out)],
+            [ffmpeg(), "-hide_banner", "-y", "-loglevel", "error", *input_args, "-i", "-", *args, str(out)],
             stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=errors,
         )
         try:
-            for frame in frames:
-                proc.stdin.write(frame)
+            for chunk in chunks:
+                proc.stdin.write(chunk)
         except BrokenPipeError:
             pass  # ffmpeg stopped reading (enough frames, or an error reported below)
         finally:

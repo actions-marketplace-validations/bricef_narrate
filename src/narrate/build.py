@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import dataclasses
 import os
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 import shutil
 import sys
 from concurrent.futures import Future, ThreadPoolExecutor, wait
@@ -24,9 +24,9 @@ from typing import Any, Callable
 
 import numpy as np
 
-from . import media, motion, music, render, subtitles, voicemap
+from . import media, motion, music, pages, render, subtitles, voicemap
 from .config import (
-    BUILTIN_MUSIC, FPS, TRANSITIONS, ConfigError, Settings, SubtitleConfig, parse_pitch, parse_transition, parse_color, parse_number, parse_speed,
+    BUILTIN_MUSIC, FPS, TRANSITIONS, ConfigError, Settings, SubtitleConfig, parse_pitch, parse_transition, parse_color, parse_number, parse_size, parse_speed,
     parse_time, parse_volume, settings_from_header,
 )
 from .doctor import find_font
@@ -77,7 +77,7 @@ class BuildError(Exception):
 
 @dataclass
 class Visual:
-    kind: str  # "still" | "video"
+    kind: str  # "still" | "video" | "page"
     path: Path | None = None
     fit: str = "cover"
     position: str = "center"
@@ -88,6 +88,7 @@ class Visual:
     has_audio: bool = False
     frames: int = 0
     motion: str | None = None  # pan/zoom animation of a still image
+    viewport: tuple[int, int] | None = None  # an HTML scene's design size
 
 
 @dataclass
@@ -193,6 +194,24 @@ class Builder:
         except ConfigError as e:
             raise BuildError(f"header transition: {e}") from None
         self._voices: dict[tuple[str | None, str | None], Voice] = {}
+        self._frames: FrameRenderer | None = None  # the build's Chromium, while frames render
+        self._probe: FrameRenderer | None = None  # one started just to measure pages, when there isn't
+
+    def close(self) -> None:
+        """Stop the Chromium started to measure HTML scenes, if any."""
+        if self._probe is not None:
+            self._probe.__exit__(None, None, None)
+            self._probe = None
+            shutil.rmtree(self._probe_dir, ignore_errors=True)
+
+    def _pages(self) -> FrameRenderer:
+        """A Chromium to load HTML scenes in: the build's own, or one started for planning."""
+        if self._frames is not None:
+            return self._frames
+        if self._probe is None:
+            self._probe_dir = Path(tempfile.mkdtemp(prefix="narrate-pages-"))
+            self._probe = FrameRenderer(self.settings.width, self.settings.height, self._probe_dir).__enter__()
+        return self._probe
 
     # -- helpers -------------------------------------------------------------
 
@@ -360,7 +379,9 @@ class Builder:
                 raise BuildError(str(e), block.line) from None
 
 
-        visuals = [self._visual(m, workdir) for m in sources]
+        # An HTML scene with nothing else to time the scene lasts as long as its animations
+        natural = track.seconds <= 0 and duration is None and force_duration is None
+        visuals = [self._visual(m, workdir, natural) for m in sources]
         if force_duration is not None:
             duration = force_duration
         narration = track.samples()
@@ -420,7 +441,7 @@ class Builder:
                 except (ConfigError, render.RenderError) as e:
                     raise BuildError(str(e), getattr(e, "line", None) or block.line) from None
 
-    def _visual(self, m: Media, workdir: Path) -> Visual:
+    def _visual(self, m: Media, workdir: Path, natural: bool = False) -> Visual:
         if m.render and not m.path:
             # Audio builds and the speech prefetch plan timing only; they don't render
             return Visual("still", None, m.size or self.settings.asset_resize, m.position or "center")
@@ -430,6 +451,15 @@ class Builder:
         if size in ANIMATED_SIZES:
             animation, size = size, "cover"
         position = m.position or "center"
+        if m.kind == "html":
+            if animation:
+                self.notes.add(f"{animation} on an HTML scene (ignored; pan/zoom applies to images)")
+            try:
+                viewport = parse_size(m.viewport) if m.viewport else (self.settings.width, self.settings.height)
+            except ConfigError as e:
+                raise BuildError(f"viewport: {e}", m.line) from None
+            length = pages.natural_length(self._pages(), path, viewport) if natural else 0.0
+            return Visual("page", path, size, position, length=length or DEFAULT_STILL_SECONDS, viewport=viewport)
         if m.kind == "image" and not media.is_animated_gif(path):
             return Visual("still", path, size, position, motion=animation)
         if animation:
@@ -478,6 +508,7 @@ class Builder:
         try:
             return self._build(out, work)
         finally:
+            self.close()
             if own_workdir:
                 shutil.rmtree(work, ignore_errors=True)
 
@@ -541,6 +572,7 @@ class Builder:
                 files = [srt, vtt]
             return BuildResult(out, None, files, len(audio) / SR, sorted(self.notes))
         finally:
+            self.close()
             if own_workdir:
                 shutil.rmtree(work, ignore_errors=True)
 
@@ -556,6 +588,7 @@ class Builder:
         frame = 0
         # Scene k's segments encode in the pool while scene k+1 is narrated
         with ThreadPoolExecutor(self.jobs) as pool, FrameRenderer(s.width, s.height, work) as renderer:
+            self._frames = renderer
             self._render_blocks(renderer)
             for plan in self.plans(scenes, work):
                 self.log(f"scene {plan.index}/{len(scenes)}")
@@ -572,6 +605,7 @@ class Builder:
                 scene_frames.append(frames)
                 frame = end_f
             scene_segments = [[f.result() for f in futures] for futures in pending]
+            self._frames = None
 
         total = frame / FPS
         audio = np.concatenate(audio_parts)
@@ -652,6 +686,12 @@ class Builder:
                 segments.append(submit(self._encode_video, v, count, tempo, windows, plan.spec.canvas,
                                        name(f"{i}.mp4")))
                 continue
+            if v.kind == "page":
+                # Captured here, since Chromium stays on this thread, and streamed to ffmpeg as it goes
+                windows = [] if layout.repeat else _windows(overlays(), lo, hi)
+                segments.append(_run_now(self._encode_page, v, count, windows, plan.spec.canvas, renderer,
+                                         name(f"{i}.mp4")))
+                continue
             if v.motion:
                 # One continuous animation, with slides overlaid rather than splitting it
                 windows = [] if layout.repeat else _windows(overlays(backdrop=True), lo, hi)
@@ -707,8 +747,11 @@ class Builder:
                 return np.zeros(1, dtype=np.float32)
 
         shadow = Builder(dataclasses.replace(self.script, warnings=[]), Recorder(), log=lambda _: None, jobs=1)
-        for _ in shadow.plans(self.script.scenes, work):
-            pass
+        try:
+            for _ in shadow.plans(self.script.scenes, work):
+                pass
+        finally:
+            shadow.close()
         self.log(f"speech: {len(set(requests))} paragraphs, {real.concurrency} at a time")
         return Prefetching(real, requests, self.notes)
 
@@ -734,6 +777,23 @@ class Builder:
         media.run(["-ss", f"{v.start:.3f}", "-t", f"{v.length:.3f}", "-i", str(v.path), *inputs,
                    "-filter_complex", graph, "-map", "[v]", "-frames:v", str(frames),
                    "-an", *_SEGMENT_CODEC, str(out)])
+        return out
+
+    def _encode_page(self, v: Visual, frames: int, overlays: list[tuple[Path, float, float]], canvas: str | None,
+                     renderer: FrameRenderer, out: Path) -> Path:
+        """An HTML scene captured frame by frame (pages.py), as exactly `frames` frames."""
+        w, h = self.settings.width, self.settings.height
+        vw, vh = v.viewport
+        # A page designed smaller than the frame renders at a higher pixel density, not enlarged afterwards
+        scale = (min if v.fit == "contain" else max)(w / vw, h / vh)
+        chain = [*_resize_filters(v.fit, v.position, w, h, canvas or "#000000"), "setsar=1"]
+        inputs, graph = _overlay_graph(f"[0:v]{','.join(chain)}", overlays)
+        captured: list[int] = []
+        with closing(pages.capture(renderer, v.path, v.viewport, scale, frames, FPS, captured.append)) as images:
+            media.encode_images(images, FPS, [*inputs, "-filter_complex", graph, "-map", "[v]",
+                                              "-frames:v", str(frames), "-an", *_SEGMENT_CODEC], out)
+        if captured and captured[0] < frames:
+            self.log(f"  {v.path.name}: {captured[0]} of {frames} frames captured, the rest settled")
         return out
 
     def _music(self, total: int, scene_samples: list[int]) -> np.ndarray:
@@ -857,6 +917,10 @@ def layout_visuals(visuals: list[Visual], a: float, duration: float | None) -> t
     """
     n = len(visuals)
     if not any(v.kind == "video" for v in visuals):
+        if a <= 0 and duration is None and any(v.kind == "page" for v in visuals):
+            # HTML scenes play their animations out; any pictures beside them get a still's time
+            natural = [v.length if v.kind == "page" else DEFAULT_STILL_SECONDS for v in visuals]
+            return max(sum(natural), 1 / FPS), Layout(natural, [1.0] * n)
         if a > 0:
             d = max(a, duration or 0.0)
         else:
@@ -887,7 +951,7 @@ def layout_visuals(visuals: list[Visual], a: float, duration: float | None) -> t
         return d, Layout(natural, [1.0] * n, repeat=True)
     pieces = list(natural)
     if d > total:
-        stills = [i for i, v in enumerate(visuals) if v.kind == "still"] or [n - 1]
+        stills = [i for i, v in enumerate(visuals) if v.kind in ("still", "page")] or [n - 1]
         for i in stills:
             pieces[i] += (d - total) / len(stills)
     elif d < total:
