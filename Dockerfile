@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-#
 # narrate with everything it needs: Python, headless Chromium, ffmpeg and fonts.
 #
 #   docker build -t narrate .
@@ -11,12 +9,16 @@
 
 ARG PYTHON=3.12
 ARG DEBIAN=trixie
+# Docker's official images, from Google's mirror of Docker Hub: no sign-in or pull
+# limits, which GitHub's runners keep hitting on Docker Hub itself (429s, 504s from
+# auth.docker.io). `--build-arg REGISTRY=docker.io/library` pulls from Docker Hub.
+ARG REGISTRY=mirror.gcr.io/library
 
 # ffmpeg with every native decoder, demuxer and filter, but only the external
 # libraries narrate uses: x264 (video), libass (burned-in subtitles), rubberband
 # (pitch), LAME and Opus (audio exports) and dav1d (AV1 input). Linked against
 # Debian's libraries, it is a fraction of the size of a static build.
-FROM debian:${DEBIAN}-slim AS ffmpeg
+FROM ${REGISTRY}/debian:${DEBIAN}-slim AS ffmpeg
 ARG FFMPEG_VERSION=9.0.2
 ARG FFMPEG_SHA256=8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -38,7 +40,7 @@ RUN ldd /opt/ffmpeg/bin/ffmpeg | awk '$3 ~ /^\// {print $3}' | xargs readlink -f
         | cut -d: -f1 | sort -u > /opt/ffmpeg/packages
 
 # narrate and its Python dependencies in /opt/narrate, and Playwright's headless Chromium
-FROM python:${PYTHON}-slim-${DEBIAN} AS python
+FROM ${REGISTRY}/python:${PYTHON}-slim-${DEBIAN} AS python
 COPY --from=ghcr.io/astral-sh/uv:0.12.24 /uv /bin/uv
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never UV_PROJECT_ENVIRONMENT=/opt/narrate
 WORKDIR /src
@@ -52,7 +54,7 @@ RUN PLAYWRIGHT_BROWSERS_PATH=/opt/playwright /opt/narrate/bin/playwright install
 RUN NARRATE_TOOLS=/tmp/tools /opt/narrate/bin/python -c \
         "import shutil; from narrate import mermaid; shutil.copy(mermaid.ensure(), '/opt/mermaid.min.js')"
 
-FROM python:${PYTHON}-slim-${DEBIAN} AS runtime
+FROM ${REGISTRY}/python:${PYTHON}-slim-${DEBIAN} AS runtime
 # Headless Chromium's libraries (Playwright's list for Debian 13), fonts that
 # stand in for Helvetica, Times and Courier, and ffmpeg's libraries.
 # libgbm comes without its package: libgbm1 depends on Mesa's GPU drivers
