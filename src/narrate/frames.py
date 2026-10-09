@@ -283,6 +283,19 @@ class FrameRenderer:
         finally:
             context.close()
 
+    @contextmanager
+    def web(self, viewport: tuple[int, int], scale: float, color_scheme: str = "light",
+            credentials: dict[str, str] | None = None):
+        """A fresh page for capturing a live web page (render:web): its own viewport,
+        pixel density, colour scheme and Basic-auth credentials, no cookies, real time."""
+        context = self._browser.new_context(
+            viewport={"width": viewport[0], "height": viewport[1]}, device_scale_factor=scale,
+            color_scheme=color_scheme, http_credentials=credentials)
+        try:
+            yield context.new_page()
+        finally:
+            context.close()
+
     def _render_page(self, scale: int):
         if scale not in self._pages:
             self._pages[scale] = self._browser.new_page(

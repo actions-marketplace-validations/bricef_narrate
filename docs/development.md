@@ -41,7 +41,8 @@ Markers select the slow or costly tests:
 `tests/test_docs.py` builds every script example in the README and `docs/`
 (each fenced with four backticks and `markdown`), with placeholder pictures,
 clips and audio, and fails on any warning. Fence new script examples the same
-way, so they stay correct.
+way, so they stay correct. Examples that need the network (`render:web`) are
+fenced with `md` instead, which the test skips.
 
 ## Conformance with Narakeet
 
@@ -180,6 +181,7 @@ Some choices worth knowing when changing behaviour:
   - `frames.py` and `motion.py`: Chromium frames, and pan and zoom.
   - `render.py`: render blocks, their cache, and `render:placeholder`.
   - `mermaid.py`: `render:mermaid`, and the pinned mermaid.js.
+  - `web.py`: `render:web`, web pages captured and stored in the project.
   - `pages.py`: HTML scenes, captured frame by frame.
   - `subtitles.py` and `stt.py`: subtitle cues, and speech-to-text for
     recordings.

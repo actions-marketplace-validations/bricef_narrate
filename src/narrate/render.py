@@ -8,6 +8,11 @@ Outputs are cached by a hash of the renderer, its settings, the body and the
 frame, so unchanged blocks aren't rendered again. A cache hit refreshes the
 file's modification time, so `narrate cache --prune` removes the least
 recently used, as it does for speech.
+
+Renderers whose output can't be reproduced later (a live web page) are
+*stored* instead: in the project, under .narrate/generated/<renderer>/, with a
+JSON sidecar saying what was rendered and when. Later builds reuse them, even
+offline, until `narrate build --regenerate` asks for new ones.
 """
 
 from __future__ import annotations
@@ -16,6 +21,7 @@ import hashlib
 import html
 import json
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -42,6 +48,8 @@ class Context:
     theme: str  # default | light | path to a .css file
     canvas: str | None
     frames: FrameRenderer | None = None  # the build's Chromium, for renderers that draw HTML
+    project: Path | None = None  # the script's folder, where stored outputs are kept
+    regenerate: bool = False  # make stored outputs again rather than reuse them
 
 
 class Renderer:
@@ -49,6 +57,8 @@ class Renderer:
     kind = "image"  # what the output is placed as
     version = 1  # bump when the output for the same input changes, to retire cached files
     settings: frozenset[str] = frozenset()  # the frontmatter keys it takes, besides placement
+    stored = False  # output can't be reproduced later: keep it in the project, not the cache
+    context_keys = ("width", "height", "theme", "canvas")  # what of the Context its output depends on
 
     def check(self, block: Render) -> list[str]:
         """Problems with the block, found quickly, without rendering it or starting tools."""
@@ -106,11 +116,17 @@ def output(media: Media, ctx: Context) -> Path:
     if problems:
         raise RenderError("; ".join(problems), media.line)
     key = json.dumps([r.name, r.version, media.render.body, media.render.settings,
-                      ctx.width, ctx.height, ctx.theme, ctx.canvas], sort_keys=True, default=str)
-    path = cache_dir() / "render" / r.name / f"{hashlib.sha256(key.encode()).hexdigest()[:24]}.png"
-    if path.exists():
-        path.touch()
-        return path
+                      *(getattr(ctx, k) for k in r.context_keys)], sort_keys=True, default=str)
+    digest = hashlib.sha256(key.encode()).hexdigest()[:24]
+    if r.stored and ctx.project is not None:
+        path = ctx.project / ".narrate" / "generated" / r.name / f"{digest}.png"
+        if path.exists() and not ctx.regenerate:
+            return path
+    else:
+        path = cache_dir() / "render" / r.name / f"{digest}.png"
+        if path.exists():
+            path.touch()
+            return path
     path.parent.mkdir(parents=True, exist_ok=True)
     part = path.with_name(f"{path.stem}.part.png")
     try:
@@ -119,6 +135,10 @@ def output(media: Media, ctx: Context) -> Path:
         part.unlink(missing_ok=True)
         raise RenderError(str(e), e.line or media.line) from None
     part.replace(path)
+    if r.stored:
+        sidecar = {"renderer": r.name, "settings": media.render.settings, "body": media.render.body,
+                   "frame": [ctx.width, ctx.height], "made": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+        path.with_suffix(".json").write_text(json.dumps(sidecar, indent=2, default=str) + "\n")
     return path
 
 
@@ -167,4 +187,4 @@ svg {{ position: absolute; inset: 0; }}
         ctx.frames.screenshot(page, out)
 
 
-from . import mermaid  # noqa: E402,F401 -- registers render:mermaid
+from . import mermaid, web  # noqa: E402,F401 -- register render:mermaid and render:web

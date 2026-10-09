@@ -21,6 +21,7 @@ speech. [Building videos](building.md) covers the commands.
 - [Play video clips](#play-video-clips)
 - [Generate pictures from code blocks](#generate-pictures-from-code-blocks)
 - [Draw diagrams](#draw-diagrams)
+- [Capture web pages](#capture-web-pages)
 - [Show animated HTML scenes](#show-animated-html-scenes)
 - [Show text slides](#show-text-slides)
 - [Style slides with a theme](#style-slides-with-a-theme)
@@ -352,6 +353,7 @@ Chart: sales by region
   `(image: …)`.
 - **Renderers:**
   - `render:mermaid` draws a Mermaid diagram (see [Draw diagrams](#draw-diagrams)).
+  - `render:web` captures a web page (see [Capture web pages](#capture-web-pages)).
   - `render:placeholder` draws a card labelled with the block's text and the
     video's size, standing in for a picture still to come. `background` and
     `color` set its colours.
@@ -408,6 +410,61 @@ sequenceDiagram
   with the block's line.
 - The first diagram downloads Mermaid itself (about 5 MB); the Docker image
   already has it.
+
+## Capture web pages
+
+````md
+```render:web zoom
+---
+url: https://github.com/bricef/narrate/issues/43
+color-scheme: dark
+hide: header.AppHeader, .js-notification-shelf
+scroll-to: Done when
+---
+```
+
+The issue that tracks all of this work.
+
+---
+
+```render:web
+https://example.com
+```
+
+(duration: 2)
+````
+
+- **What it does:** a `render:web` block captures a web page when the video
+  is built, then shows it like a picture, so screenshots of live pages come
+  from the script rather than a separate step. A block holding just a URL is
+  enough.
+- **Settings:**
+
+  | Setting | Does |
+  | --- | --- |
+  | `url` | the page, http or https (or put the URL in the block) |
+  | `viewport` | the window size, default the video's size |
+  | `scale` | pixels per CSS pixel, default 2, which leaves room to zoom |
+  | `color-scheme` | `light` (default), `dark` or `no-preference`, for sites that follow it |
+  | `hide` | CSS selectors to hide, such as banners and headers |
+  | `css` | extra CSS to add to the page |
+  | `scroll-to` | text to scroll into view first |
+  | `selector` | capture only the element it matches |
+  | `wait` | `load` (default), `networkidle`, or milliseconds to wait after loading |
+  | `auth` | the name of an environment variable holding `user:password`, for Basic auth |
+
+- **Kept in the project:** pages change, so each capture is saved beside the
+  script, in `.narrate/generated/web/`, with a note of the URL and when it was
+  taken.
+  - Later builds reuse the capture, offline too.
+  - `narrate build --regenerate` takes it again.
+  - Commit the folder to keep the video stable.
+  - A ZIP project is unpacked afresh each time, so its pages are captured on
+    every build.
+- **Privacy:** the page opens with no cookies or saved logins. Credentials come
+  only from the environment variable that `auth` names; the secret never goes
+  in the script or the saved note.
+- `narrate check` validates the settings without fetching anything.
 
 ## Show animated HTML scenes
 

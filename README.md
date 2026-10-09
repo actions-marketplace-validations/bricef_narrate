@@ -12,8 +12,9 @@ Narakeet projects build unchanged, without uploading anything.
   your own account.
 - **Visuals:** pictures with pan and zoom, video clips, text and code slides,
   themes, callouts and 24 kinds of transition.
-- **Generated pictures:** Mermaid diagrams and placeholder cards, written as
-  code blocks in the script (a narrate extension).
+- **Generated pictures:** Mermaid diagrams, captures of live web pages and
+  placeholder cards, written as code blocks in the script (a narrate
+  extension).
 - **Animated HTML scenes:** web pages animated with CSS or JavaScript, captured
   frame by frame so every build is identical (a narrate extension).
 - **Sound and text:** recorded audio, background music, and subtitles, burned
