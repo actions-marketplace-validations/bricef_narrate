@@ -287,6 +287,7 @@ narrate fetches some files on first use and caches synthesised speech:
 | mermaid.js, for diagrams | `~/.cache/narrate/mermaid/` | about 5 MB |
 | Synthesised speech and transcripts | `~/.cache/narrate/tts/`, `stt/` | grows with use |
 | Pictures drawn from render blocks | `~/.cache/narrate/render/` | grows with use |
+| Web captures (`render:web`) | `.narrate/generated/web/`, beside the script | kept until you delete them; commit them |
 
 - **Download ahead of time**, for example before going offline:
   `narrate models`.
@@ -368,7 +369,7 @@ models and the ElevenLabs key, and prints a fix for each problem.
 
 | Command | Does |
 | --- | --- |
-| `narrate build SCRIPT [-o OUT.mp4]` | render a video (`SCRIPT` may be a `.zip`; `--source` picks the script inside) |
+| `narrate build SCRIPT [-o OUT.mp4]` | render a video (`SCRIPT` may be a `.zip`; `--source` picks the script inside; `--regenerate` retakes web captures) |
 | `narrate audio SCRIPT [-o OUT]` | render the narration only |
 | `narrate check SCRIPT` | report missing files and problems, without rendering |
 | `narrate callouts FILE` | write a page for placing callouts on an image or a clip's frame |

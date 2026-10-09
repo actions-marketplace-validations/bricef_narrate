@@ -175,8 +175,9 @@ def apply_gain(samples: np.ndarray, volume: float | str) -> np.ndarray:
 
 class Builder:
     def __init__(self, script: Script, synth: Synth, *, log: Callable[[str], None] | None = None,
-                 jobs: int | None = None):
+                 jobs: int | None = None, regenerate: bool = False):
         self.script = script
+        self.regenerate = regenerate  # make stored render outputs (render:web) again
         self.synth = synth
         # Encodes run in a thread pool alongside narration; x264 threads each one too
         self.jobs = max(1, jobs or int(os.environ.get("NARRATE_JOBS", 0)) or min(4, os.cpu_count() or 1))
@@ -447,7 +448,8 @@ class Builder:
                         canvas = parse_color(block.value, "canvas")
                     elif isinstance(block, Media) and block.render and not block.path:
                         block.kind = render.renderer(block.render.name).kind
-                        ctx = render.Context(s.width, s.height, theme, canvas, frames)
+                        ctx = render.Context(s.width, s.height, theme, canvas, frames,
+                                             self.script.base_dir, self.regenerate)
                         block.path = str(render.output(block, ctx))
                 except (ConfigError, render.RenderError) as e:
                     raise BuildError(str(e), getattr(e, "line", None) or block.line) from None

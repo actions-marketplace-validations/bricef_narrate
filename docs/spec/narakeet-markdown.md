@@ -1046,11 +1046,20 @@ frontmatter  := "---" NL yaml-mapping NL "---" NL      ; at the very top of the 
 - **Rendering:** each block is drawn at the frame size with the theme and canvas
   in effect at its position in the scene. The output is cached by a hash of the
   renderer, its settings, the body, the frame size, the theme and the canvas.
+- **Stored renderers:** a renderer whose output can't be reproduced, such as
+  `web`, keeps it in the project instead of the cache.
+  - **Where:** `.narrate/generated/<renderer>/<hash>.png` beside the script,
+    with a JSON sidecar recording the settings and when it was made.
+  - **Reuse:** later builds reuse the stored file until a build asks to
+    regenerate.
+  - **Key:** a stored renderer's hash leaves out what can't change its output
+    (for `web`, the theme and canvas).
 
 | Renderer | Draws | Settings |
 | --- | --- | --- |
 | `mermaid` | the body as a Mermaid diagram (mermaid.js 12, pinned), fitted to 90% of the frame and captured at twice its size; Mermaid's dark theme on a dark background | `background` (default: the canvas, else the theme's slide background), `scale` (of the fitted size, default 1); Mermaid's `title`, `displayMode` and `config` pass through |
 | `placeholder` | a card labelled with the body (or "Placeholder") and the frame size | `background`, `color` |
+| `web` (narrate #50) | a live web page, captured at build time; stored, not cached | `url` (or a body that is just a URL), `viewport`, `scale` (default 2), `color-scheme`, `hide`, `css`, `scroll-to`, `selector`, `wait`, `auth` (an environment variable's name) |
 
 `narrate check` also runs each renderer's deeper validation, such as Mermaid's
 parser. Planned renderers: AI-generated pictures and clips (narrate #41, #42).

@@ -1,6 +1,7 @@
 """Every script example in the docs builds, without warnings.
 
-Examples are the ````markdown blocks in README.md and docs/*.md. They name
+Examples are the ````markdown blocks in README.md and docs/*.md (````md
+blocks, which need the network, are left out). They name
 placeholder files (photo.jpg, clip.mp4, …), which the fixture makes; theme.css
 and scene.html are the CSS and HTML examples from docs/writing-scripts.md itself.
 """
