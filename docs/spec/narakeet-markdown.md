@@ -1093,3 +1093,15 @@ animated page (narrate #44).
     the run there, and names match `[A-Za-z_][A-Za-z0-9_-]*`.
   - Times count from the page's start, and may be negative.
   - Pages in merged scenes get no cues.
+
+### 18.3 Dips and fades (narrate #46)
+
+- **Transitions:** `fade-black` and `fade-white` are extra transition types
+  (§10). Over the transition's time, the outgoing frame fades to the colour
+  during the first half, then the incoming scene fades in from it during the
+  second. Placement and length follow §10 and §16.9: the dip starts at the cut,
+  and the video's length is unchanged.
+- **Header `fade-in: N` and `fade-out: N`** (seconds, default 0): the video
+  fades from black at the start and to black at the end, after burned-in
+  subtitles. The mixed sound fades linearly over the same time, in audio
+  builds as well. The length is unchanged.

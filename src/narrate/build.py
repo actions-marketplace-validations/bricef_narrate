@@ -26,7 +26,7 @@ import numpy as np
 
 from . import media, motion, music, pages, render, subtitles, voicemap
 from .config import (
-    BUILTIN_MUSIC, FPS, TRANSITIONS, ConfigError, Settings, SubtitleConfig, parse_pitch, parse_transition, parse_color, parse_number, parse_size, parse_speed,
+    BUILTIN_MUSIC, FPS, XFADE, ConfigError, Settings, SubtitleConfig, parse_pitch, parse_transition, parse_color, parse_number, parse_size, parse_speed,
     parse_time, parse_volume, settings_from_header,
 )
 from .doctor import find_font
@@ -571,7 +571,7 @@ class Builder:
             if peak > 0.99:
                 audio = audio * (0.99 / peak)
             wav = work / "audio.wav"
-            _write_wav(wav, audio)
+            _write_wav(wav, self._fade(audio))
             out.parent.mkdir(parents=True, exist_ok=True)
             media.run(["-i", str(wav), *codec, str(out)])
             files: list[Path] = []
@@ -625,7 +625,7 @@ class Builder:
         if peak > 0.99:
             audio = audio * (0.99 / peak)
         wav = work / "audio.wav"
-        _write_wav(wav, audio)
+        _write_wav(wav, self._fade(audio))
 
         self.log("muxing")
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -810,6 +810,20 @@ class Builder:
             self.log(f"  {v.path.name}: {captured[0]} of {frames} frames captured, the rest settled")
         return out
 
+    def _fade(self, audio: np.ndarray) -> np.ndarray:
+        """The sound fades with the picture (header fade-in / fade-out)."""
+        s = self.settings
+        for seconds, at_start in ((s.fade_in, True), (s.fade_out, False)):
+            n = min(len(audio), int(round(seconds * SR)))
+            if n:
+                ramp = np.linspace(0.0, 1.0, n, dtype=np.float32)
+                audio = audio.copy()
+                if at_start:
+                    audio[:n] *= ramp
+                else:
+                    audio[-n:] *= ramp[::-1]
+        return audio
+
     def _music(self, total: int, scene_samples: list[int]) -> np.ndarray:
         bg = self.settings.background
         candidate = self.script.base_dir / bg.source
@@ -842,7 +856,13 @@ class Builder:
         # Block-quote captions are explicit content: burn them in unless the
         # mode writes them to files instead
         burn = cues and (s.subtitles.burned or s.subtitles.mode == "none")
-        graph += f";[vx]{self._subtitle_filter(cues, work)}[v]" if burn else ";[vx]null[v]"
+        graph += f";[vx]{self._subtitle_filter(cues, work)}[vs]" if burn else ";[vx]null[vs]"
+        # Fades from and to black go last, so burned-in subtitles fade too
+        total = sum(scene_frames) / FPS
+        fades = ([f"fade=t=in:st=0:d={min(s.fade_in, total):.4f}"] if s.fade_in else []) + \
+                ([f"fade=t=out:st={max(0.0, total - s.fade_out):.4f}:d={min(s.fade_out, total):.4f}"]
+                 if s.fade_out else [])
+        graph += f";[vs]{','.join(fades) or 'null'}[v]"
         audio_index = len(files)
         args += ["-i", str(wav)]
         maps = ["-map", "[v]", "-map", f"{audio_index}:a"]
@@ -1003,6 +1023,19 @@ def _overlay_graph(base: str, overlays: list[tuple[Path, float, float]]) -> tupl
     return inputs, graph + f";[v{len(overlays)}]null[v]"
 
 
+# fade-black / fade-white: the outgoing frame fades to the colour over the first
+# half, the incoming scene fades in from it over the second (xfade's own
+# fadeblack goes dark almost at once). Luma and chroma of each colour in 8-bit
+# video range; xfade's progress P runs from 1 to 0.
+_DIP_LEVELS = {"fade-black": (16, 128), "fade-white": (235, 128)}
+
+
+def _dip(name: str) -> str:
+    luma, chroma = _DIP_LEVELS[name]
+    m = f"if(PLANE,{chroma},{luma})"
+    return f"custom:expr='if(gt(P,0.5),{m}+(A-{m})*(2*P-1),{m}+(B-{m})*(1-2*P))'"
+
+
 def transition_graph(frames: list[int], transitions: list[tuple[str, float] | None]) -> str:
     """Filter graph joining scene inputs 0..n-1 with xfade transitions, output [vx].
 
@@ -1028,7 +1061,8 @@ def transition_graph(frames: list[int], transitions: list[tuple[str, float] | No
     for k in range(1, n):
         padded = frames[k] + (span[k + 1] if k + 1 < n else 0)
         if span[k]:
-            kind = TRANSITIONS[transitions[k][0]]
+            name = transitions[k][0]
+            kind = _dip(name) if name in _DIP_LEVELS else XFADE[name]
             parts.append(f"[{current}][p{k}]xfade=transition={kind}:duration={span[k] / FPS:.6f}"
                          f":offset={(length - span[k]) / FPS:.6f}[x{k}]")
             length += padded - span[k]

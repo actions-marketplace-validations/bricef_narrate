@@ -8,7 +8,7 @@ from PIL import Image
 
 from narrate import media
 from narrate.build import Builder, transition_graph
-from narrate.config import TRANSITIONS, ConfigError, parse_transition
+from narrate.config import EXTRA_TRANSITIONS, TRANSITIONS, ConfigError, parse_transition, settings_from_header
 from narrate.script import parse_file
 from narrate.tts import SilentSynth
 
@@ -32,6 +32,8 @@ def test_every_narakeet_transition_exists_in_ffmpeg():
     assert {"fade", "wiperight", "revealright"} <= available
     assert len(TRANSITIONS) == 26  # 27 names in the docs, less `none`
     assert set(TRANSITIONS.values()) <= available
+    assert set(EXTRA_TRANSITIONS.values()) <= available | {"custom"}  # narrate's own (#46)
+    assert "custom" in available
 
 
 def test_transition_starts_at_the_cut_and_keeps_the_length():
@@ -94,3 +96,45 @@ def test_cuts_and_transitions_mix(tmp_path):
                       "![](red.png)\n\n(duration: 1)\n")
     result = Builder(parse_file(script), SilentSynth(), log=lambda _: None).build(tmp_path / "out.mp4")
     assert media.probe(result.video).duration == pytest.approx(4.0, abs=0.05)
+
+
+# -- narrate's fades (#46) -------------------------------------------------------
+
+def _brightness(video: Path, t: float) -> float:
+    png = video.with_name(f"{video.stem}-{t:.3f}.png")
+    media.extract_frame(video, t, png)
+    return float(np.asarray(Image.open(png).convert("L"), dtype=float).mean())
+
+
+def _build(tmp_path: Path, text: str, name: str = "s", audio: bool = False):
+    script = tmp_path / f"{name}.md"
+    script.write_text(text)
+    builder = Builder(parse_file(script), SilentSynth(), log=lambda _: None)
+    return builder.build_audio(tmp_path / f"{name}.wav") if audio else builder.build(tmp_path / f"{name}.mp4")
+
+
+def test_fade_black_dips_through_black_and_keeps_the_length(tmp_path):
+    result = _build(tmp_path, "---\nsize: 320x180\ntransition: fade-black 0.6\n---\n\n(canvas: white)\n\n"
+                              "(duration: 1)\n\n---\n\n(canvas: white)\n\n(duration: 1)\n")
+    assert result.duration == pytest.approx(2.0, abs=0.04)
+    levels = [_brightness(result.video, t) for t in (0.95, 1.15, 1.3, 1.45, 1.65)]
+    assert levels[0] > 250 and levels[-1] > 250  # before the cut, and after the 0.6 s dip
+    assert levels[2] < 15 < levels[1] < 250 and 15 < levels[3] < 250  # darkest half way, from the cut at 1.0 s
+    assert abs(levels[1] - levels[3]) < 40  # out and in at the same pace
+
+
+def test_fade_in_and_out_go_to_black_and_take_the_sound_with_them(tmp_path):
+    header = "---\nsize: 320x180\nfade-in: 0.5\nfade-out: 0.5\n---\n\n"
+    video = _build(tmp_path, header + "(canvas: white)\n\n(duration: 2)\n").video
+    assert _brightness(video, 0.0) < 10 and _brightness(video, 1.0) > 250 and _brightness(video, 1.97) < 30
+
+    media.run(["-f", "lavfi", "-i", "sine=frequency=440:duration=2", str(tmp_path / "tone.wav")])
+    result = _build(tmp_path, header + "(audio: tone.wav)\n", "sound", audio=True)
+    sound = media.decode_audio(result.video, 24000)
+    start, middle, end = (np.abs(sound[a:a + 1200]).mean() for a in (0, 24000, len(sound) - 1200))
+    assert start < middle / 5 and end < middle / 5
+
+
+def test_fades_must_not_be_negative():
+    with pytest.raises(ConfigError, match="fade-in"):
+        settings_from_header({"fade-in": "-1"}, [])

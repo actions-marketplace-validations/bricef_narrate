@@ -38,6 +38,10 @@ TRANSITIONS = {
     "pixelise": "pixelize", "radial": "radial", "circle": "circlecrop", "rect": "rectcrop",
     "reveal": "revealright",
 }
+# narrate's own: dips through a colour, half out and half in (spec §18.3), drawn
+# by a custom xfade expression (build.transition_graph)
+EXTRA_TRANSITIONS = {"fade-black": "custom", "fade-white": "custom"}
+XFADE = {**TRANSITIONS, **EXTRA_TRANSITIONS}
 DEFAULT_TRANSITION_SECONDS = 0.2
 
 
@@ -85,7 +89,7 @@ def parse_transition(value: Any, default_type: str = "crossfade") -> tuple[str, 
         kind, rest = default_type, tokens
     else:
         kind, rest = tokens[0], tokens[1:]
-    if kind not in TRANSITIONS:
+    if kind not in XFADE:
         raise ConfigError(f"unknown transition {kind!r}")
     seconds = parse_number(rest[0], "transition duration") if rest else DEFAULT_TRANSITION_SECONDS
     if seconds <= 0:
@@ -187,6 +191,8 @@ class Settings:
     background: Background | None = None
     poster_time: str = "50%"
     target: str = "offline"
+    fade_in: float = 0.0  # seconds from black at the start (narrate extension)
+    fade_out: float = 0.0  # seconds to black at the end
 
 
 def parse_subtitles(value: Any) -> SubtitleConfig:
@@ -261,6 +267,8 @@ def settings_from_header(header: dict[str, Any], warnings: list[str]) -> Setting
         "background": lambda v: setattr(s, "background", parse_background(v)),
         "poster-time": lambda v: setattr(s, "poster_time", str(v).strip()),
         "target": lambda v: setattr(s, "target", _choice(v, TARGETS, "target")),
+        "fade-in": lambda v: setattr(s, "fade_in", _seconds(v, "fade-in")),
+        "fade-out": lambda v: setattr(s, "fade_out", _seconds(v, "fade-out")),
     }
     for key, value in header.items():
         handler = handlers.get(key)
@@ -272,6 +280,13 @@ def settings_from_header(header: dict[str, Any], warnings: list[str]) -> Setting
         except ConfigError as e:
             raise ConfigError(f"header {key}: {e}") from None
     return s
+
+
+def _seconds(value: Any, what: str) -> float:
+    seconds = parse_number(value, what)
+    if seconds < 0:
+        raise ConfigError(f"{what} can't be negative")
+    return seconds
 
 
 def _choice(value: Any, allowed: set[str], what: str) -> str:
