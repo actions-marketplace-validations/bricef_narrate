@@ -142,6 +142,9 @@ ELEVENLABS_BY_GENDER = {"f": "sarah", "m": "george"}
 ELEVENLABS_MODEL = "eleven_multilingual_v2"
 ELEVENLABS_PHONEME_MODEL = "eleven_flash_v2"  # reads <phoneme alphabet="ipa"> tags
 ELEVENLABS_SPEED = (0.7, 1.2)
+# Models with no speed setting: narrate synthesises at 1.0 and stretches the rest
+# (#47; the factor-q intro sped eleven_v4 up with atempo for the same reason)
+ELEVENLABS_FIXED_SPEED = ("eleven_v3", "eleven_v4")
 _ELEVENLABS_ID_RE = re.compile(r"^[A-Za-z0-9]{20}$")
 
 
@@ -383,6 +386,8 @@ class ElevenLabsSynth:
         if not self.key:
             raise RuntimeError("ELEVENLABS_API_KEY is not set (put it in .env or the environment)")
         self.model = model or os.environ.get("NARRATE_ELEVENLABS_MODEL") or ELEVENLABS_MODEL
+        if self.model.startswith(ELEVENLABS_FIXED_SPEED):
+            self.speed_range = (1.0, 1.0)
         self._cache = SynthCache(self.name)
         self._ignores_language: set[str] = set()
         self._library_names: dict[str, str] | None = None
@@ -434,10 +439,10 @@ class ElevenLabsSynth:
                      for part, tag in text]
             gap = np.zeros(int(JOIN_SECONDS * SAMPLE_RATE), dtype=np.float32)
             return np.concatenate([p for part in parts for p in (part, gap)][:-1])
-        lo, hi = ELEVENLABS_SPEED
+        lo, hi = self.speed_range
         clamped = min(hi, max(lo, speed))
         if clamped != speed:
-            notes.add(f"voice-speed {speed} (ElevenLabs accepts {lo}–{hi}; clamped)")
+            notes.add(f"voice-speed {speed} ({self.model} accepts {lo}–{hi}; clamped)")
         cached = self._cache.path(self.model, text, voice.id, voice.lang, round(clamped, 3))
         if (hit := self._cache.load(cached)) is not None:
             return hit

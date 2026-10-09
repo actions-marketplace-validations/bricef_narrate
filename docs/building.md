@@ -84,8 +84,8 @@ with it.
   other language falls back to Kokoro's default American voice, with a note;
   use ElevenLabs for German, Russian, Korean and the rest.
 - **Speed:** both engines render some speeds themselves (Kokoro 0.5–2×,
-  ElevenLabs 0.7–1.2×). narrate stretches the audio for speeds beyond those,
-  keeping the pitch.
+  ElevenLabs 0.7–1.2×, except its v3 and v4 models). narrate stretches the
+  audio for speeds beyond those, keeping the pitch.
 - **Rebuilds** reuse every paragraph that hasn't changed, from the speech
   cache, so they cost no credits.
 
@@ -106,8 +106,13 @@ with it.
    picks Kokoro.
 
 - **Model:** `eleven_multilingual_v2` by default. Choose another with
-  `--tts-model eleven_turbo_v2_5`, or `NARRATE_ELEVENLABS_MODEL`. Phonetic
-  spans are always voiced by `eleven_flash_v2`, the model that reads IPA.
+  `--tts-model eleven_v4`, or `NARRATE_ELEVENLABS_MODEL`.
+  - **Phonetic spans** are always voiced by `eleven_flash_v2`, the model that
+    reads IPA.
+  - **`eleven_v3` and `eleven_v4`** have no speed setting. narrate speaks with
+    them at their own pace and stretches the audio to the `voice-speed` you
+    ask for, keeping the pitch. Other models set the speed themselves between
+    0.7 and 1.2, and narrate stretches beyond that.
 - **Voices:** ElevenLabs' default voices work on any plan. Voices from the
   Voice Library need a paid plan, and listing your own library needs a key
   with voice-reading permission.
