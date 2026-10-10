@@ -81,9 +81,9 @@ A line of three dashes starts the next scene.
   read aloud, with a warning.
 
 `narrate check script.md` finds missing pictures, clips and recordings, and
-lines it doesn't understand, in a second. It doesn't catch bad values (such
-as `voice-speed: 3`) or missing theme, music and font files. A preview build,
-`narrate build script.md --tts silent`, finds those in seconds.
+lines it doesn't understand, in a second. `narrate check script.md --timing`
+also catches bad values (such as `voice-speed: 3`) and missing theme, music
+and font files, and says how long each scene will be.
 
 ## Narrate text and add pauses
 
