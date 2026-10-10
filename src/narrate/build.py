@@ -92,6 +92,14 @@ class Visual:
     zoom: float | None = None  # how far a pan/zoom moves, if not motion.ZOOM / PAN_ZOOM
     render: Render | None = None  # a render block not drawn yet (planning without rendering)
     line: int = 0  # the script line it comes from
+    focus: tuple[float, float] | None = None  # a focal point, fractions of the source (#63)
+    windows: tuple | None = None  # pan/zoom windows given outright, (from, to) (#63)
+    align: tuple[float, float] | None = None  # where a still crop sits, object-position fractions (from focus)
+
+    @property
+    def css_position(self) -> str:
+        """Its position for a frame's CSS: a named one, or the alignment its focal point gives."""
+        return f"{self.align[0] * 100:.4g}% {self.align[1] * 100:.4g}%" if self.align else self.position
 
 
 @dataclass
@@ -437,6 +445,7 @@ class Builder:
         visuals = [self._visual(m, workdir, natural) for m in sources]
         for v, m in zip(visuals, sources):
             v.line = m.line
+            self._frame_freely(v, m)
         if force_duration is not None:
             duration = force_duration
         narration = track.samples()
@@ -542,6 +551,35 @@ class Builder:
             length=end - start, volume=1.0 if m.volume is None else m.volume,
             has_audio=info.has_audio,
         )
+
+    def _frame_freely(self, v: Visual, m: Media) -> None:
+        """A focal point and pan/zoom windows (#63): carried to the visual, with the crop alignment its
+        source's size gives."""
+        if m.focus is None and m.windows is None:
+            return
+        w, h = self.settings.width, self.settings.height
+        v.focus, v.windows = m.focus, m.windows
+        size = None
+        if v.kind == "still" and v.path is not None:
+            from PIL import Image
+
+            with Image.open(v.path) as im:
+                size = im.size
+        elif v.kind == "video" and v.path is not None:
+            info = media.probe(v.path)
+            size = (info.width, info.height) if info.width and info.height else None
+        elif v.kind == "page":
+            size = v.viewport
+        if m.windows is not None:
+            if v.kind != "still" or v.render is not None:
+                self.notes.add("from/to windows on a clip, page or render block (ignored; they apply to pictures)")
+                v.windows = None
+            else:
+                v.motion = v.motion or "custom"
+                if size and any(motion.window_rect(win, *size, w, h)[1] for win in m.windows if win):
+                    self.notes.add(f"line {m.line}: a window reached past the picture's edge, so it was moved in")
+        if m.focus is not None and size:
+            v.align = motion.alignment(m.focus, size[0], size[1], w, h, v.fit)
 
     def _clip_audio(self, visuals: list[Visual], layout: Layout, n: int) -> np.ndarray:
         """The soundtracks of the scene's clips, each placed where its clip plays."""
@@ -820,7 +858,7 @@ class Builder:
                 windows = [] if layout.repeat else _windows(overlays(backdrop=True), lo, hi)
                 segments.append(submit(self._encode_motion, v, count, windows, name(f"{i}.mp4")))
                 continue
-            image = {"image": v.path, "fit": v.fit, "position": v.position}
+            image = {"image": v.path, "fit": v.fit, "position": v.css_position}
             if layout.repeat:
                 png = renderer.render(spec(**image, slide=None, callouts=[]), name(f"{i}.png"))
                 segments.append(submit(_encode_still, png, count, name(f"{i}.mp4")))
@@ -883,7 +921,7 @@ class Builder:
         w, h = self.settings.width, self.settings.height
         inputs, graph = _overlay_graph("[0:v]setsar=1", overlays)
         return media.encode_frames(
-            motion.frames(v.path, v.motion, v.position, w, h, frames, v.zoom), w, h, FPS,
+            motion.frames(v.path, v.motion, v.position, w, h, frames, v.zoom, v.focus, v.windows), w, h, FPS,
             [*inputs, "-filter_complex", graph, "-map", "[v]", "-frames:v", str(frames), "-an", *_SEGMENT_CODEC],
             out,
         )
@@ -895,7 +933,7 @@ class Builder:
         chain = ["setpts=PTS-STARTPTS"]
         if abs(tempo - 1.0) > 1e-6:
             chain.append(f"setpts=PTS/{tempo:.6f}")
-        chain += [f"fps={FPS}", *_resize_filters(v.fit, v.position, w, h, canvas or "#000000"), "setsar=1",
+        chain += [f"fps={FPS}", *_resize_filters(v.fit, v.position, w, h, canvas or "#000000", v.align), "setsar=1",
                   f"tpad=stop_mode=clone:stop_duration={frames / FPS + 1:.3f}"]
         inputs, graph = _overlay_graph(f"[0:v]{','.join(chain)}", overlays)
         media.run(["-ss", f"{v.start:.3f}", "-t", f"{v.length:.3f}", "-i", str(v.path), *inputs,
@@ -910,7 +948,7 @@ class Builder:
         vw, vh = v.viewport
         # A page designed smaller than the frame renders at a higher pixel density, not enlarged afterwards
         scale = (min if v.fit == "contain" else max)(w / vw, h / vh)
-        chain = [*_resize_filters(v.fit, v.position, w, h, canvas or "#000000"), "setsar=1"]
+        chain = [*_resize_filters(v.fit, v.position, w, h, canvas or "#000000", v.align), "setsar=1"]
         inputs, graph = _overlay_graph(f"[0:v]{','.join(chain)}", overlays)
         captured: list[int] = []
         with closing(pages.capture(renderer, v.path, v.viewport, scale, frames, FPS, captured.append,
@@ -1206,12 +1244,18 @@ def allocate_frames(frames: int, pieces: list[float]) -> list[int]:
     return counts
 
 
-def _resize_filters(fit: str, position: str, w: int, h: int, canvas: str) -> list[str]:
+def _resize_filters(fit: str, position: str, w: int, h: int, canvas: str,
+                    align: tuple[float, float] | None = None) -> list[str]:
+    """ffmpeg filters fitting a clip or page to w×h; `align` (from a focal point) places the crop or the
+    picture as CSS object-position fractions would."""
     if fit == "fit":
         return [f"scale={w}:{h}"]
     if fit == "contain":
-        return [f"scale={w}:{h}:force_original_aspect_ratio=decrease",
-                f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color={canvas}"]
+        px, py = ((f"(ow-iw)*{align[0]:.6f}", f"(oh-ih)*{align[1]:.6f}") if align else ("(ow-iw)/2", "(oh-ih)/2"))
+        return [f"scale={w}:{h}:force_original_aspect_ratio=decrease", f"pad={w}:{h}:{px}:{py}:color={canvas}"]
+    if align:
+        return [f"scale={w}:{h}:force_original_aspect_ratio=increase",
+                f"crop={w}:{h}:(iw-ow)*{align[0]:.6f}:(ih-oh)*{align[1]:.6f}"]
     x = {"left": "0", "top-left": "0", "right": "iw-ow"}.get(position, "(iw-ow)/2")
     y = {"top": "0", "top-left": "0", "bottom": "ih-oh"}.get(position, "(ih-oh)/2")
     return [f"scale={w}:{h}:force_original_aspect_ratio=increase", f"crop={w}:{h}:{x}:{y}"]

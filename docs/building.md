@@ -96,10 +96,14 @@ The studio is a web app for writing a script, served from your computer.
   the script's text, as you would by hand, and can be undone in the editor.
   - **Fit:** `cover`, `contain` or `fit`. **Position:** the six positions
     narrate has; those that make no difference for this picture are dimmed.
-    With room to move, drag the preview to pick the position.
-  - **Pictures:** pan and zoom (`zoom`, `pan`, `panzoom`, …) and how far it
-    moves. The whole picture shows below with the first and last frames'
-    windows, and **Show the motion** plays it.
+  - **Framing a picture:** the whole picture shows below, with its crop and
+    focal point. Click or drag there, or drag the preview, to move the focal
+    point anywhere (`position: 38% 50%`); it becomes a named position when it
+    lands on one.
+  - **Pan and zoom:** `zoom`, `pan`, `panzoom` and the rest, and how far it
+    moves, or **custom** for windows of your own (`from` and `to`). The first
+    and last frames' windows show on the whole picture: drag one to move it,
+    or its corner to zoom. **Show the motion** plays it.
   - **Clips:** sync, the segment to play, and volume or mute.
   - **The written form is kept:** `![cover top](photo.jpg)` stays a picture
     line, with its words changed in place. A zoom amount or a volume other
@@ -110,8 +114,8 @@ The studio is a web app for writing a script, served from your computer.
   part of the video, with music, subtitles and theme. It goes in a temporary
   folder, never over the video, and a scene whose text, engine and files
   haven't changed isn't rendered again.
-- **What's next:** free framing, callouts drawn on the preview, a voice
-  picker and HTML scene tools are planned (narrate #28; the design is in
+- **What's next:** callouts drawn on the preview, a voice picker and HTML
+  scene tools are planned (narrate #28; the design is in
   [design/studio.md](design/studio.md)).
 
 **On another machine,** such as a server you reach over a VPN:

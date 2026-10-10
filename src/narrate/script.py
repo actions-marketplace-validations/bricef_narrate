@@ -26,7 +26,10 @@ ANIMATED_SIZES = {"zoom", "zoomout", "pan", "panzoom", "panzoomout"}
 POSITIONS = {"center", "top-left", "left", "right", "top", "bottom"}
 SYNCS = {"freeze", "match", "trim", "loop", "trim-or-loop", "loop-audio"}
 # Frontmatter keys of a render block that place its output, as in (image: …) / (video: …)
-PLACEMENT = {"size", "position", "sync", "segment", "volume", "zoom"}
+PLACEMENT = {"size", "position", "sync", "segment", "volume", "zoom", "from", "to"}
+# Free framing (narrate extension, #63): a focal point "X% Y%", and pan/zoom windows "X% Y% ZOOM"
+_FOCUS_RE = re.compile(r"^(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%$")
+_WINDOW_RE = re.compile(r"^(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%(?:\s+(\d+(?:\.\d+)?))?$")
 
 DIRECTIVES = {
     "audio", "callout", "canvas", "duration", "font-size", "html", "image", "image-size",
@@ -80,6 +83,8 @@ class Media:
     render: Render | None = None
     viewport: str | None = None  # an HTML scene's design size, as written ("1280x720")
     zoom: float | None = None  # how far pan and zoom move (narrate extension, #49)
+    focus: tuple[float, float] | None = None  # a focal point, fractions of the picture (#63)
+    windows: tuple[tuple[float, float, float] | None, tuple[float, float, float] | None] | None = None  # from, to
 
 
 @dataclass
@@ -363,6 +368,26 @@ def media_kind(path: str) -> str | None:
     return None
 
 
+def parse_focus(value: str) -> tuple[float, float] | None:
+    """A focal point written "70% 25%", as fractions of the picture; None if it isn't one."""
+    m = _FOCUS_RE.match(value.strip())
+    if not m or float(m.group(1)) > 100 or float(m.group(2)) > 100:
+        return None
+    return float(m.group(1)) / 100, float(m.group(2)) / 100
+
+
+def parse_window(value: str) -> tuple[float, float, float] | None:
+    """A pan/zoom window written "72% 30% 2.5": its centre, as fractions of the picture, and its zoom
+    (1, the default, is the plain cover framing). None if it isn't one."""
+    m = _WINDOW_RE.match(value.strip())
+    if not m or float(m.group(1)) > 100 or float(m.group(2)) > 100:
+        return None
+    zoom = float(m.group(3)) if m.group(3) else 1.0
+    if zoom < 1:
+        return None
+    return float(m.group(1)) / 100, float(m.group(2)) / 100, zoom
+
+
 def _segment(value: str) -> tuple[str, str | None] | None:
     m = _SEGMENT_RE.match(value.replace(" ", ""))
     return (m.group(1), m.group(2)) if m else None
@@ -423,6 +448,11 @@ def _apply_props(media: Media, props: dict[str, Any], what: str, line: int, warn
             media.size = low
         elif prop == "position" and low in POSITIONS:
             media.position = low
+        elif prop == "position" and (focus := parse_focus(low)):
+            media.focus = focus
+        elif prop in ("from", "to") and (window := parse_window(low)):
+            start, end = media.windows or (None, None)
+            media.windows = (window, end) if prop == "from" else (start, window)
         elif prop == "sync" and low in SYNCS:
             media.sync = low
         elif prop == "segment" and (seg := _segment(low)):

@@ -9,6 +9,7 @@ planned is reported and skipped, so one bad line doesn't blank the outline.
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import re
 from dataclasses import dataclass, field
@@ -96,10 +97,15 @@ def _options(block: Media) -> dict:
     segment = None
     if block.segment:
         segment = block.segment[0] + (f"-{block.segment[1]}" if block.segment[1] else "")
+    pct = lambda v: f"{v * 100:.4g}%"  # noqa: E731
+    window = lambda w: None if w is None else f"{pct(w[0])} {pct(w[1])}" + (f" {w[2]:g}" if w[2] != 1 else "")  # noqa: E731
     return {"fit": block.size if block.size in SIZES else None,
             "motion": block.size if block.size in ANIMATED_SIZES else None,
-            "position": block.position, "zoom": block.zoom, "sync": block.sync, "segment": segment,
-            "volume": "mute" if block.volume == 0 else block.volume}
+            "position": f"{pct(block.focus[0])} {pct(block.focus[1])}" if block.focus else block.position,
+            "zoom": block.zoom, "sync": block.sync, "segment": segment,
+            "volume": "mute" if block.volume == 0 else block.volume,
+            "from": window(block.windows[0]) if block.windows else None,
+            "to": window(block.windows[1]) if block.windows else None}
 
 
 _sizes: dict[tuple[Path, int], tuple[int, int] | None] = {}
@@ -122,18 +128,27 @@ def _picture_size(path: Path) -> tuple[int, int] | None:
     return _sizes[key]
 
 
-def _media_entry(line: int, kind: str, path: str, options: dict, base: Path, settings: Settings) -> dict:
+def _media_entry(line: int, kind: str, block: Media, options: dict, base: Path, settings: Settings) -> dict:
     """What the inspector needs about one picture, clip, page or render block."""
+    path = block.path
     entry = {"line": line, "kind": kind, "file": path, "options": options, "size": None, "length": None,
-             "windows": None}
+             "windows": None, "crop": None, "focus": None}
     file = base / path if path else None
+    w, h = settings.width, settings.height
     if kind == "picture" and file and file.is_file():
-        entry["size"] = _picture_size(file)
-        if entry["size"] and options["motion"]:
-            zoom = options["zoom"] or settings.image_zoom
-            start, end = motion.endpoints(options["motion"], options["position"] or "center", *entry["size"],
-                                          settings.width, settings.height, zoom)
-            entry["windows"] = [[round(v, 1) for v in start], [round(v, 1) for v in end]]
+        entry["size"] = size = _picture_size(file)
+        if size:
+            position = block.position or "center"
+            point = (block.focus[0] * size[0], block.focus[1] * size[1]) if block.focus else None
+            crop = motion._align(*motion.cover_size(*size, w, h), (0.0, 0.0, *size), position, point)
+            entry["crop"] = [round(v, 1) for v in crop]  # a still's cover framing
+            entry["focus"] = list(block.focus) if block.focus else [(crop[0] + crop[2] / 2) / size[0],
+                                                                       (crop[1] + crop[3] / 2) / size[1]]
+            if options["motion"] or block.windows:
+                zoom = options["zoom"] or settings.image_zoom
+                start, end = motion.endpoints(options["motion"], position, *size, w, h, zoom, block.focus,
+                                              block.windows)
+                entry["windows"] = [[round(v, 1) for v in start], [round(v, 1) for v in end]]
     elif kind == "clip" and file and file.is_file():
         try:
             info = media.probe(file)
@@ -190,7 +205,7 @@ def run(text: str, script: Path, synth: Any) -> Analysis:
     names = {b.line: _name(b) for scene in parsed.scenes for b in scene.blocks if isinstance(b, Media)}
     # Each picture and clip as written, before stand-ins replace missing ones
     written = {b.line: ("render" if b.render else {"image": "picture", "video": "clip", "html": "page"}.get(b.kind, b.kind),
-                        b.path, _options(b))
+                        dataclasses.replace(b), _options(b))
                for scene in parsed.scenes for b in scene.blocks if isinstance(b, Media) and b.kind != "audio"}
     problems: list[dict] = []
     missing: set[int] = set()
@@ -262,7 +277,7 @@ def run(text: str, script: Path, synth: Any) -> Analysis:
         "duration": round(start, 3),
         "missing": {"paragraphs": estimator.estimates, "characters": estimator.missing_chars},
         "notes": sorted(builder.notes),
-        "media": {str(line): _media_entry(line, kind, path, options, parsed.base_dir, builder.settings)
-                  for line, (kind, path, options) in written.items()},
+        "media": {str(line): _media_entry(line, kind, block, options, parsed.base_dir, builder.settings)
+                  for line, (kind, block, options) in written.items()},
         "defaults": {"fit": builder.settings.asset_resize, "zoom": builder.settings.image_zoom},
     }, kept, builder.settings, text, sounds)

@@ -21,16 +21,16 @@ from typing import Any
 
 import yaml
 
-from ..script import ANIMATED_SIZES, POSITIONS, SIZES, SYNCS, media_kind
+from ..script import ANIMATED_SIZES, POSITIONS, SIZES, SYNCS, media_kind, parse_focus, parse_window
 
 _IMAGE = re.compile(r'^(?P<indent>\s*)!\[(?P<alt>[^\]]*)\]\((?P<target>\s*(?:<[^>]*>|[^)\s]+)(?:\s+"[^"]*")?\s*)\)(?P<tail>\s*)$')
 _FENCE = re.compile(r"^(?P<lead>\s{0,3}(?:`{3,}|~{3,})\s*render:\S+)(?P<tokens>[^\n]*)$", re.I)
 _DIRECTIVE = re.compile(r"^(?P<indent>\s*)\(\s*(?P<key>image|video|html)\s*:", re.I)
 _SEGMENT = re.compile(r"^(start|end|\d+(?::\d{1,2}){0,2}(?:\.\d+)?)(?:-(start|end|\d+(?::\d{1,2}){0,2}(?:\.\d+)?))?$")
-_PLAIN = re.compile(r"^[A-Za-z0-9_./@+-]+$")
+_PLAIN = re.compile(r"^(?:[A-Za-z0-9_./@+-]+|[\d.%][\d.% ]*)$")  # names, or numbers such as 70% 25% 2
 
 # The properties an edit can set, and None to remove one (the default applies again)
-PROPERTIES = ("fit", "motion", "position", "zoom", "sync", "segment", "volume")
+PROPERTIES = ("fit", "motion", "position", "zoom", "sync", "segment", "volume", "from", "to")
 _TOKEN_SLOTS = ("size", "position", "sync", "mute", "segment")
 
 
@@ -42,10 +42,17 @@ def _check(changes: dict[str, Any]) -> dict[str, Any]:
     unknown = set(changes) - set(PROPERTIES)
     if unknown:
         raise EditError(f"unknown properties: {', '.join(sorted(unknown))}")
-    rules = {"fit": SIZES, "motion": ANIMATED_SIZES, "position": POSITIONS, "sync": SYNCS}
+    rules = {"fit": SIZES, "motion": ANIMATED_SIZES, "sync": SYNCS}
     for key, allowed in rules.items():
         if changes.get(key) is not None and changes[key] not in allowed:
             raise EditError(f"{key} must be one of {', '.join(sorted(allowed))}, not {changes[key]!r}")
+    position = changes.get("position")
+    if position is not None and position not in POSITIONS and not parse_focus(str(position)):
+        raise EditError(f"position must be one of {', '.join(sorted(POSITIONS))} or a point such as 70% 25%, "
+                        f"not {position!r}")
+    for key in ("from", "to"):
+        if changes.get(key) is not None and not parse_window(str(changes[key])):
+            raise EditError(f"{key} is a window such as 72% 30% 2.5 (its centre, then its zoom), not {changes[key]!r}")
     if changes.get("zoom") is not None:
         try:
             if float(changes["zoom"]) <= 1:
@@ -82,8 +89,10 @@ def _volume_token(changes: dict[str, Any]) -> tuple[bool, bool]:
 
 
 def _needs_map(changes: dict[str, Any]) -> bool:
-    if changes.get("zoom") is not None:
+    if changes.get("zoom") is not None or changes.get("from") is not None or changes.get("to") is not None:
         return True
+    if changes.get("position") is not None and changes["position"] not in POSITIONS:
+        return True  # a focal point
     value = changes.get("volume")
     return value is not None and value != "mute" and float(value) not in (0.0, 1.0)
 
@@ -140,7 +149,7 @@ def _edit_props(props: dict[str, str], changes: dict[str, Any]) -> dict[str, str
     updates: dict[str, str | None] = {}
     if changed:
         updates["size"] = size
-    for key in ("position", "sync", "segment", "volume"):
+    for key in ("position", "sync", "segment", "volume", "from", "to"):
         if key in changes:
             updates[key] = None if changes[key] is None else str(changes[key]).replace(" ", "") if key == "segment" \
                 else str(changes[key])

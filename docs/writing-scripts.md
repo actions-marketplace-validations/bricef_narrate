@@ -271,6 +271,22 @@ the second zooms in.
     zooms to 1.1× instead.
   - **Every picture:** `image-zoom: 1.1` in the header.
   - Gentler amounts suit short scenes.
+- **Any point, any path** (narrate only):
+  - **Focal point:** `(image: {file: photo.jpg, position: 70% 25%})` keeps
+    that point, 70% across and 25% down, as near the middle as the crop
+    allows. Zooms and pans head for it too.
+  - **Windows:** `from` and `to` give the first and last frames outright, each
+    as its centre and a zoom (1 is the plain crop, 2 shows half as much):
+
+    ```
+    (image:
+      file: photo.jpg
+      from: 50% 50%
+      to: 72% 30% 2.5)
+    ```
+
+    A window past the picture's edge is moved in, with a note. The studio's
+    inspector draws both on the whole picture, to drag and resize.
 - **Several pictures** in one scene play in turn and share its time equally.
 - **Directive form:** `(image: photo.jpg)`, or a map such as
   `(image: {file: photo.jpg, size: panzoom, position: left})`.
@@ -942,7 +958,9 @@ name it with `--source`.
   - [render blocks](#generate-pictures-from-code-blocks) generate pictures
     from code blocks, which Narakeet would show as code;
   - [HTML scenes](#show-animated-html-scenes) animate web pages, which
-    Narakeet would read out as narration.
+    Narakeet would read out as narration;
+  - [free framing](#show-pictures) (`position: 70% 25%`, `from` and `to`)
+    frames a picture on any point and pans or zooms between any two windows.
 - **Open questions:** where Narakeet's documentation is silent or
   contradicts itself, narrate makes a choice;
   [§16](spec/narakeet-markdown.md#16-gaps-and-how-narrate-resolves-them) lists each

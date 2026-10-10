@@ -1136,3 +1136,37 @@ or `broadcast` (−23).
   - For `pan`, it is the fixed zoom the pan travels at (default 1.15).
 - **Default:** the header's `image-zoom` sets it for every picture.
 - **Precedence:** the picture's own value wins over the header's.
+
+### 18.6 Free framing (narrate #63)
+
+Map forms only (`(image:)`, `(video:)`, `(html:)`, and a render block's
+frontmatter); alt-text tokens can't hold them.
+
+```
+position: X% Y%           ; a focal point, 0–100% of the picture across and down
+from: X% Y% [ZOOM]        ; a pan/zoom window: its centre, and its zoom (default 1)
+to:   X% Y% [ZOOM]
+```
+
+- **Focal point:** `position: X% Y%` in place of a named position.
+  - **With `cover`:** the crop keeps the point as near the middle of the frame
+    as the picture allows (a crop never shows past the picture's edge).
+  - **With `contain`:** it places the picture as CSS `object-position` would
+    (0% at the left or top, 100% at the right or bottom).
+  - **With `fit`** (stretched), it has no effect.
+  - **Pan and zoom:** the point is where an animated size heads, as a named
+    position would be, as near it as the windows allow.
+- **Windows** (pictures only): `from` and `to` give the first and last frames'
+  windows outright, and the picture moves linearly between them over its time
+  on screen, with or without an animated size.
+  - **Zoom** 1 is the plain `cover` framing; 2 shows half its width. It must be
+    at least 1.
+  - **Left out:** a missing `from` or `to` is the plain framing (the cover crop,
+    placed by the position).
+  - **Kept inside:** a window that would show past the picture's edge is moved
+    in, and the build notes it.
+  - On a clip, page or render block whose output isn't a picture, `from` and
+    `to` are ignored with a note.
+- **Invalid values** are warned about with their line and ignored, as other
+  properties are.
+
