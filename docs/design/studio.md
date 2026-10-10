@@ -180,15 +180,19 @@ Decided with the author.
 | Request | Does |
 | --- | --- |
 | `GET /` | the app |
-| `GET /api/script` | the script's text and modification time |
-| `PUT /api/script` | save `{text, mtime}`; 409 if the file changed meanwhile |
-| `POST /api/analyse` | parse, check and plan `{text}`: scenes with times, blocks with lines, problems |
-| `GET /api/frame` | the frame HTML for a scene at a moment |
+| `GET /api/script` | the script's text and version (modification time and size) |
+| `PUT /api/script` | save `{text, version}`; 409 if the file changed meanwhile |
+| `POST /api/analyse` | parse, check and plan `{text}`: an id, scenes with times, blocks with lines, problems |
+| `POST /api/frame` | the frame HTML (or page URL) for `{id, scene, time}`, from that analysis |
+| `POST /api/engine` | switch the speech engine; refused if it can't start |
 | `POST /api/scenes/{n}/audio` | synthesise a scene's narration; returns a WAV URL and paragraph start times |
 | `GET /api/peaks/{sound}` | a scene's waveform, as min/max pairs, by the sound id the analysis gives |
 | `POST /api/build` | start a build; progress over the event stream |
+| `GET /api/build` | the latest build's state |
+| `POST /api/build/cancel` | stop the running build |
 | `GET /api/events` | the event stream (SSE) |
-| `GET /files/{path}` | the project's own files, nothing outside its folder |
+| `GET /files/{path}` | the project's own files, nothing outside its folder and no hidden files |
+| `GET /scratch/{name}` | the session's scratch files: clip stills, scene audio, copies of renders |
 
 ## Milestones
 
