@@ -13,7 +13,40 @@ def test_action_mirrors_narakeets_outputs():
     a = action()
     assert a["runs"]["using"] == "composite"
     assert a["inputs"]["source-path"]["required"] is True
-    assert set(a["outputs"]) == {"video-file", "poster-file", "srt-file", "vtt-file"}
+    assert set(a["outputs"]) == {"video-file", "poster-file", "srt-file", "vtt-file", "transcript-file"}
+
+
+def test_action_chooses_subtitles_and_a_transcript(tmp_path):
+    """The inputs become narrate's own options, and the transcript comes back as an output (#58)."""
+    import subprocess
+
+    a = action()
+    assert a["inputs"]["subtitles"]["default"] == "" and a["inputs"]["transcript"]["default"] == "false"
+    build = next(step for step in a["runs"]["steps"] if step.get("id") == "build")
+    assert build["env"]["SUBTITLES"] == "${{ inputs.subtitles }}" and build["env"]["TRANSCRIPT"] == "${{ inputs.transcript }}"
+    # Run the step's script with a stand-in docker that records its arguments and makes the files
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "docker").write_text('#!/bin/bash\necho "$@" > "$RECORD"\nbase="${OUTPUT%.*}"\n'
+                                    'touch "$OUTPUT" "$base.jpg" "$base.srt" "$base.vtt" "$base.transcript.txt"\n')
+    (bin_dir / "docker").chmod(0o755)
+
+    def run(subtitles, transcript):
+        outputs = tmp_path / "outputs"
+        outputs.write_text("")
+        env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": str(tmp_path), "GITHUB_WORKSPACE": str(tmp_path),
+               "GITHUB_OUTPUT": str(outputs), "RECORD": str(tmp_path / "args"), "IMAGE": "narrate:test",
+               "SOURCE": "s.md", "OUTPUT": str(tmp_path / "out/video.mp4"), "TTS": "silent",
+               "SUBTITLES": subtitles, "TRANSCRIPT": transcript}
+        subprocess.run(["bash", "-e", "-c", build["run"]], env=env, cwd=tmp_path, check=True)
+        return (tmp_path / "args").read_text().split(), outputs.read_text()
+
+    args, outputs = run("external", "true")
+    assert args[args.index("build"):] == ["build", "s.md", "-o", str(tmp_path / "out/video.mp4"), "--tts", "silent",
+                                          "--subtitles", "external", "--transcript"]
+    assert f"transcript-file={tmp_path}/out/video.transcript.txt" in outputs
+    args, _ = run("", "false")
+    assert "--subtitles" not in args and "--transcript" not in args  # the script decides
 
 
 def test_action_builds_in_the_published_image():

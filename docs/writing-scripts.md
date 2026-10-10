@@ -695,9 +695,17 @@ This narration plays, but the quote above is what the viewer reads.
   | `none` | no subtitles (the default) |
   | `external` | `.srt` and `.vtt` files next to the video |
   | `embed` | a subtitle track inside the MP4, plus the files |
-  | `overlay` | burned in: white text with a black outline |
-  | `overlay-background` | burned in: white text on a dark box |
-  | `tiktok` | burned in: large text, a few words at a time, mid-frame |
+  | `overlay` | burned in: white text with a black outline, plus the files |
+  | `overlay-background` | burned in: white text on a dark box, plus the files |
+  | `tiktok` | burned in: large text, a few words at a time, mid-frame, plus the files |
+
+  Every mode but `none` writes the `.srt` and `.vtt` files (narrate only:
+  Narakeet writes them for `external` and `embed`), so a video with captions
+  burned in still has a file to upload where a platform takes one.
+- **Per build:** `narrate build script.md --subtitles external` chooses the
+  mode for that build, over the header's, keeping the header's style. One
+  script then gives a YouTube upload with a separate `.srt` and a TikTok cut
+  with captions burned in ([Build a video](building.md#build-a-video)).
 
 - **Style:** the map form shown above takes `mode: overlay` or `mode: embed`,
   plus any of:
@@ -717,6 +725,12 @@ This narration plays, but the quote above is what the viewer reads.
   faster-whisper when subtitles are on and the scene has no block quote. Its
   model, about 460 MB, downloads the first time.
 - Write one sentence per paragraph for subtitles that change with the speech.
+- **Transcript** (narrate only): `transcript: true` in the header, or
+  `--transcript` when building, writes what's spoken as plain text beside the
+  video, as `script.transcript.txt`: a line per paragraph, a blank line
+  between scenes, without markup. It's what's said, so a block quote doesn't
+  replace its scene's narration there. Recordings are transcribed for it, as
+  for subtitles.
 
 ## Add background music
 

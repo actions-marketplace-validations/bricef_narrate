@@ -17,6 +17,12 @@ inputs:
   elevenlabs-api-key:
     description: ElevenLabs API key, e.g. from a secret (optional)
     default: ""
+  subtitles:
+    description: "Subtitles for this build, over the script's own: none, external, embed, overlay, overlay-background or tiktok (every mode but none also writes .srt and .vtt)"
+    default: ""
+  transcript:
+    description: "true to also write what's spoken as plain text (<output>.transcript.txt)"
+    default: "false"
   image:
     description: The narrate container image to build with
     default: ghcr.io/bricef/narrate:latest
@@ -34,6 +40,9 @@ outputs:
   vtt-file:
     description: Subtitles (VTT), when the script asks for subtitle files
     value: ${{ steps.build.outputs.vtt-file }}
+  transcript-file:
+    description: What's spoken, as plain text, when a transcript is asked for
+    value: ${{ steps.build.outputs.transcript-file }}
 
 runs:
   using: composite
@@ -92,14 +101,20 @@ runs:
         SOURCE: ${{ inputs.source-path }}
         OUTPUT: ${{ inputs.output }}
         TTS: ${{ inputs.tts }}
+        SUBTITLES: ${{ inputs.subtitles }}
+        TRANSCRIPT: ${{ inputs.transcript }}
       run: |
         cache="$HOME/.cache/narrate-image"
         mkdir -p "$cache" "$(dirname "$OUTPUT")"
+        extra=()
+        if [ -n "$SUBTITLES" ]; then extra+=(--subtitles "$SUBTITLES"); fi
+        if [ "$TRANSCRIPT" = "true" ]; then extra+=(--transcript); fi
         docker run --rm --user "$(id -u):$(id -g)" \
           -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$PWD" -v "$cache:/cache" \
-          -e ELEVENLABS_API_KEY "$IMAGE" build "$SOURCE" -o "$OUTPUT" --tts "$TTS"
+          -e ELEVENLABS_API_KEY "$IMAGE" build "$SOURCE" -o "$OUTPUT" --tts "$TTS" "${extra[@]}"
         base="${OUTPUT%.*}"
         echo "video-file=$OUTPUT" >> "$GITHUB_OUTPUT"
         echo "poster-file=$base.jpg" >> "$GITHUB_OUTPUT"
         if [ -f "$base.srt" ]; then echo "srt-file=$base.srt" >> "$GITHUB_OUTPUT"; fi
         if [ -f "$base.vtt" ]; then echo "vtt-file=$base.vtt" >> "$GITHUB_OUTPUT"; fi
+        if [ -f "$base.transcript.txt" ]; then echo "transcript-file=$base.transcript.txt" >> "$GITHUB_OUTPUT"; fi

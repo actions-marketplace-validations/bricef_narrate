@@ -27,11 +27,12 @@ import numpy as np
 from . import media, motion, music, pages, render, subtitles, voicemap
 from .config import (
     BUILTIN_MUSIC, FPS, XFADE, ConfigError, Settings, SubtitleConfig, parse_pitch, parse_transition, parse_color, parse_number, parse_size, parse_speed,
-    parse_time, parse_volume, settings_from_header,
+    parse_time, parse_volume, settings_from_header, subtitles_with_mode,
 )
 from .doctor import find_font
 from .frames import FrameRenderer, FrameSpec, SlideSpec
 from .script import ANIMATED_SIZES, POSITIONS, SIZES, Directive, Media, Narration, Quote, Render, Scene, Script, Slide
+from .stt import captions as stt_captions
 from .subtitles import Cue
 from .ssml import ssml_runs
 from .text import Run, speech_runs, ssml_text, subtitle_text
@@ -134,6 +135,7 @@ class ScenePlan:
     transition: tuple[str, float] | None = None  # incoming: Narakeet type, seconds
     marks: dict[str, float] = field(default_factory=dict)  # cue name -> seconds in, for HTML scenes
     paragraphs: list[ParagraphTiming] = field(default_factory=list)
+    spoken: list[str] = field(default_factory=list)  # each paragraph as plain text, recordings transcribed (#58)
 
 
 @dataclass
@@ -143,6 +145,7 @@ class BuildResult:
     subtitle_files: list[Path]
     duration: float
     notes: list[str]
+    transcript: Path | None = None  # <name>.transcript.txt, when asked for (#58)
 
 
 class AudioTrack:
@@ -197,7 +200,7 @@ def apply_gain(samples: np.ndarray, volume: float | str) -> np.ndarray:
 class Builder:
     def __init__(self, script: Script, synth: Synth, *, log: Callable[[str], None] | None = None,
                  jobs: int | None = None, regenerate: bool = False, measure_pages: bool = True,
-                 scenes: Collection[int] | None = None):
+                 scenes: Collection[int] | None = None, subtitles: str | None = None, transcript: bool = False):
         self.script = script
         self.measure_pages = measure_pages  # load HTML scenes to time them (the studio's previews don't)
         self.regenerate = regenerate  # make stored render outputs (render:web) again
@@ -208,8 +211,11 @@ class Builder:
         self.notes: set[str] = set()
         try:
             self.settings: Settings = settings_from_header(script.header, script.warnings)
+            if subtitles is not None:  # the build's choice, over the header's (#58), before any planning
+                self.settings.subtitles = subtitles_with_mode(script.header.get("subtitles"), subtitles)
         except ConfigError as e:
             raise BuildError(str(e)) from None
+        self.settings.transcript = self.settings.transcript or transcript
         try:
             self.voice_map = voicemap.load(script.base_dir)
         except voicemap.VoiceMapError as e:
@@ -314,6 +320,8 @@ class Builder:
                                    workdir, force_duration=frames / FPS)
             lo, hi = at * SR // FPS, (at + frames) * SR // FPS
             plan.audio = fit_length(plan.audio, hi - lo) + fit_length(voiced.audio[lo:hi], hi - lo)
+            if scene is group[0]:  # one narration across the group: its words go with its first scene
+                plan.spoken = voiced.spoken + plan.spoken
             if not plan.cues:
                 start, end = at / FPS, (at + frames) / FPS
                 plan.cues = [Cue(max(c.start, start) - start, min(c.end, end) - start, c.text)
@@ -337,6 +345,7 @@ class Builder:
         quotes: list[str] = []
         narration_spans: list[tuple[float, float, str]] = []
         recordings: list[tuple[float, Path, str | None]] = []  # start in the track, file, language hint
+        spoken: list[tuple[float, str]] = []  # (start, plain text) of each narration block, for the transcript
         marks: dict[str, float] = {}  # "1", "2", … for each narration block, and SSML mark names
         paragraphs: list[ParagraphTiming] = []
 
@@ -435,6 +444,7 @@ class Builder:
                     if runs:
                         caption = subtitle_text(ssml_text(block.text) if block.ssml else block.text)
                         narration_spans.append((start, track.seconds, caption))
+                        spoken.append((start, caption))
                         track.silence(PARAGRAPH_PAUSE[self.mode])
             except ConfigError as e:
                 raise BuildError(str(e), block.line) from None
@@ -457,35 +467,49 @@ class Builder:
         if any(v.kind == "video" and v.has_audio and v.volume for v in visuals):
             audio = audio + self._clip_audio(visuals, layout, n)
 
+        captioned = s.subtitles.mode != "none" and not quotes
+        # Recordings are transcribed once, for their captions and for the transcript alike
+        heard = self._recording_phrases(recordings, captioned) if recordings and (captioned or s.transcript) else None
         if quotes:
             texts = [q for q in quotes if q]
             cues = subtitles.spread(0.0, d, texts) if texts else []
-        elif s.subtitles.mode != "none":
-            spans = narration_spans + self._transcripts(recordings)
+        elif captioned:
+            spans = narration_spans + [(start + a, start + b, text) for (start, _, _), phrases in zip(recordings, heard or [])
+                                       for a, b, text in stt_captions(phrases, s.subtitles.break_chars)]
             cues = sorted((c for start, end, text in spans
                            for c in subtitles.narration_cues(start, end, text, s.subtitles.break_chars)),
                           key=lambda c: c.start)
         else:
             cues = []
+        if heard:  # each recording is one paragraph of the transcript, where it plays
+            spoken += [(start, " ".join(w for words in phrases for _, _, w in words))
+                       for (start, _, _), phrases in zip(recordings, heard) if phrases]
         return ScenePlan(scene.index, visuals, spec, audio, d, cues, layout,
-                         [SlideSpec(lang=sl.lang, text=sl.text) for sl in slides], transition, marks, paragraphs)
+                         [SlideSpec(lang=sl.lang, text=sl.text) for sl in slides], transition, marks, paragraphs,
+                         [text for _, text in sorted(spoken, key=lambda p: p[0]) if text])
 
-    def _transcripts(self, recordings: list[tuple[float, Path, str | None]]) -> list[tuple[float, float, str]]:
-        """Phrases spoken in a scene's recordings, placed where each recording plays."""
-        if not recordings:
-            return []
-        try:
-            from . import stt
-        except ImportError:
-            self.notes.add("subtitles for recorded audio (needs faster-whisper)")
-            return []
-        spans = []
-        for start, path, lang in recordings:
+    def _recording_phrases(self, recordings: list[tuple[float, Path, str | None]],
+                           captioned: bool) -> list[list] | None:
+        """The phrases spoken in each of a scene's recordings (times within the recording), or None when
+        speech-to-text isn't available. Captions need it, so a failure there stops the build; a transcript
+        alone notes what it couldn't hear."""
+        from . import stt
+
+        heard = []
+        for _, path, lang in recordings:
             hint = lang.split("-")[0].lower() if lang else None
-            phrases = stt.transcribe(path, hint)
-            spans += [(start + a, start + b, text)
-                      for a, b, text in stt.captions(phrases, self.settings.subtitles.break_chars)]
-        return spans
+            try:
+                heard.append(stt.transcribe(path, hint))
+            except ImportError:  # faster-whisper is loaded on first use
+                self.notes.add("subtitles for recorded audio (needs faster-whisper)" if captioned
+                               else "transcript of recorded audio (needs faster-whisper)")
+                return None
+            except Exception as e:
+                if captioned:
+                    raise
+                self.notes.add(f"transcript: couldn't transcribe {path.name} ({e})")
+                heard.append([])
+        return heard
 
     def _render_blocks(self, frames: FrameRenderer) -> None:
         """Render every render block, with its scene's theme and canvas, and point it at the output."""
@@ -643,7 +667,9 @@ class Builder:
                 parts: list[np.ndarray] = []
                 cues: list[Cue] = []
                 scene_samples: list[int] = []
+                spoken: list[list[str]] = []
                 for plan in self.plans(self.script.scenes, work):
+                    spoken.append(plan.spoken)
                     if plan.visuals or plan.slides or plan.spec.callouts:
                         self.notes.add("images, videos, slides and callouts (ignored in audio output)")
                     n = int(round(plan.duration * SR))
@@ -669,7 +695,8 @@ class Builder:
                 srt.write_text(subtitles.to_srt(cues), encoding="utf-8")
                 vtt.write_text(subtitles.to_vtt(cues), encoding="utf-8")
                 files = [srt, vtt]
-            return BuildResult(out, None, files, len(audio) / SR, sorted(self.notes))
+            transcript = self._write_transcript(out, spoken)
+            return BuildResult(out, None, files, len(audio) / SR, sorted(self.notes), transcript)
         finally:
             self.close()
             if own_workdir:
@@ -749,7 +776,18 @@ class Builder:
         subtitle_files = self._mux(out, scene_segments, scene_frames, transitions, wav, cues, work)
         poster = out.with_suffix(".jpg")
         media.extract_frame(out, _poster_time(s.poster_time, total), poster)
-        return BuildResult(out, poster, subtitle_files, total, sorted(self.notes))
+        transcript = self._write_transcript(out, [plan.spoken for plan in plans])
+        return BuildResult(out, poster, subtitle_files, total, sorted(self.notes), transcript)
+
+    def _write_transcript(self, out: Path, scenes: list[list[str]]) -> Path | None:
+        """What's spoken, as plain text beside the output (#58): a line per paragraph, a blank line
+        between scenes. Not <name>.txt, which a .txt script built in its own folder would be."""
+        if not self.settings.transcript:
+            return None
+        path = out.with_name(f"{out.stem}.transcript.txt")
+        blocks = ["\n".join(paragraphs) for paragraphs in scenes if paragraphs]
+        path.write_text("\n\n".join(blocks) + ("\n" if blocks else ""), encoding="utf-8")
+        return path
 
     def _planned(self, work: Path):
         """Every scene's plan, and whether it's rendered.

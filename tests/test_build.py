@@ -134,8 +134,8 @@ def test_burned_captions_and_custom_font_render(project):
         "---\nsize: 320x180\nsubtitles:\n  mode: overlay\n  font: bold.ttf\n  position: top\n---\n\n"
         "![](blue.png)\n\nCaptioned narration.\n"
     ), name="burn")
-    assert media.probe(result.video).has_subtitles is False
-    assert not (project / "burn.srt").exists()
+    assert media.probe(result.video).has_subtitles is False  # burned in, not a track
+    assert "Captioned narration." in (project / "burn.srt").read_text()  # and the files come too (#58)
 
 
 LOOP_PROBE = """

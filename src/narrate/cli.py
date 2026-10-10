@@ -55,6 +55,18 @@ def cmd_build(args: argparse.Namespace) -> int:
         return _build(args, path)
 
 
+SUBTITLE_CHOICES = ("none", "external", "embed", "overlay", "overlay-background", "tiktok")
+
+
+def _output_options(parser: argparse.ArgumentParser) -> None:
+    """What a build writes besides the video or audio, chosen per build (#58)."""
+    parser.add_argument("--subtitles", choices=SUBTITLE_CHOICES, metavar="MODE",
+                        help="subtitles for this build, over the script's own: " + ", ".join(SUBTITLE_CHOICES)
+                        + " (every mode but none also writes .srt and .vtt)")
+    parser.add_argument("--transcript", action="store_true",
+                        help="also write what's spoken as plain text, <output>.transcript.txt")
+
+
 def parse_scenes(spec: str) -> list[int]:
     """Scene numbers from "3", "3-5" or "2,4" (and mixes such as "1-2,5"), in order."""
     scenes: list[int] = []
@@ -89,10 +101,11 @@ def _build(args: argparse.Namespace, path: Path) -> int:
     started = time.monotonic()
     synth = make_synth(args.tts, args.tts_model)
     log(f"speech: {synth.name}" + (f" ({synth.model})" if hasattr(synth, "model") else ""))
-    builder = Builder(script, synth, log=log, jobs=args.jobs, regenerate=args.regenerate, scenes=args.scenes)
+    builder = Builder(script, synth, log=log, jobs=args.jobs, regenerate=args.regenerate, scenes=args.scenes,
+                      subtitles=args.subtitles, transcript=args.transcript)
     result = builder.build(out, workdir=Path(args.keep_work) if args.keep_work else None)
     _report(script, result.notes)
-    extras = ", ".join(str(p) for p in [result.poster, *result.subtitle_files])
+    extras = ", ".join(str(p) for p in [result.poster, *result.subtitle_files, result.transcript] if p)
     print(f"{result.video} ({result.duration:.1f}s video, built in {time.monotonic() - started:.1f}s); {extras}")
     return 0
 
@@ -104,9 +117,10 @@ def cmd_audio(args: argparse.Namespace) -> int:
         log = (lambda msg: None) if args.quiet else (lambda msg: print(msg, file=sys.stderr))
         started = time.monotonic()
         synth = make_synth(args.tts, args.tts_model)
-        result = Builder(script, synth, log=log, jobs=args.jobs).build_audio(out)
+        result = Builder(script, synth, log=log, jobs=args.jobs, subtitles=args.subtitles,
+                         transcript=args.transcript).build_audio(out)
         _report(script, result.notes)
-        extras = "".join(f", {p}" for p in result.subtitle_files)
+        extras = "".join(f", {p}" for p in [*result.subtitle_files, result.transcript] if p)
         print(f"{result.video} ({result.duration:.1f}s audio, built in {time.monotonic() - started:.1f}s){extras}")
     return 0
 
@@ -341,6 +355,7 @@ def main(argv: list[str] | None = None) -> int:
     build.add_argument("--tts-model", help="ElevenLabs model id (default eleven_multilingual_v2)")
     build.add_argument("--scenes", type=parse_scenes, metavar="N",
                        help="build only these scenes, as in 3, 3-5 or 2,4 (default output: <script>-scene-3.mp4)")
+    _output_options(build)
     build.add_argument("--keep-work", metavar="DIR", help="keep intermediate files in DIR")
     build.add_argument("--regenerate", action="store_true",
                        help="take web captures (render:web) again instead of reusing the stored ones")
@@ -355,6 +370,7 @@ def main(argv: list[str] | None = None) -> int:
     audio.add_argument("--tts", choices=["auto", "kokoro", "elevenlabs", "silent"], default="auto",
                        help="speech engine (default auto: ElevenLabs when ELEVENLABS_API_KEY is set, else Kokoro)")
     audio.add_argument("--tts-model", help="ElevenLabs model id (default eleven_multilingual_v2)")
+    _output_options(audio)
     audio.add_argument("-j", "--jobs", type=int, help="parallel work (default: up to 4, or $NARRATE_JOBS)")
     audio.add_argument("-q", "--quiet", action="store_true", help="print only warnings and errors")
     audio.set_defaults(func=cmd_audio)
