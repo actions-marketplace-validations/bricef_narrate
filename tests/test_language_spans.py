@@ -57,3 +57,15 @@ def test_kokoro_reads_the_span_in_its_language(monkeypatch, tmp_path):
     voice = kokoro_resolve("bm_george", None, set())
     audio = synth.synth((("The German word", None), ("See", "de"), ("sounds like this.", None)), voice, 1.0, set())
     assert len(audio) > 0 and "zˈeː" in spoken[-1] and "sˈiː" not in spoken[-1]
+
+
+def test_tags_leave_no_space_before_punctuation():
+    """#69: a tag separates words, but "quietube</sub>:" captions as "quietube:"."""
+    from narrate.text import ssml_text, subtitle_text
+
+    caption = lambda s: subtitle_text(ssml_text(s))  # noqa: E731 - as the builder captions SSML
+    assert caption('<speak><sub alias="quiet tube">quietube</sub>: a quiet feed.</speak>') == "quietube: a quiet feed."
+    assert caption("<speak>Say <emphasis>this</emphasis>, then stop.</speak>") == "Say this, then stop."
+    assert caption("<speak>(<sub alias='see'>c</sub>) and <emphasis>Bob</emphasis>'s</speak>") == "(c) and Bob's"
+    # Between words a tag is still a space, and the text's own spaces stay
+    assert caption('<speak>One.<break time="1s"/>Two. <mark name="x"/>Three ?</speak>') == "One. Two. Three ?"
