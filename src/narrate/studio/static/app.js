@@ -1,6 +1,7 @@
 // narrate studio: the app shell (docs/design/studio.md).
 import { html, render, useCallback, useEffect, useRef, useState } from "./vendor/htm-preact.js";
-import { createEditor, followLine, goToLine, seconds, selectLine, showAnalysis } from "./editor.js";
+import { createEditor, followLine, goToLine, lineKinds, seconds, selectLine, showAnalysis } from "./editor.js";
+import { VoicePicker } from "./voices.js";
 import { CalloutInspector, CalloutLayer } from "./callouts.js";
 import { Timeline } from "./timeline.js";
 import { Inspector, draggedPosition, positionFor, slack } from "./inspector.js";
@@ -154,7 +155,7 @@ function SceneRender({ render, onCancel }) {
 /** The frame at the cursor's moment, at the video's size, scaled to fit the pane. `drag`, when the
     picture at the cursor has room to move, lets the frame be dragged to change its position (#62). */
 function Preview({ analysis, shown, moment, error, playback, onPlay, onStop, tab, onTab, build, sceneRender,
-                   onRender, onCancelRender, drag, overlay, tools, children }) {
+                   onRender, onCancelRender, drag, overlay, tools, voices, children }) {
   const box = useRef(null);
   const [scale, setScale] = useState(0.4);
   const dragStart = useRef(null);
@@ -195,8 +196,10 @@ function Preview({ analysis, shown, moment, error, playback, onPlay, onStop, tab
       <button role="tab" aria-selected=${tab === "frame"} onClick=${() => onTab("frame")}>Frame</button>
       <button role="tab" aria-selected=${tab === "scene"} onClick=${() => onTab("scene")}>Scene</button>
       <button role="tab" aria-selected=${tab === "video"} onClick=${() => onTab("video")}>Video</button>
+      <button role="tab" aria-selected=${tab === "voices"} onClick=${() => onTab("voices")}>Voices</button>
     </div>
     ${tab === "video" ? html`<${Player} build=${build} />`
+      : tab === "voices" ? voices
       : tab === "scene" ? html`<${SceneRender} render=${sceneRender} onCancel=${onCancelRender} />`
       : html`<div class="frame-tab">
     <div class="screen" ref=${box} style=${`height:${h * scale}px`}>
@@ -255,6 +258,7 @@ function App() {
   const [build, setBuild] = useState(null);
   const [sceneRender, setSceneRender] = useState(null);
   const [calloutTool, setCalloutTool] = useState(null);  // "circle" or "rectangle" while drawing (#64)
+  const [voicesChanged, setVoicesChanged] = useState(0);  // bumped when voices.yaml is saved (#65)
   const [awaitingAnalysis, setAwaitingAnalysis] = useState(false);  // an edit made, its analysis not back yet
   const [tab, setTab] = useState("frame");
   const cursorMoment = analysis ? momentAt(analysis, cursorLine) : null;
@@ -482,6 +486,7 @@ function App() {
       if (status.state === "done") setTab("video");
     });
     events.addEventListener("scene-build", (e) => setSceneRender(JSON.parse(e.data)));
+    events.addEventListener("voices-changed", () => { setVoicesChanged((n) => n + 1); scheduleAnalysis(); });
     events.addEventListener("script-changed", (e) => {
       const changed = JSON.parse(e.data);
       if (changed.version === version.current) return;  // our own save
@@ -565,6 +570,42 @@ function App() {
     onDraw=${drawCallout} onSelect=${(line) => selectLine(editor.current.view, line)}
     onChange=${(line, changes) => requestEdit({ op: "callout", line, set: changes })} />` : null;
 
+  // Voices (#65): the header's voice, the narration at the cursor as a sample, and where a choice goes
+  const headerVoice = () => {
+    const doc = editor.current && editor.current.view.state.doc;
+    if (!doc) return null;
+    const kinds = lineKinds(doc);
+    for (let n = 2; n <= doc.lines && kinds[n] === "header"; n++) {
+      const m = /^\s*voice\s*:\s*(.+?)\s*$/i.exec(doc.line(n).text);
+      if (m) return m[1];
+    }
+    return null;
+  };
+  const sampleAt = () => {
+    const doc = editor.current && editor.current.view.state.doc;
+    if (!doc) return "";
+    const kinds = lineKinds(doc);
+    const prose = (n) => n >= 1 && n <= doc.lines && !kinds[n] && doc.line(n).text.trim();
+    if (!prose(cursorLine)) return "";
+    let a = cursorLine, b = cursorLine;
+    while (prose(a - 1)) a--;
+    while (prose(b + 1)) b++;
+    const lines = [];
+    for (let n = a; n <= b; n++) lines.push(doc.line(n).text);
+    return lines.join(" ").replace(/<[^>]+>/g, "").slice(0, 300);
+  };
+  const chooseVoice = (name, where) => requestEdit(where === "script"
+    ? { op: "header", key: "voice", value: name }
+    : { op: "voice", line: cursorLine, voice: name });
+  const voicesPanel = html`<${VoicePicker} engine=${engine} getText=${() => editor.current.text()} sampleAt=${sampleAt}
+    current=${headerVoice()} onChoose=${chooseVoice} busy=${editing || awaitingAnalysis} refresh=${voicesChanged} />`;
+  const onVoiceLine = (() => {
+    const doc = editor.current && editor.current.view.state.doc;
+    if (!doc || cursorLine > doc.lines) return false;
+    const text = doc.line(cursorLine).text;
+    return /^\s*\(\s*voice\s*:/i.test(text) || (lineKinds(doc)[cursorLine] === "header" && /^\s*voice\s*:/i.test(text));
+  })();
+
   const status = !online ? "Offline: reconnecting…" : saving ? "Saving…" : dirty ? "Unsaved changes" : "Saved";
   return html`
     <header class="bar">
@@ -594,7 +635,10 @@ function App() {
         onPlay=${() => (seek ? play(seek.scene, seek.line, seek.time) : cursorMoment && play(cursorMoment.scene, cursorLine))}
         onStop=${stop} tab=${tab} onTab=${setTab} build=${build}
         sceneRender=${sceneRender} onRender=${() => moment && renderScene(moment.scene)} onCancelRender=${cancelSceneRender}
-        drag=${dragTarget} overlay=${calloutLayer} tools=${calloutTools}>
+        drag=${dragTarget} overlay=${calloutLayer} tools=${calloutTools} voices=${voicesPanel}>
+        ${onVoiceLine && html`<section class="inspector" aria-label="voice"><h3>Voice</h3>
+          <p class="row"><span class="muted small">Hear the voices with a sample of your script, and pick one.</span>
+          <button onClick=${() => setTab("voices")}>Choose a voice by ear…</button></p></section>`}
         <${Inspector} analysis=${analysis} line=${cursorLine} onEdit=${editBlock} busy=${editing || awaitingAnalysis} />
         <${CalloutInspector} callout=${cursorCallout} busy=${editing || awaitingAnalysis}
           onChange=${(changes) => requestEdit({ op: "callout", line: cursorCallout.line, set: changes })}

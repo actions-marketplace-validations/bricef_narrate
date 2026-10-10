@@ -115,13 +115,28 @@ The studio is a web app for writing a script, served from your computer.
   Coordinates are the frame's own pixels, so what you draw is what renders.
   With the cursor on a callout, the inspector switches its shape, sets its
   shading or makes it a black mask, and deletes it.
+- **Voices:** the **Voices** tab lists every voice: Kokoro's, ElevenLabs'
+  defaults, Narakeet's names and your pinned names, each with its language
+  and what it becomes on the studio's engine.
+  - **Audition:** ▶ reads the sample (the paragraph at the cursor, or what you
+    type) the way the script would, with its voice speed and pitch, so you
+    choose by ear. Each sample is cached once heard; with ElevenLabs, the
+    first play of each asks first, saying how many characters it sends.
+  - **Use** writes `voice:` in the header (the whole script), or `(voice: …)`
+    before the paragraph at the cursor (from there on).
+  - **Pins:** pin a name to a voice on each engine, saved to `voices.yaml` next
+    to the script, so `voice: Narrator` is that voice on Kokoro and on
+    ElevenLabs ([Pick voices](#pick-voices)). Pins in your user-level
+    `voices.yaml` are shown, not changed.
+  - With the cursor on a `voice:` line or a `(voice: …)`, the inspector offers
+    the picker.
 - **Rendering a scene:** **Render scene**, under the preview, saves the
   script, then renders the scene at the cursor with the real builder, as
   `narrate build --scenes` does. It plays in the **Scene** tab: exactly that
   part of the video, with music, subtitles and theme. It goes in a temporary
   folder, never over the video, and a scene whose text, engine and files
   haven't changed isn't rendered again.
-- **What's next:** a voice picker and HTML scene tools are planned (narrate #28; the design is in
+- **What's next:** HTML scene tools are planned (narrate #28; the design is in
   [design/studio.md](design/studio.md)).
 
 **On another machine,** such as a server you reach over a VPN:

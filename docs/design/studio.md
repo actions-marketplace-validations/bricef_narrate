@@ -168,6 +168,11 @@ Decided with the author.
 
 ### D11. Where the studio writes
 
+- **Script:** the `.md` file, on Save; every direct manipulation edits its
+  text in the editor first.
+- **Voice pins:** the project's `voices.yaml`, when pins are saved in the
+  voice picker (#65), written in one step and checked as a build reads it.
+  The user-level file is only read.
 - **Video:** "Build" writes the same files as `narrate build` would, next to
   the script (`intro.mp4`, `intro.jpg`).
 - **Scratch files:** scene audio and single-scene renders go in a temporary
@@ -185,9 +190,12 @@ Decided with the author.
 | `POST /api/analyse` | parse, check and plan `{text}`: an id, scenes with times, blocks with lines, problems |
 | `POST /api/frame` | the frame HTML (or page URL) for `{id, scene, time}`, from that analysis |
 | `POST /api/engine` | switch the speech engine; refused if it can't start |
-| `POST /api/edit` | the text change for a direct manipulation: properties set on the block at a line (`{text, line, set}`), or `op` `callout` (set a callout's), `insert-callout` (`{after, callout}`) or `delete` (`{line}`) |
+| `POST /api/edit` | the text change for a direct manipulation: properties set on the block at a line (`{text, line, set}`), or `op` `callout` (set a callout's), `insert-callout` (`{after, callout}`), `delete` (`{line}`), `header` (`{key: voice, value}`) or `voice` (`{line, voice}`) |
 | `POST /api/scenes/{n}/audio` | synthesise a scene's narration; returns a WAV URL and paragraph start times |
 | `GET /api/peaks/{sound}` | a scene's waveform, as min/max pairs, by the sound id the analysis gives |
+| `GET /api/voices` | every voice, grouped, with what it becomes on the session's engine, and the pins |
+| `POST /api/voices/audition` | `{text, voice, sample}`: the sample read as the script would read it (a WAV URL), or with `dry` what it would send |
+| `PUT /api/voices/pins` | write the project's `voices.yaml`; announced as `voices-changed` |
 | `POST /api/build` | start a build; progress over the event stream |
 | `GET /api/build` | the latest build's state |
 | `POST /api/build/cancel` | stop the running build |

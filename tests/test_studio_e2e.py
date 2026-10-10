@@ -458,3 +458,43 @@ def test_callouts_are_drawn_moved_and_deleted_on_the_preview(tmp_path, page):
         page.locator(".cm-content").focus()
         page.keyboard.press("Control+z")
         expect(page.locator(".cm-content")).to_contain_text("type: rectangle")  # each change is one undo
+
+
+# -- voices (#65) ----------------------------------------------------------------------------
+
+def test_choose_a_voice_by_ear(tmp_path, page, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.setenv("NARRATE_CACHE", str(tmp_path / "cache"))
+    script = tmp_path / "s.md"
+    script.write_text("---\nvoice: George\n---\n\nThe first paragraph.\n\nThe second paragraph, read by someone else.\n")
+    with running(script) as url:
+        page.goto(url)
+        page.locator(".cm-line", has_text="The second paragraph").click(position={"x": 4, "y": 4})
+        page.get_by_role("tab", name="Voices").click()
+        voices = page.get_by_test_id("voices")
+        expect(voices.get_by_label("sample")).to_have_value("The second paragraph, read by someone else.")
+        expect(voices.locator("li.current[data-voice=George]")).to_have_count(1)  # the header's voice
+
+        # Audition: the sample is synthesised and plays
+        with page.expect_response("**/api/voices/audition") as heard:
+            voices.get_by_role("button", name="audition bf_lily").click()
+        assert heard.value.json()["url"].startswith("/scratch/")
+
+        # From the cursor on: a (voice: …) before the cursor's paragraph
+        voices.get_by_label("from the cursor on").check()
+        voices.locator("li[data-voice=bf_lily]").get_by_role("button", name="Use").click()
+        expect(page.locator(".cm-content")).to_contain_text("(voice: bf_lily)The second paragraph")
+        expect(page.locator("[aria-busy=true]")).to_have_count(0)
+
+        # The whole script: the header's voice
+        voices.get_by_label("the whole script").check()
+        voices.locator("li[data-voice=af_heart]").get_by_role("button", name="Use").click()
+        expect(page.locator(".cm-narrate-header", has_text="voice:")).to_have_text("voice: af_heart")
+
+        # Pin a name, saved next to the script
+        voices.get_by_role("button", name="+ Pin a name").click()
+        voices.get_by_label("pinned name").fill("Host")
+        voices.get_by_label("Host on Kokoro").select_option("am_adam")
+        voices.get_by_role("button", name="Save pins").click()
+        expect(voices.locator("li[data-voice=host]")).to_contain_text("am_adam")
+        assert "Host:\n  kokoro: am_adam" in (tmp_path / "voices.yaml").read_text()

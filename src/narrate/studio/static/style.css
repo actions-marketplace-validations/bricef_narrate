@@ -239,3 +239,28 @@ button.quiet { border-color: transparent; color: var(--muted); }
 .callout-tools { display: inline-flex; gap: 4px; margin-left: auto; }
 .callout-tools button { padding: 2px 8px; font-size: 13px; }
 .callout-tools button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* voices (#65) */
+.voices { font-size: 13px; }
+.voices .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 6px 0; }
+.voices .sample { display: flex; flex-direction: column; gap: 4px; width: 100%; color: var(--muted); }
+.voices textarea, .voices .filter, .pins input, .pins select {
+  font: inherit; font-size: 13px; color: var(--fg); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 6px; padding: 4px 6px; }
+.voices textarea { width: 100%; resize: vertical; }
+.voices .filter { margin-left: auto; min-width: 160px; }
+.voice-group { margin: 6px 0; }
+.voice-group summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+.voice-group ul { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto; }
+.voice-group li { display: flex; align-items: center; gap: 8px; padding: 2px 4px; border-radius: 4px; }
+.voice-group li:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.voice-group li.current { background: color-mix(in srgb, var(--scene) 14%, transparent); }
+.voice-group .play { width: 28px; padding: 0; }
+.voice-group .name { min-width: 90px; font-family: ui-monospace, monospace; }
+.voice-group .use { margin-left: auto; padding: 0 10px; }
+.pins { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
+.pins h4 { margin: 0 0 6px; font-size: 13px; }
+.pins table { border-collapse: collapse; width: 100%; }
+.pins th { text-align: left; font-weight: normal; color: var(--muted); font-size: 12px; }
+.pins td { padding: 2px 4px 2px 0; }
+.pins input { width: 100%; }
