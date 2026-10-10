@@ -183,13 +183,22 @@ def stress_marks(text: str) -> str:
     return _STRESS_RE.sub(lambda m: m.group(1) + "\u0301", text).replace("^", "")
 
 
+def _drop_tags(text: str) -> str:
+    """Text without its tags. A tag separates the words either side of it, but leaves no space before
+    closing punctuation or after opening punctuation: "<sub>quietube</sub>:" is "quietube:" (#69).
+    Spaces the text itself has stay."""
+    text = _TAG_RE.sub("\0", text)
+    text = re.sub(r"\0+(?=[,.;:!?…%)\]}»”’'\"])", "", text)
+    text = re.sub(r"(?<=[(\[{«“‘])\0+", "", text)
+    return " ".join(text.replace("\0", " ").split())
+
+
 def ssml_text(ssml: str) -> str:
-    return " ".join(_TAG_RE.sub(" ", ssml).split())
+    return _drop_tags(ssml)
 
 
 def subtitle_text(text: str) -> str:
     text = _SPAN_RE.sub(r"\1", text)
     text = _LINK_RE.sub(r"\1", text)
     text = _CODE_RE.sub(r"\1", text)
-    text = _TAG_RE.sub(" ", _strip_emphasis(text)).replace("^", "")
-    return " ".join(text.split())
+    return _drop_tags(_strip_emphasis(text).replace("^", ""))
