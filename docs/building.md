@@ -168,9 +168,18 @@ narrate build project.zip                 # a ZIP of the script and its files
 - **Progress** goes to the terminal: one line per scene, then notes about
   anything narrate adapted, such as a voice it matched. `-q` keeps it quiet.
 - **Check first:** `narrate check script.md` finds missing pictures, clips and
-  recordings, and lines it doesn't understand, in a second. Bad values and
-  missing theme, music or font files show up in a build; a
-  [preview](#preview-quickly) finds them fast.
+  recordings, and lines it doesn't understand, in a second.
+- **Timing and cost:** `narrate check script.md --timing` also plans it,
+  still without building or spending anything:
+  - each scene's start and length, and the total;
+  - what's left to synthesise, in paragraphs and characters, for the engine
+    `--tts` names (auto, as for a build);
+  - bad values, and missing theme, music or font files, as errors with their
+    lines.
+
+  Lengths are exact for speech already synthesised with that engine (by a
+  build, or the studio) and estimated from the text elsewhere, marked `≈`.
+  `--json` prints the same report for programs.
 - **Intermediate files** are deleted afterwards; `--keep-work DIR` keeps them
   for inspection.
 - **First build:** the Kokoro voice model downloads (about 350 MB), and from
@@ -524,7 +533,7 @@ models and the ElevenLabs key, and prints a fix for each problem.
 | `narrate studio SCRIPT [--open]` | edit the script in a web app (`--tts` for its engine; `--host`, `--port` to serve elsewhere) |
 | `narrate build SCRIPT [-o OUT.mp4]` | render a video (`SCRIPT` may be a `.zip`; `--source` picks the script inside; `--scenes 3-5` builds just those; `--regenerate` retakes web captures) |
 | `narrate audio SCRIPT [-o OUT]` | render the narration only |
-| `narrate check SCRIPT` | report missing files and problems, without rendering |
+| `narrate check SCRIPT [--timing]` | report missing files and problems, without rendering; `--timing` adds scene lengths, the total and what synthesis would cost (`--json` for programs) |
 | `narrate callouts FILE` | write a page for placing callouts on an image or a clip's frame |
 | `narrate voices [SCRIPT]` | list voices, and a script's `voices.yaml` pins |
 | `narrate models` | download the voice, speech-to-text, ffmpeg and mermaid.js files now |

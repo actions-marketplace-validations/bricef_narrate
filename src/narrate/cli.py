@@ -132,7 +132,61 @@ def cmd_callouts(args: argparse.Namespace) -> int:
 
 def cmd_check(args: argparse.Namespace) -> int:
     with script_path(args) as path:
+        if args.timing or args.json:
+            return _check_timing(path, args.tts, args.tts_model, args.json)
         return _check(path)
+
+
+ENGINE_NAMES = {"kokoro": "Kokoro", "elevenlabs": "ElevenLabs", "silent": "silent"}
+
+
+def timing(path: Path, engine: str = "auto", model: str | None = None) -> dict:
+    """The script's timing and what synthesis would still cost with `engine`, its problems included,
+    as the studio analyses it (#66): speech already cached is exact, the rest estimated from the text,
+    and nothing is synthesised."""
+    from .studio.analysis import analyse
+
+    synth = make_synth(engine, model)
+    text = path.read_bytes().decode("utf-8-sig").replace("\r\n", "\n")
+    return {**analyse(text, path, synth), "engine": synth.name}
+
+
+def _clock(seconds: float) -> str:
+    return f"{int(seconds // 60)}:{seconds % 60:04.1f}"
+
+
+def _check_timing(path: Path, engine: str, model: str | None, as_json: bool) -> int:
+    import json
+
+    report = timing(path, engine, model)
+    errors = [p for p in report["problems"] if p["severity"] == "error"]
+    if as_json:
+        print(json.dumps(report, indent=2))
+        return 1 if errors else 0
+    for p in report["problems"]:
+        print(f"{p['severity']}: {path}: line {p['line']}: {p['message']}", file=sys.stderr)
+    for note in report.get("notes", []):
+        print(f"note: {note}", file=sys.stderr)
+    name = ENGINE_NAMES.get(report["engine"], report["engine"])
+    scenes = report["scenes"]
+    total = report["duration"]
+    print(f"{path}: {len(scenes)} scenes, " + (f"{total:.1f}s with {name}" if total is not None else "can't be timed"))
+    estimated = False
+    for scene in scenes:
+        if scene["duration"] is None:
+            print(f"  {scene['index']:>3}  {'':>7}       ?   {scene['title']} (can't be timed: see the errors)")
+            continue
+        mark = "≈" if any(p["estimated"] for p in scene["paragraphs"]) else " "
+        estimated = estimated or mark == "≈"
+        print(f"  {scene['index']:>3}  {_clock(scene['start']):>7}  {mark}{scene['duration']:5.1f}s  {scene['title']}")
+    missing = report["missing"]
+    if missing:
+        cost = "free" if report["engine"] in ("kokoro", "silent") else "spends ElevenLabs credits"
+        print(f"to synthesise: {missing['paragraphs']} paragraphs, {missing['characters']} characters ({name}: {cost})"
+              if missing["paragraphs"] else "to synthesise: nothing, all speech is cached")
+    if estimated:
+        print("≈ estimated from the text: exact once the speech is synthesised (a build, or the studio)")
+    return 1 if errors else 0
 
 
 def _check(path: Path) -> int:
@@ -298,6 +352,12 @@ def main(argv: list[str] | None = None) -> int:
     check = sub.add_parser("check", help="parse a script and check its files, without rendering")
     check.add_argument("script", help="a .md/.txt script, or a .zip project")
     check.add_argument("--source", help="the script's path inside a .zip project")
+    check.add_argument("--timing", action="store_true",
+                       help="also plan it: each scene's length, the total, what synthesis would cost, and bad values")
+    check.add_argument("--json", action="store_true", help="the --timing report as JSON, for programs")
+    check.add_argument("--tts", choices=["auto", "kokoro", "elevenlabs", "silent"], default="auto",
+                       help="the engine to time and price with (default auto, as for build)")
+    check.add_argument("--tts-model", help="ElevenLabs model id (default eleven_multilingual_v2)")
     check.set_defaults(func=cmd_check)
 
     voices = sub.add_parser("voices", help="list voices, and any voices.yaml pins")
