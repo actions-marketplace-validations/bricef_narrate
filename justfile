@@ -31,3 +31,10 @@ image-test:
 # Download the Narakeet reference snapshot (docs, example scripts and their media)
 reference:
     ./scripts/fetch-narakeet-reference.sh --media
+
+# Link the narrate skill into ~/.claude/skills, so AI agents on this machine can make videos with narrate
+install-skill:
+    mkdir -p ~/.claude/skills
+    ln -sfn "{{justfile_directory()}}/skills/narrate" ~/.claude/skills/narrate
+    @echo "linked ~/.claude/skills/narrate -> {{justfile_directory()}}/skills/narrate"
+

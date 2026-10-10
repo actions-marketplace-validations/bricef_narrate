@@ -99,6 +99,7 @@ COPY pyproject.toml uv.lock /src/
 RUN uv export --project /src --frozen --only-group dev --no-hashes > /tmp/dev.txt \
  && uv pip install --python /opt/narrate/bin/python --no-cache -r /tmp/dev.txt
 COPY tests /src/tests
+COPY skills /src/skills
 COPY examples /src/examples
 USER narrate
 WORKDIR /src
