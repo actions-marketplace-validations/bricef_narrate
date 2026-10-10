@@ -54,6 +54,7 @@ class Session:
         self._synth = None
         self._listeners: set[asyncio.Queue] = set()
         self.analyses: OrderedDict = OrderedDict()  # the last few analyses by text id, for previews
+        self.peaks: OrderedDict = OrderedDict()  # waveforms by sound id (#60)
         self.build = None  # the latest BuildRun (#55)
         self.scratch = Path(tempfile.mkdtemp(prefix="narrate-studio-"))  # clip stills, copies of renders
 
@@ -186,6 +187,21 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
             return JSONResponse({"error": f"couldn't preview this moment: {e}"}, status_code=500)
         return JSONResponse(shown)
 
+    async def waveform(request: Request) -> Response:
+        from .analysis import PEAK_RATE, peaks
+
+        key = request.path_params["sound"]
+        if key not in session.peaks:
+            sound = next((a.sounds[key] for a in reversed(session.analyses.values()) if key in a.sounds), None)
+            if sound is None:
+                return JSONResponse({"error": "no such sound: analyse the script again"}, status_code=404)
+            session.peaks[key] = await run_in_threadpool(peaks, sound)
+            while len(session.peaks) > 256:
+                session.peaks.popitem(last=False)
+        # A sound id names its samples, so the answer never changes
+        return JSONResponse({"rate": PEAK_RATE, "peaks": session.peaks[key]},
+                            headers={"Cache-Control": "max-age=86400, immutable"})
+
     async def set_engine(request: Request) -> Response:
         from ..tts import make_synth
 
@@ -283,6 +299,7 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
         Route("/api/analyse", analyse, methods=["POST"]),
         Route("/api/frame", preview, methods=["POST"]),
         Route("/api/engine", set_engine, methods=["POST"]),
+        Route("/api/peaks/{sound}", waveform),
         Route("/api/scenes/{index:int}/audio", scene_audio, methods=["POST"]),
         Route("/api/build", start_build, methods=["POST"]),
         Route("/api/build", build_status, methods=["GET"]),

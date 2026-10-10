@@ -1,6 +1,7 @@
 // narrate studio: the app shell (docs/design/studio.md).
 import { html, render, useCallback, useEffect, useRef, useState } from "./vendor/htm-preact.js";
-import { createEditor, goToLine, seconds, showAnalysis } from "./editor.js";
+import { createEditor, followLine, goToLine, seconds, showAnalysis } from "./editor.js";
+import { Timeline } from "./timeline.js";
 
 const ANALYSE_AFTER_MS = 300;
 const PREVIEW_AFTER_MS = 150;
@@ -87,6 +88,17 @@ function momentAt(analysis, line) {
   return { scene: scene.index, time, start: scene.start };
 }
 
+/** The moment `t` seconds into the video: its scene, the time into it, and the paragraph playing then. */
+function momentOf(analysis, t) {
+  const timed = analysis ? analysis.scenes.filter((s) => s.duration != null && s.duration > 0) : [];
+  if (!timed.length) return null;
+  const scene = timed.find((s) => t < s.start + s.duration) || timed[timed.length - 1];
+  const time = Math.max(0, Math.min(t - scene.start, scene.duration - 1 / 30));
+  let line = scene.line;
+  for (const p of scene.paragraphs) if (p.start <= time + 1e-3) line = p.line;
+  return { scene: scene.index, time, start: scene.start, line };
+}
+
 /** Build progress, and Cancel while it runs (#55). */
 function BuildStatus({ build, onCancel }) {
   if (!build || build.state === "idle") return null;
@@ -166,6 +178,7 @@ function App() {
   const analysisRef = useRef(null);
   const setAnalysis = (value) => { analysisRef.current = value; setAnalysisState(value); };
   const [cursorLine, setCursorLine] = useState(1);
+  const [seek, setSeek] = useState(null);  // a moment chosen on the timeline, until the cursor moves (#60)
   const analyseTimer = useRef(null);
   const [shown, setShown] = useState(null);
   const [previewError, setPreviewError] = useState(null);
@@ -182,15 +195,17 @@ function App() {
     ? { scene: playback.scene, start: playback.start,
         time: playback.paragraphs.filter((p) => p.start <= playback.time + 0.05).map((p) => p.start).pop() ?? 0 }
     : null;
-  const moment = playingMoment || cursorMoment;
+  const moment = playingMoment || seek || cursorMoment;
+  const playhead = playback.state === "playing" ? playback.start + playback.time
+    : moment ? moment.start + moment.time : 0;
 
   const stop = useCallback(() => {
     if (audio.current) audio.current.pause();
     setPlayback({ state: "idle" });
   }, []);
 
-  /** Play `sceneIndex` from the paragraph on `line` (or its start), synthesising it first if need be. */
-  const play = useCallback(async (sceneIndex, line) => {
+  /** Play `sceneIndex` from `at` seconds, or the paragraph on `line` (or its start), synthesising it first if need be. */
+  const play = useCallback(async (sceneIndex, line, at = null) => {
     const current = analysisRef.current;
     const scene = current && current.scenes.find((s) => s.index === sceneIndex);
     if (!scene) return;
@@ -209,7 +224,7 @@ function App() {
       sceneAudio.current.set(key, track);
       scheduleAnalysis();  // the speech is cached now: exact timing replaces the estimates
     }
-    const from = (track.paragraphs.find((p) => p.line === line) || { start: 0 }).start;
+    const from = at ?? (track.paragraphs.find((p) => p.line === line) || { start: 0 }).start;
     if (!audio.current) {
       audio.current = new Audio();
       audio.current.addEventListener("timeupdate", () =>
@@ -266,7 +281,11 @@ function App() {
     else editor.current = createEditor(host.current, body.text, {
       onChange: () => setDirty(true),
       onSave: () => save(false),
-      onCursor: (line, docChanged) => { setCursorLine(line); if (docChanged) scheduleAnalysis(); },
+      onCursor: (line, docChanged, followed) => {
+        setCursorLine(line);
+        if (!followed) setSeek(null);  // the user moved on: the preview follows the cursor again
+        if (docChanged) scheduleAnalysis();
+      },
     });
     setDirty(false);
     setNotice(null);
@@ -311,6 +330,15 @@ function App() {
   }, [save]);
 
   const cancelBuild = useCallback(() => getJSON("/api/build/cancel", { method: "POST" }), []);
+
+  /** Show the moment `t` seconds into the video, with the editor's cursor on the paragraph playing then. */
+  const seekTo = useCallback((t) => {
+    const found = momentOf(analysisRef.current, t);
+    if (!found) return;
+    if (audio.current && !audio.current.paused) stop();
+    setSeek(found);
+    followLine(editor.current.view, found.line);
+  }, [stop]);
 
   // A paragraph's play button (editor.js) plays its scene from there
   useEffect(() => {
@@ -397,9 +425,11 @@ function App() {
         onPick=${(line) => goToLine(editor.current.view, line)} />
       <section class="editor" ref=${host} aria-label="script"></section>
       <${Preview} analysis=${analysis} shown=${shown} moment=${moment} error=${previewError} playback=${playback}
-        onPlay=${() => cursorMoment && play(cursorMoment.scene, cursorLine)} onStop=${stop}
-        tab=${tab} onTab=${setTab} build=${build} />
-    </main>`;
+        onPlay=${() => (seek ? play(seek.scene, seek.line, seek.time) : cursorMoment && play(cursorMoment.scene, cursorLine))}
+        onStop=${stop} tab=${tab} onTab=${setTab} build=${build} />
+    </main>
+    <${Timeline} analysis=${analysis} playhead=${playhead} onSeek=${seekTo}
+      onLine=${(line) => goToLine(editor.current.view, line)} />`;
 }
 
 render(html`<${App} />`, document.getElementById("app"));

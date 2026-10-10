@@ -6,6 +6,8 @@ import {
 
 // Changes that came from disk rather than the keyboard: they don't make the script unsaved
 export const fromDisk = Annotation.define();
+// Cursor moves made for the user, such as following the timeline (#60): not the user moving on
+export const quiet = Annotation.define();
 
 const SEPARATOR = /^ {0,3}-{3,}\s*$/;
 const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
@@ -178,6 +180,13 @@ export function goToLine(view, line) {
   view.focus();
 }
 
+/** Move the cursor to `line` to follow something else (the timeline), without taking the focus. */
+export function followLine(view, line) {
+  const target = view.state.doc.line(Math.max(1, Math.min(line, view.state.doc.lines)));
+  if (view.state.doc.lineAt(view.state.selection.main.head).number === target.number) return;
+  view.dispatch({ selection: { anchor: target.from }, scrollIntoView: true, annotations: quiet.of(true) });
+}
+
 /** An editor in `parent` holding `text`; calls onChange() on typing and onSave() on Mod-S. */
 export function createEditor(parent, text, { onChange, onSave, onCursor = () => {}, extensions = [] }) {
   const view = new EditorView({
@@ -196,7 +205,8 @@ export function createEditor(parent, text, { onChange, onSave, onCursor = () => 
       EditorView.updateListener.of((update) => {
         if (update.docChanged && !update.transactions.some((t) => t.annotation(fromDisk))) onChange(update);
         if (update.docChanged || update.selectionSet) {
-          onCursor(update.state.doc.lineAt(update.state.selection.main.head).number, update.docChanged);
+          const followed = update.transactions.every((t) => t.annotation(quiet) || t.annotation(fromDisk));
+          onCursor(update.state.doc.lineAt(update.state.selection.main.head).number, update.docChanged, followed);
         }
       }),
       ...extensions,

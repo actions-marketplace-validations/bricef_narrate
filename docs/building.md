@@ -50,7 +50,8 @@ The studio is a web app for writing a script, served from your computer.
   on their lines as you type.
 - **Preview:** the frame at the cursor, composed by the same code a build uses,
   with pictures, slides, callouts and theme.
-  - **The moment shown** is the start of the paragraph the cursor is in.
+  - **The moment shown** is the start of the paragraph the cursor is in, or
+    the moment picked on the timeline.
   - **Clips** show a still from that point, and pan and zoom the crop
     reached by then.
   - **HTML scenes** show the page itself, playing.
@@ -77,9 +78,21 @@ The studio is a web app for writing a script, served from your computer.
   - **Watching:** the result plays in the **Video** tab.
   - **Failures:** a failed build lists its errors, and clicking one goes to
     its line.
-- **What's next:** a timeline, visual inspectors and HTML scene tools are
-  planned (narrate #28; the design is in
-  [design/studio.md](design/studio.md)).
+- **Timeline:** the whole video along the bottom, each scene as wide as it
+  lasts.
+  - **What it shows:** each scene's pictures, clips, pages, render blocks and
+    slides, as long as each is on screen; the narration's waveform, with
+    paragraphs not yet synthesised shown as grey blocks; where each
+    transition and paragraph starts; and named cues (SSML `<mark>`).
+  - **Seeking:** click or drag to show that moment in the preview. The
+    editor's cursor moves to the paragraph playing then, and **Play scene**
+    starts from there. Moving the cursor yourself moves the playhead back.
+    With the timeline focused, ← and → step a frame, and Shift a second.
+  - **Zoom:** **+** and **−**, or Ctrl and the mouse wheel. **Fit** shows
+    the whole video again.
+  - **Double-click** a picture or slide to go to its line.
+- **What's next:** visual inspectors and HTML scene tools are planned
+  (narrate #28; the design is in [design/studio.md](design/studio.md)).
 
 **On another machine,** such as a server you reach over a VPN:
 `narrate studio script.md --host 0.0.0.0`, then open port 8787 on that

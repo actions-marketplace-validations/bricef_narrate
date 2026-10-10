@@ -91,6 +91,7 @@ class Visual:
     viewport: tuple[int, int] | None = None  # an HTML scene's design size
     zoom: float | None = None  # how far a pan/zoom moves, if not motion.ZOOM / PAN_ZOOM
     render: Render | None = None  # a render block not drawn yet (planning without rendering)
+    line: int = 0  # the script line it comes from
 
 
 @dataclass
@@ -415,6 +416,8 @@ class Builder:
         # An HTML scene with nothing else to time the scene lasts as long as its animations
         natural = track.seconds <= 0 and duration is None and force_duration is None
         visuals = [self._visual(m, workdir, natural) for m in sources]
+        for v, m in zip(visuals, sources):
+            v.line = m.line
         if force_duration is not None:
             duration = force_duration
         narration = track.samples()
