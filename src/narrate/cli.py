@@ -207,6 +207,39 @@ def _check(path: Path) -> int:
     return 1 if missing or problems else 0
 
 
+def cmd_frames(args: argparse.Namespace) -> int:
+    from . import review
+
+    video = Path(args.video)
+    if not video.is_file():
+        print(f"error: {video} not found", file=sys.stderr)
+        return 2
+    duration = media.probe(video).duration
+    if args.script:
+        # One frame in the middle of each scene, timed as `check --timing` times it
+        report = timing(Path(args.script), args.tts, args.tts_model)
+        moments = [(s["start"] + s["duration"] / 2, f"scene {s['index']} · {s['title']}")
+                   for s in report["scenes"] if s["duration"]]
+        if report["duration"] and abs(report["duration"] - duration) > 0.5:
+            print(f"note: the script times to {report['duration']:.1f}s but the video is {duration:.1f}s: "
+                  f"time it with the engine the video was built with (--tts)", file=sys.stderr)
+    elif args.at:
+        moments = [(float(t), "") for t in args.at.split(",") if t.strip()]
+    elif args.every:
+        moments = [(t, "") for t in review.every(duration, args.every)]
+    else:
+        moments = [(t, "") for t in review.evenly(duration, args.count)]
+    if not moments:
+        print("error: no moments to show", file=sys.stderr)
+        return 2
+    out = Path(args.output or video.with_name(f"{video.stem}-frames.png"))
+    review.contact_sheet(video, moments, out, args.width)
+    for at, label in moments:
+        print(f"{review.clock(at):>7}  {label}".rstrip())
+    print(out)
+    return 0
+
+
 def cmd_studio(args: argparse.Namespace) -> int:
     from .studio.server import serve
 
@@ -348,6 +381,19 @@ def main(argv: list[str] | None = None) -> int:
     studio.add_argument("--tts", choices=["auto", "kokoro", "elevenlabs", "silent"], default="kokoro",
                         help="speech engine for previews and builds (default kokoro, which is free)")
     studio.set_defaults(func=cmd_studio)
+
+    frames = sub.add_parser("frames", help="a contact sheet of a video's frames, to review it without watching it")
+    frames.add_argument("video", help="a built video")
+    frames.add_argument("-o", "--output", help="the sheet to write (default: <video>-frames.png beside it)")
+    frames.add_argument("--script", help="one frame in the middle of each of this script's scenes, labelled")
+    frames.add_argument("--tts", choices=["auto", "kokoro", "elevenlabs", "silent"], default="auto",
+                        help="with --script: the engine the video was built with, to time its scenes")
+    frames.add_argument("--tts-model", help="with --script: the ElevenLabs model it was built with")
+    frames.add_argument("--at", help="frames at these seconds, as in 1.5,12,30")
+    frames.add_argument("--every", type=float, metavar="SECONDS", help="a frame every SECONDS")
+    frames.add_argument("--count", type=int, default=12, help="frames spread evenly across the video (default 12)")
+    frames.add_argument("--width", type=int, default=480, help="each frame's width in pixels (default 480)")
+    frames.set_defaults(func=cmd_frames)
 
     check = sub.add_parser("check", help="parse a script and check its files, without rendering")
     check.add_argument("script", help="a .md/.txt script, or a .zip project")
