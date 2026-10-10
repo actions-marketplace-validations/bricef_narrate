@@ -254,6 +254,52 @@ def cmd_frames(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_hear(args: argparse.Namespace) -> int:
+    import json
+
+    from . import review
+
+    source = Path(args.media)
+    if not source.is_file():
+        print(f"error: {source} not found", file=sys.stderr)
+        return 2
+    language = args.language
+    if args.script and not language:  # the script's own narration language, if it sets one
+        lang = parse_file(Path(args.script)).header.get("narration-language")
+        language = str(lang).split("-")[0].lower() if lang else None
+    try:
+        heard = review.heard_words(source, language)
+    except ImportError:
+        print("error: narrate hear needs faster-whisper (narrate's speech-to-text); see narrate doctor", file=sys.stderr)
+        return 2
+    if not args.script:  # just what's heard, with when
+        from . import stt
+
+        for phrase in stt.transcribe(source, language):
+            print(f"{review.clock(phrase[0][0]):>7}  {' '.join(w for _, _, w in phrase)}")
+        return 0
+    report = review.compare(review.written_words(Path(args.script)), heard)
+    if args.json:
+        print(json.dumps(report, indent=2))
+        return 0
+    words, good = report["words"], report["heard_as_written"]
+    print(f"{args.script}: {good} of {words} words heard as written ({round(100 * good / words) if words else 100}%)")
+    for d in report["differences"]:
+        at = f"{review.clock(d['at']):>7}" if d["at"] is not None else " " * 7
+        where = f"scene {d['scene']}, line {d['line']}: " if d["line"] else ""
+        if d["kind"] == "different":
+            print(f"  {at}  {where}wrote \"{d['wrote']}\", heard \"{d['heard']}\"")
+        elif d["kind"] == "not heard":
+            print(f"  {at}  {where}wrote \"{d['wrote']}\", not heard")
+        else:
+            print(f"  {at}  heard \"{d['heard']}\", not in the script (a recording, or noise)")
+    if not report["differences"]:
+        print("  no differences")
+    else:
+        print("speech-to-text makes mistakes of its own: a difference is worth a listen, not proof")
+    return 0
+
+
 def cmd_studio(args: argparse.Namespace) -> int:
     from .studio.server import serve
 
@@ -410,6 +456,13 @@ def main(argv: list[str] | None = None) -> int:
     frames.add_argument("--count", type=int, default=12, help="frames spread evenly across the video (default 12)")
     frames.add_argument("--width", type=int, default=480, help="each frame's width in pixels (default 480)")
     frames.set_defaults(func=cmd_frames)
+
+    hear = sub.add_parser("hear", help="what speech-to-text hears in a video, and where it differs from the script")
+    hear.add_argument("media", help="a built video or audio file")
+    hear.add_argument("--script", help="the script it was built from: report where the narration sounds different")
+    hear.add_argument("--language", help="the narration's language, as in en or fr (default: the script's, else detected)")
+    hear.add_argument("--json", action="store_true", help="the comparison as JSON, for programs")
+    hear.set_defaults(func=cmd_hear)
 
     check = sub.add_parser("check", help="parse a script and check its files, without rendering")
     check.add_argument("script", help="a .md/.txt script, or a .zip project")
