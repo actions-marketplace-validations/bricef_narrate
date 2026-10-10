@@ -1,0 +1,63 @@
+{
+  "skill_name": "narrate",
+  "evals": [
+    {
+      "id": 1,
+      "name": "https-explainer-from-brief",
+      "prompt": "I need a 60-second explainer video on how HTTPS keeps what you type into a website private, aimed at people who aren't technical (think a library's digital-skills class). I don't have any pictures for it. You can use narrate; its checkout is at ~/Code/github.com/bricef/narrate. Put everything in OUTPUT_DIR.",
+      "expected_output": "A narrate script of about 60 seconds for a lay audience, with visuals made from slides, Mermaid diagrams or placeholders (no invented files), checked, built with a free voice, and reviewed via frames.",
+      "files": [],
+      "assertions": [
+        "The script passes `narrate check --timing` with no errors",
+        "A video was built",
+        "The video's length meets the brief (within about 20%)",
+        "Frames of the built video were looked at (an image taken from it exists)",
+        "NOTES.md reports the final video's length",
+        "Timing was checked or a silent preview built before the first real-voice build",
+        "Pronunciation was checked by ear-proxy (narrate hear, or speech-to-text)",
+        "The video has at least 4 scenes"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "readme-to-youtube-intro",
+      "prompt": "Here's the README of a side project of mine, quietube: FILES_DIR/quietube-README.md. Can you turn it into a ~90 second intro video for YouTube that I could link from the top of the repo? There aren't any screenshots yet. narrate is checked out at ~/Code/github.com/bricef/narrate. Work in OUTPUT_DIR.",
+      "expected_output": "A ~90 s 1080p script that condenses the README faithfully (no invented features), with placeholders for the missing screenshots, built with a free voice and reviewed.",
+      "files": [
+        "evals/files/quietube-README.md"
+      ],
+      "assertions": [
+        "The script passes `narrate check --timing` with no errors",
+        "A video was built",
+        "The video's length meets the brief (within about 20%)",
+        "Frames of the built video were looked at (an image taken from it exists)",
+        "NOTES.md reports the final video's length",
+        "Timing was checked or a silent preview built before the first real-voice build",
+        "Pronunciation was checked by ear-proxy (narrate hear, or speech-to-text)",
+        "The video is 1920\u00d71080 for YouTube",
+        "The missing screenshots are handled honestly (placeholder cards, or illustrations labelled as such)",
+        "quietube is named in the narration"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "animated-stats-html-scene",
+      "prompt": "We just crossed 1,000 active users on our app Tally (a shared shopping-list app). Make a short celebratory video (about 30 seconds) for LinkedIn where the numbers pop up on screen exactly as the narrator says them: 1,000 users, 18,400 lists created, and 92% of lists shared with someone. Keep it on-brand: dark navy with a mint accent. narrate's checkout is at ~/Code/github.com/bricef/narrate. Put everything in OUTPUT_DIR.",
+      "expected_output": "A ~30 s video whose numbers appear in step with the narration, via an HTML scene timed with cues or SSML marks, in navy and mint, built and checked with frames at the moments the numbers land.",
+      "files": [],
+      "assertions": [
+        "The script passes `narrate check --timing` with no errors",
+        "A video was built",
+        "The video's length meets the brief (within about 20%)",
+        "Frames of the built video were looked at (an image taken from it exists)",
+        "NOTES.md reports the final video's length",
+        "Timing was checked or a silent preview built before the first real-voice build",
+        "Pronunciation was checked by ear-proxy (narrate hear, or speech-to-text)",
+        "An HTML scene drives the numbers",
+        "The numbers are timed to the narration (cues or marks)",
+        "All three numbers appear on screen"
+      ]
+    }
+  ],
+  "grader": "Graded by a script in the eval workspace (round 2): narrate check/probe for the objective checks, NOTES.md for the process ones; quality is reviewed by a person."
+}

@@ -130,6 +130,21 @@ shows voices, pauses, slides, a clip with a callout, and code.
 - **[Development](docs/development.md):** tests, the container image, CI and
   the code's layout.
 
+## Make videos with an AI agent
+
+[`skills/narrate/`](skills/narrate/SKILL.md) is a skill that teaches AI agents
+(Claude Code and others that read the Agent Skills layout) to make videos with
+narrate. It covers:
+- writing a script from a brief, or from a README, post or outline;
+- timing it and pricing its speech before building (`narrate check --timing`);
+- reviewing the result as a contact sheet of frames (`narrate frames`);
+- animated HTML scenes timed to the narration.
+
+Agents draft with free voices, and ask before spending ElevenLabs credits.
+Link it into Claude Code with `just install-skill`. It lives here, so it
+changes with the tool; a test checks it covers every stage direction and
+header key.
+
 ## Status
 
 narrate covers the whole Markdown format: every header property, stage

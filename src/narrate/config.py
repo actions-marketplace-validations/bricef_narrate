@@ -267,9 +267,9 @@ def parse_background(value: Any) -> Background:
     return bg
 
 
-def settings_from_header(header: dict[str, Any], warnings: list[str]) -> Settings:
-    s = Settings()
-    handlers = {
+def _header_handlers(s: Settings) -> dict[str, Any]:
+    """How each header key sets `s`."""
+    return {
         "size": lambda v: setattr(s, "width", parse_size(v)[0]) or setattr(s, "height", parse_size(v)[1]),
         "voice": lambda v: setattr(s, "voice", str(v).strip()),
         "voice-speed": lambda v: setattr(s, "voice_speed", parse_speed(v)),
@@ -290,6 +290,14 @@ def settings_from_header(header: dict[str, Any], warnings: list[str]) -> Setting
         "image-zoom": lambda v: setattr(s, "image_zoom", parse_zoom(v)),
         "transcript": lambda v: setattr(s, "transcript", parse_switch(v, "transcript")),
     }
+
+
+HEADER_KEYS = tuple(_header_handlers(Settings()))  # every key a header may hold
+
+
+def settings_from_header(header: dict[str, Any], warnings: list[str]) -> Settings:
+    s = Settings()
+    handlers = _header_handlers(s)
     for key, value in header.items():
         handler = handlers.get(key)
         if handler is None:
