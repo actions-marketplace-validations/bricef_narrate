@@ -46,8 +46,7 @@ export function CalloutLayer({ callouts, frame, tool, selected, onDraw, onChange
   const svg = useRef(null);
   const mode = useRef(null);
   const [draft, setDraftState] = useState(null);  // {line, geometry} while dragging
-  const latest = useRef(null);
-  const setDraft = (value) => { latest.current = value; setDraftState(value); };
+  const setDraft = setDraftState;
   const [w, h] = frame;
   const toFrame = (e) => {
     const r = svg.current.getBoundingClientRect();
@@ -56,35 +55,38 @@ export function CalloutLayer({ callouts, frame, tool, selected, onDraw, onChange
   const start = (e, next) => {
     if (e.button !== 0) return;
     e.stopPropagation();
+    e.preventDefault();  // no text selection or native drag, which would cancel the pointer
     svg.current.setPointerCapture(e.pointerId);
     mode.current = { ...next, from: toFrame(e) };
   };
-  const onPointerMove = (e) => {
+  /** Where the drag has got to: the shape being drawn, or the callout moved or resized. */
+  const track = (e) => {
     const m = mode.current;
-    if (!m) return;
     const p = toFrame(e);
     if (m.kind === "draw") {
       const geometry = tool === "circle"
         ? { type: "circle", cx: m.from[0], cy: m.from[1], size: Math.hypot(p[0] - m.from[0], p[1] - m.from[1]) }
         : { type: "rectangle", ...box(m.from, p) };
-      setDraft({ line: null, geometry });
-      return;
+      return { line: null, geometry };
     }
     const c = callouts.find((x) => x.line === m.line);
-    setDraft({ line: m.line, geometry: { ...c, ...reshaped(c, m, p) } });
+    return { line: m.line, geometry: { ...c, ...reshaped(c, m, p) }, moved: Math.hypot(p[0] - m.from[0], p[1] - m.from[1]) > 1 };
   };
-  const onPointerUp = () => {
+  const onPointerMove = (e) => { if (mode.current) setDraft(track(e)); };
+  const onPointerUp = (e) => {
     const m = mode.current;
-    const done = latest.current;
+    // The release says where the pointer ended: moves before it may have been coalesced away
+    const done = m && e.type === "pointerup" ? track(e) : null;
     mode.current = null;
     setDraft(null);
-    if (!m || !done) return;
+    if (!done) return;
     const g = done.geometry;
     if (m.kind === "draw") {
       const big = g.type === "circle" ? g.size >= MIN : g.right - g.left >= MIN && g.bottom - g.top >= MIN;
       if (big) onDraw(round(g));
       return;
     }
+    if (!done.moved) return;  // a click selects; it doesn't move
     const keys = g.type === "circle" ? (m.kind === "move" ? ["cx", "cy"] : ["size"]) : ["left", "top", "right", "bottom"];
     onChange(m.line, round(Object.fromEntries(keys.map((k) => [k, g[k]]))));
   };

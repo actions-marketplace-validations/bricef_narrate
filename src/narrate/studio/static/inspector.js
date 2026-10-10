@@ -78,9 +78,7 @@ export function positionFor(focus, size, frame) {
 function Framing({ entry, frame, moving, onSet, busy }) {
   const svg = useRef(null);
   const mode = useRef(null);
-  const [draft, setDraftState] = useState(null);
-  const latest = useRef(null);  // the draft as it is now: a quick click ends before a re-render
-  const setDraft = (value) => { latest.current = value; setDraftState(value); };
+  const [draft, setDraft] = useState(null);
   const [t, setT] = useState(null);
   const animation = useRef(null);
   useEffect(() => () => cancelAnimationFrame(animation.current), []);
@@ -100,6 +98,7 @@ function Framing({ entry, frame, moving, onSet, busy }) {
 
   const onPointerDown = (e) => {
     if (busy || e.button !== 0) return;
+    e.preventDefault();  // no text selection or native drag, which would cancel the pointer
     const p = toPicture(e);
     e.currentTarget.setPointerCapture(e.pointerId);
     if (!windows) {
@@ -118,11 +117,11 @@ function Framing({ entry, frame, moving, onSet, busy }) {
     }
     mode.current = null;
   };
-  const onPointerMove = (e) => {
+  /** Where the drag has got to: a focal point, or the windows with one moved or resized. */
+  const track = (e) => {
     const m = mode.current;
-    if (!m) return;
     const p = toPicture(e);
-    if (m.kind === "focus") { setDraft({ focus: [p[0] / iw, p[1] / ih] }); return; }
+    if (m.kind === "focus") return { focus: [p[0] / iw, p[1] / ih] };
     const next = windows.slice();
     const [cw] = coverSize(size, frame);
     if (m.kind === "move") {
@@ -132,13 +131,14 @@ function Framing({ entry, frame, moving, onSet, busy }) {
       const h = (w * frame[1]) / frame[0];
       next[m.k] = [(m.anchor[0] + w / 2) / iw, (m.anchor[1] + h / 2) / ih, cw / w];
     }
-    setDraft({ windows: next.map((w) => windowOf(windowRect(w, size, frame), size, frame)) });
+    return { windows: next.map((w) => windowOf(windowRect(w, size, frame), size, frame)) };
   };
-  const onPointerUp = () => {
-    const m = mode.current;
-    const done = latest.current;
+  const onPointerMove = (e) => { if (mode.current) setDraft(track(e)); };
+  const onPointerUp = (e) => {
+    // The release says where the pointer ended: moves before it may have been coalesced away
+    const done = mode.current && e.type === "pointerup" ? track(e) : null;
     mode.current = null;
-    if (!m || !done) return;
+    if (!done) return;
     if (done.focus) onSet({ position: positionFor(done.focus, size, frame) });
     else if (done.windows) onSet({ from: windowText(done.windows[0]), to: windowText(done.windows[1]), motion: null, zoom: null });
   };

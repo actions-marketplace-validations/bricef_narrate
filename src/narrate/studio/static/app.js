@@ -170,6 +170,7 @@ function Preview({ analysis, shown, moment, error, playback, onPlay, onStop, tab
   const frameStyle = `width:${w}px;height:${h}px;transform:${shift}scale(${scale})`;
   const onPointerDown = (e) => {
     if (!drag || e.button !== 0) return;
+    e.preventDefault();  // no text selection or native drag, which would cancel the pointer
     const rect = e.currentTarget.getBoundingClientRect();
     dragStart.current = { x: e.clientX, y: e.clientY, w: rect.width, h: rect.height };
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -180,10 +181,14 @@ function Preview({ analysis, shown, moment, error, playback, onPlay, onStop, tab
     const dx = (e.clientX - start.x) / start.w, dy = (e.clientY - start.y) / start.h;
     setDragged({ dx: drag.room.x ? dx : 0, dy: drag.room.y ? dy : 0, label: drag.label(dx, dy) });
   };
-  const onPointerUp = () => {
-    if (dragged && (dragged.dx || dragged.dy)) drag.commit(dragged.dx, dragged.dy);
+  const onPointerUp = (e) => {
+    const start = dragStart.current;
     dragStart.current = null;
     setDragged(null);
+    if (!start || e.type !== "pointerup") return;
+    // The release says where the pointer ended: moves before it may have been coalesced away
+    const dx = drag.room.x ? (e.clientX - start.x) / start.w : 0, dy = drag.room.y ? (e.clientY - start.y) / start.h : 0;
+    if (dx || dy) drag.commit(dx, dy);
   };
   return html`<aside class="preview" aria-label="preview">
     <div class="tabs" role="tablist">
