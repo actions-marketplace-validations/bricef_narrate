@@ -2,6 +2,7 @@
 import { html, render, useCallback, useEffect, useRef, useState } from "./vendor/htm-preact.js";
 import { createEditor, followLine, goToLine, seconds, showAnalysis } from "./editor.js";
 import { Timeline } from "./timeline.js";
+import { Inspector, draggedPosition, slack } from "./inspector.js";
 
 const ANALYSE_AFTER_MS = 300;
 const PREVIEW_AFTER_MS = 150;
@@ -78,11 +79,14 @@ function sceneAt(analysis, line) {
   return found;
 }
 
-/** The moment the cursor points at: its scene, and the start of the paragraph it's in or after. */
+/** The moment the cursor points at: its scene, and the start of the paragraph it's in or after,
+    or, on a picture's line, when that picture first shows. */
 function momentAt(analysis, line) {
   const index = sceneAt(analysis, line);
   const scene = analysis && analysis.scenes.find((s) => s.index === index);
   if (!scene || scene.duration == null) return null;
+  const picture = (scene.visuals || []).find((v) => v.line === line);
+  if (picture) return { scene: scene.index, time: picture.start, start: scene.start };
   let time = 0;
   for (const p of scene.paragraphs) if (p.line <= line) time = p.start;
   return { scene: scene.index, time, start: scene.start };
@@ -146,11 +150,14 @@ function SceneRender({ render, onCancel }) {
   </div>`;
 }
 
-/** The frame at the cursor's moment, at the video's size, scaled to fit the pane. */
+/** The frame at the cursor's moment, at the video's size, scaled to fit the pane. `drag`, when the
+    picture at the cursor has room to move, lets the frame be dragged to change its position (#62). */
 function Preview({ analysis, shown, moment, error, playback, onPlay, onStop, tab, onTab, build, sceneRender,
-                   onRender, onCancelRender }) {
+                   onRender, onCancelRender, drag, children }) {
   const box = useRef(null);
   const [scale, setScale] = useState(0.4);
+  const dragStart = useRef(null);
+  const [dragged, setDragged] = useState(null);  // {dx, dy, position} while dragging
   const [w, h] = (analysis && analysis.size) || [1280, 720];
   useEffect(() => {
     if (!box.current) return;
@@ -158,7 +165,25 @@ function Preview({ analysis, shown, moment, error, playback, onPlay, onStop, tab
     observer.observe(box.current);
     return () => observer.disconnect();
   }, [w]);
-  const frameStyle = `width:${w}px;height:${h}px;transform:scale(${scale})`;
+  const shift = dragged ? `translate(${dragged.dx * w * scale}px, ${dragged.dy * h * scale}px) ` : "";
+  const frameStyle = `width:${w}px;height:${h}px;transform:${shift}scale(${scale})`;
+  const onPointerDown = (e) => {
+    if (!drag || e.button !== 0) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    dragStart.current = { x: e.clientX, y: e.clientY, w: rect.width, h: rect.height };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onPointerMove = (e) => {
+    const start = dragStart.current;
+    if (!start) return;
+    const dx = (e.clientX - start.x) / start.w, dy = (e.clientY - start.y) / start.h;
+    setDragged({ dx: drag.room.x ? dx : 0, dy: drag.room.y ? dy : 0, position: draggedPosition(drag.position, dx, dy, drag.room) });
+  };
+  const onPointerUp = () => {
+    if (dragged && dragged.position !== drag.position) drag.onPosition(dragged.position);
+    dragStart.current = null;
+    setDragged(null);
+  };
   return html`<aside class="preview" aria-label="preview">
     <div class="tabs" role="tablist">
       <button role="tab" aria-selected=${tab === "frame"} onClick=${() => onTab("frame")}>Frame</button>
@@ -171,6 +196,9 @@ function Preview({ analysis, shown, moment, error, playback, onPlay, onStop, tab
     <div class="screen" ref=${box} style=${`height:${h * scale}px`}>
       ${shown && shown.kind === "frame" && html`<iframe title="frame" srcdoc=${shown.html} style=${frameStyle} tabindex="-1"></iframe>`}
       ${shown && shown.kind === "page" && html`<iframe title="frame" src=${shown.url} style=${frameStyle} tabindex="-1"></iframe>`}
+      ${drag && html`<div class="drag-surface" data-testid="drag-surface" title="drag to move the picture"
+        onPointerDown=${onPointerDown} onPointerMove=${onPointerMove} onPointerUp=${onPointerUp} onPointerCancel=${onPointerUp}></div>`}
+      ${dragged && html`<span class="drag-hint">${dragged.position}</span>`}
     </div>
     <p class="caption" data-testid="moment">
       ${moment ? `scene ${moment.scene} · ${seconds(moment.time)} into it · ${seconds(moment.start + moment.time)} in the video` : "No scene here"}
@@ -186,7 +214,8 @@ function Preview({ analysis, shown, moment, error, playback, onPlay, onStop, tab
         playback.state === "synthesising" ? `Synthesising scene ${playback.scene}…`
         : playback.state === "playing" ? `Playing scene ${playback.scene}: ${seconds(playback.time)} of ${seconds(playback.duration)}`
         : ""}</span>
-    </div></div>`}
+    </div>
+    ${children}</div>`}
     ${error && html`<p class="preview-error">${error}</p>`}
   </aside>`;
 }
@@ -374,6 +403,27 @@ function App() {
 
   const cancelSceneRender = useCallback(() => getJSON("/api/scenes/render/cancel", { method: "POST" }), []);
 
+  /** Set properties of the block on `line`: the server writes the text, the editor applies it (#62). */
+  const [editing, setEditing] = useState(false);
+  const editBlock = useCallback(async (line, changes) => {
+    const view = editor.current.view;
+    const sent = view.state.doc;
+    setEditing(true);
+    try {
+      const { status, body } = await getJSON("/api/edit", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: sent.toString(), line, set: changes }),
+      });
+      if (status !== 200) { setError(body.error || `can't make that change (${status})`); return; }
+      if (view.state.doc !== sent) return;  // typed meanwhile: the place it was for has moved
+      if (sent.sliceString(body.from, body.to) === body.insert) return;  // nothing to change
+      view.dispatch({ changes: { from: body.from, to: body.to, insert: body.insert }, userEvent: "input.inspector" });
+      setError(null);
+    } finally {
+      setEditing(false);
+    }
+  }, []);
+
   /** Show the moment `t` seconds into the video, with the editor's cursor on the paragraph playing then. */
   const seekTo = useCallback((t) => {
     const found = momentOf(analysisRef.current, t);
@@ -443,6 +493,16 @@ function App() {
     return () => window.removeEventListener("beforeunload", warn);
   }, []);
 
+  // The picture at the cursor, when it has room to move: dragging the preview picks its position
+  const inspected = analysis && analysis.media && analysis.media[String(cursorLine)];
+  const inspectedFit = inspected && (inspected.options.motion ? "cover"
+    : inspected.options.fit || (analysis.defaults && analysis.defaults.fit) || "cover");
+  const room = inspected ? slack(inspected, inspectedFit, analysis.size || [1280, 720]) : { x: false, y: false };
+  const dragTarget = inspected && !playingMoment && (room.x || room.y) && inspected.kind !== "page" ? {
+    room, position: inspected.options.position || "center",
+    onPosition: (p) => editBlock(inspected.line, { position: p === "center" ? null : p }),
+  } : null;
+
   const status = !online ? "Offline: reconnecting…" : saving ? "Saving…" : dirty ? "Unsaved changes" : "Saved";
   return html`
     <header class="bar">
@@ -471,7 +531,10 @@ function App() {
       <${Preview} analysis=${analysis} shown=${shown} moment=${moment} error=${previewError} playback=${playback}
         onPlay=${() => (seek ? play(seek.scene, seek.line, seek.time) : cursorMoment && play(cursorMoment.scene, cursorLine))}
         onStop=${stop} tab=${tab} onTab=${setTab} build=${build}
-        sceneRender=${sceneRender} onRender=${() => moment && renderScene(moment.scene)} onCancelRender=${cancelSceneRender} />
+        sceneRender=${sceneRender} onRender=${() => moment && renderScene(moment.scene)} onCancelRender=${cancelSceneRender}
+        drag=${dragTarget}>
+        <${Inspector} analysis=${analysis} line=${cursorLine} onEdit=${editBlock} busy=${editing} />
+      </${Preview}>
     </main>
     <${Timeline} analysis=${analysis} playhead=${playhead} onSeek=${seekTo}
       onLine=${(line) => goToLine(editor.current.view, line)} />`;

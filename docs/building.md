@@ -91,14 +91,28 @@ The studio is a web app for writing a script, served from your computer.
   - **Zoom:** **+** and **−**, or Ctrl and the mouse wheel. **Fit** shows
     the whole video again.
   - **Double-click** a picture or slide to go to its line.
+- **Inspector:** with the cursor on a picture, clip, HTML scene or render
+  block, controls under the preview change how it's shown. Each change edits
+  the script's text, as you would by hand, and can be undone in the editor.
+  - **Fit:** `cover`, `contain` or `fit`. **Position:** the six positions
+    narrate has; those that make no difference for this picture are dimmed.
+    With room to move, drag the preview to pick the position.
+  - **Pictures:** pan and zoom (`zoom`, `pan`, `panzoom`, …) and how far it
+    moves. The whole picture shows below with the first and last frames'
+    windows, and **Show the motion** plays it.
+  - **Clips:** sync, the segment to play, and volume or mute.
+  - **The written form is kept:** `![cover top](photo.jpg)` stays a picture
+    line, with its words changed in place. A zoom amount or a volume other
+    than mute needs `(image: {…})`, so the line switches to that form.
 - **Rendering a scene:** **Render scene**, under the preview, saves the
   script, then renders the scene at the cursor with the real builder, as
   `narrate build --scenes` does. It plays in the **Scene** tab: exactly that
   part of the video, with music, subtitles and theme. It goes in a temporary
   folder, never over the video, and a scene whose text, engine and files
   haven't changed isn't rendered again.
-- **What's next:** visual inspectors and HTML scene tools are planned
-  (narrate #28; the design is in [design/studio.md](design/studio.md)).
+- **What's next:** free framing, callouts drawn on the preview, a voice
+  picker and HTML scene tools are planned (narrate #28; the design is in
+  [design/studio.md](design/studio.md)).
 
 **On another machine,** such as a server you reach over a VPN:
 `narrate studio script.md --host 0.0.0.0`, then open port 8787 on that
