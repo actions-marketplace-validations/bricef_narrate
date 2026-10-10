@@ -1,5 +1,6 @@
 """narrate studio in a real browser (#51): edit, save, and follow edits made elsewhere."""
 
+import contextlib
 import threading
 import time
 from pathlib import Path
@@ -241,3 +242,51 @@ def test_build_and_watch(tmp_path, page, monkeypatch):
         server.end_streams()
         server.should_exit = True
         thread.join(5)
+
+
+# -- timeline (#60) ---------------------------------------------------------------------
+
+@contextlib.contextmanager
+def running(script: Path, engine: str = "silent"):
+    """The studio on `script`, serving at the URL it yields."""
+    server = studio_server(create_app(script, engine), "127.0.0.1", 0)
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    while not server.started:
+        time.sleep(0.05)
+    try:
+        yield f"http://127.0.0.1:{server.servers[0].sockets[0].getsockname()[1]}/"
+    finally:
+        server.end_streams()
+        server.should_exit = True
+        thread.join(5)
+
+
+def test_the_timeline_seeks_and_follows_the_cursor(tmp_path, page):
+    script = tmp_path / "s.md"
+    text = ("A first paragraph, long enough to take a few seconds.\n\nA second paragraph.\n\n---\n\n"
+            "The second scene, which is a good deal longer than either paragraph of the first scene.\n")
+    script.write_text(text)
+    with running(script) as url:
+        report = httpx2.post(url + "api/analyse", json={"text": text}).json()
+        one, two = report["scenes"]
+        page.goto(url)
+        scenes = page.locator(".tl-scene")
+        expect(scenes).to_have_count(2)
+        widths = [scenes.nth(k).bounding_box()["width"] for k in (0, 1)]
+        assert widths[0] / widths[1] == pytest.approx(one["duration"] / two["duration"], rel=0.02)
+
+        # Clicking in the second scene shows that moment, with the cursor on the paragraph playing then
+        box = scenes.nth(1).bounding_box()
+        page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] - 10)
+        expect(page.get_by_test_id("moment")).to_contain_text("scene 2")
+        expect(page.locator(".cm-activeLine")).to_contain_text("The second scene")
+        at = page.get_by_test_id("playhead").inner_text()
+        page.keyboard.press("Shift+ArrowRight")  # a second later
+        expect(page.get_by_test_id("playhead")).not_to_have_text(at)
+
+        # Moving the cursor moves the playhead to that paragraph
+        page.locator(".cm-line:not(.cm-narrate-scene)", has_text="A second paragraph").click(position={"x": 4, "y": 4})
+        start = one["paragraphs"][1]["start"]
+        expect(page.get_by_test_id("playhead")).to_have_text(f"{start:.1f} s / {report['duration']:.1f} s")
+        expect(page.get_by_test_id("moment")).to_contain_text("scene 1")

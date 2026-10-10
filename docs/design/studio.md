@@ -185,6 +185,7 @@ Decided with the author.
 | `POST /api/analyse` | parse, check and plan `{text}`: scenes with times, blocks with lines, problems |
 | `GET /api/frame` | the frame HTML for a scene at a moment |
 | `POST /api/scenes/{n}/audio` | synthesise a scene's narration; returns a WAV URL and paragraph start times |
+| `GET /api/peaks/{sound}` | a scene's waveform, as min/max pairs, by the sound id the analysis gives |
 | `POST /api/build` | start a build; progress over the event stream |
 | `GET /api/events` | the event stream (SSE) |
 | `GET /files/{path}` | the project's own files, nothing outside its folder |
