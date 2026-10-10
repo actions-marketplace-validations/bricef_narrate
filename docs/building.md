@@ -253,6 +253,35 @@ agent that can read a picture but not play a video.
 - **Size:** up to four frames across, each `--width` pixels wide (default
   480).
 
+**Hear it, too:**
+
+```sh
+narrate hear script.mp4 --script script.md    # where the narration sounds different from the script
+narrate hear script.mp4                       # just what's heard, with times
+```
+
+`narrate hear` listens with narrate's speech-to-text and lines up what it
+hears with the script's narration, then lists only the differences, with the
+scene, line and moment of each:
+
+```
+script.md: 152 of 154 words heard as written (99%)
+    0:12.4  scene 2, line 14: wrote "yt-dlp", heard "it DLP"
+    0:48.0  heard "thanks for watching", not in the script (a recording, or noise)
+```
+
+- **What counts as the same:** case and punctuation don't count. Words heard
+  joined, split or spelled almost alike match ("QuietTube" for "quietube").
+  Numbers match their spoken form ("531" and "five hundred and thirty-one").
+- **Use it** to catch names, acronyms and jargon the voice gets wrong, then
+  fix them with [pronunciation markup](writing-scripts.md#control-pronunciation).
+  Speech-to-text makes mistakes of its own (homophones such as "your" and
+  "you're"), so a difference is worth a listen, not proof.
+- **Recordings** aren't in the script's text, so their words show as heard but
+  not in the script.
+- `--json` prints the comparison for programs; `--language` sets the language
+  if the script doesn't.
+
 ## Make an audio file instead
 
 ```sh
@@ -571,6 +600,7 @@ models and the ElevenLabs key, and prints a fix for each problem.
 | `narrate studio SCRIPT [--open]` | edit the script in a web app (`--tts` for its engine; `--host`, `--port` to serve elsewhere) |
 | `narrate build SCRIPT [-o OUT.mp4]` | render a video (`SCRIPT` may be a `.zip`; `--source` picks the script inside; `--scenes 3-5` builds just those; `--subtitles MODE` and `--transcript` choose the extra outputs; `--regenerate` retakes web captures) |
 | `narrate audio SCRIPT [-o OUT]` | render the narration only (also takes `--subtitles` and `--transcript`) |
+| `narrate hear VIDEO [--script SCRIPT]` | what speech-to-text hears, and where it differs from the script (`--json`) |
 | `narrate frames VIDEO [--script SCRIPT]` | a contact sheet of the video's frames (`--at`, `--every`, `--count`, `-o`) |
 | `narrate check SCRIPT [--timing]` | report missing files and problems, without rendering; `--timing` adds scene lengths, the total and what synthesis would cost (`--json` for programs) |
 | `narrate callouts FILE` | write a page for placing callouts on an image or a clip's frame |
