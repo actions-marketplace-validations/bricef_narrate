@@ -201,7 +201,7 @@ def frame_html(spec: FrameSpec, width: int, height: int, url=file_uri) -> str:
                       f"width: {spec.image_size[0] * sx:.2f}px; height: {spec.image_size[1] * sy:.2f}px; }}")
     elif spec.image is not None:
         styles.append(f"img.media {{ object-fit: {OBJECT_FIT[spec.fit]}; "
-                      f"object-position: {OBJECT_POSITION[spec.position]}; }}")
+                      f"object-position: {OBJECT_POSITION.get(spec.position, spec.position)}; }}")
     head = f"<style>{''.join(styles)}</style>"
     if custom_css:
         head += f'<link rel="stylesheet" href="{html.escape(url(Path(custom_css)))}">'

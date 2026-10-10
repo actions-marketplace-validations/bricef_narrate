@@ -184,6 +184,8 @@ button.quiet { border-color: transparent; color: var(--muted); }
                        border-top: 7px solid var(--error); }
 
 /* inspector (#62) */
+.inspector[aria-busy="true"] { cursor: progress; }
+.inspector[aria-busy="true"] .windows-picture svg { cursor: progress; }
 .inspector { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; }
 .inspector h3 { margin: 0 0 8px; font-size: 13px; font-weight: 600; display: flex; gap: 8px; align-items: baseline; }
 .inspector h3 .file { font-family: ui-monospace, monospace; font-weight: normal; color: var(--media); }
@@ -212,6 +214,9 @@ button.quiet { border-color: transparent; color: var(--muted); }
 .windows rect.first, .swatch.first { stroke: #ffd166; border-color: #ffd166; }
 .windows rect.last, .swatch.last { stroke: #06d6a0; border-color: #06d6a0; }
 .windows rect.now { stroke: #fff; }
+.windows-picture svg { cursor: crosshair; touch-action: none; }
+.windows circle.handle { fill: #06d6a0; stroke: #000; stroke-opacity: .4; cursor: nwse-resize; }
+.windows .focus line { stroke: #fff; filter: drop-shadow(0 0 2px #000); }
 .swatch { display: inline-block; width: 10px; height: 10px; border: 2px solid; margin: 0 4px 0 8px; vertical-align: -1px; }
 .inspector .hint { display: flex; justify-content: space-between; align-items: center; margin: 4px 0; color: var(--muted);
                    font-size: 12px; }

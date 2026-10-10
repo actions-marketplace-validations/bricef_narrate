@@ -2,7 +2,7 @@
 import { html, render, useCallback, useEffect, useRef, useState } from "./vendor/htm-preact.js";
 import { createEditor, followLine, goToLine, seconds, showAnalysis } from "./editor.js";
 import { Timeline } from "./timeline.js";
-import { Inspector, draggedPosition, slack } from "./inspector.js";
+import { Inspector, draggedPosition, positionFor, slack } from "./inspector.js";
 
 const ANALYSE_AFTER_MS = 300;
 const PREVIEW_AFTER_MS = 150;
@@ -177,10 +177,10 @@ function Preview({ analysis, shown, moment, error, playback, onPlay, onStop, tab
     const start = dragStart.current;
     if (!start) return;
     const dx = (e.clientX - start.x) / start.w, dy = (e.clientY - start.y) / start.h;
-    setDragged({ dx: drag.room.x ? dx : 0, dy: drag.room.y ? dy : 0, position: draggedPosition(drag.position, dx, dy, drag.room) });
+    setDragged({ dx: drag.room.x ? dx : 0, dy: drag.room.y ? dy : 0, label: drag.label(dx, dy) });
   };
   const onPointerUp = () => {
-    if (dragged && dragged.position !== drag.position) drag.onPosition(dragged.position);
+    if (dragged && (dragged.dx || dragged.dy)) drag.commit(dragged.dx, dragged.dy);
     dragStart.current = null;
     setDragged(null);
   };
@@ -198,7 +198,7 @@ function Preview({ analysis, shown, moment, error, playback, onPlay, onStop, tab
       ${shown && shown.kind === "page" && html`<iframe title="frame" src=${shown.url} style=${frameStyle} tabindex="-1"></iframe>`}
       ${drag && html`<div class="drag-surface" data-testid="drag-surface" title="drag to move the picture"
         onPointerDown=${onPointerDown} onPointerMove=${onPointerMove} onPointerUp=${onPointerUp} onPointerCancel=${onPointerUp}></div>`}
-      ${dragged && html`<span class="drag-hint">${dragged.position}</span>`}
+      ${dragged && html`<span class="drag-hint">${dragged.label}</span>`}
     </div>
     <p class="caption" data-testid="moment">
       ${moment ? `scene ${moment.scene} · ${seconds(moment.time)} into it · ${seconds(moment.start + moment.time)} in the video` : "No scene here"}
@@ -246,6 +246,7 @@ function App() {
   const [playback, setPlayback] = useState({ state: "idle" });
   const [build, setBuild] = useState(null);
   const [sceneRender, setSceneRender] = useState(null);
+  const [awaitingAnalysis, setAwaitingAnalysis] = useState(false);  // an edit made, its analysis not back yet
   const [tab, setTab] = useState("frame");
   const cursorMoment = analysis ? momentAt(analysis, cursorLine) : null;
   // While narration plays, the preview follows it paragraph by paragraph
@@ -321,6 +322,7 @@ function App() {
       showAnalysis(view, body);
       setAnalysis(body);
       setEngine(body.engine);
+      setAwaitingAnalysis(false);  // the inspector's facts are current again
     } catch {
       /* offline: the event stream reports it */
     }
@@ -418,6 +420,7 @@ function App() {
       if (view.state.doc !== sent) return;  // typed meanwhile: the place it was for has moved
       if (sent.sliceString(body.from, body.to) === body.insert) return;  // nothing to change
       view.dispatch({ changes: { from: body.from, to: body.to, insert: body.insert }, userEvent: "input.inspector" });
+      setAwaitingAnalysis(true);
       setError(null);
     } finally {
       setEditing(false);
@@ -498,10 +501,33 @@ function App() {
   const inspectedFit = inspected && (inspected.options.motion ? "cover"
     : inspected.options.fit || (analysis.defaults && analysis.defaults.fit) || "cover");
   const room = inspected ? slack(inspected, inspectedFit, analysis.size || [1280, 720]) : { x: false, y: false };
-  const dragTarget = inspected && !playingMoment && (room.x || room.y) && inspected.kind !== "page" ? {
-    room, position: inspected.options.position || "center",
-    onPosition: (p) => editBlock(inspected.line, { position: p === "center" ? null : p }),
-  } : null;
+  const frameSize = (analysis && analysis.size) || [1280, 720];
+  const moving = inspected && (inspected.options.motion || inspected.options.from || inspected.options.to);
+  let dragTarget = null;
+  if (inspected && !playingMoment && !editing && !awaitingAnalysis && (room.x || room.y) && inspected.kind !== "page") {
+    if (inspected.kind === "picture" && inspectedFit === "cover" && !moving && inspected.crop) {
+      // A still's cover crop: drag it anywhere, and the focal point follows (#63)
+      const [iw, ih] = inspected.size;
+      const [, , cw, ch] = inspected.crop;
+      const focusAfter = (dx, dy) => [Math.min(Math.max(inspected.focus[0] - (dx * cw) / iw, 0), 1),
+                                      Math.min(Math.max(inspected.focus[1] - (dy * ch) / ih, 0), 1)];
+      dragTarget = {
+        room,
+        label: (dx, dy) => positionFor(focusAfter(dx, dy), inspected.size, frameSize) || "center",
+        commit: (dx, dy) => editBlock(inspected.line, { position: positionFor(focusAfter(dx, dy), inspected.size, frameSize) }),
+      };
+    } else {  // a clip, a contained picture, or a moving one: the six positions
+      const from = inspected.options.position && !inspected.options.position.includes("%") ? inspected.options.position : "center";
+      dragTarget = {
+        room,
+        label: (dx, dy) => draggedPosition(from, dx, dy, room),
+        commit: (dx, dy) => {
+          const p = draggedPosition(from, dx, dy, room);
+          if (p !== from) editBlock(inspected.line, { position: p === "center" ? null : p });
+        },
+      };
+    }
+  }
 
   const status = !online ? "Offline: reconnecting…" : saving ? "Saving…" : dirty ? "Unsaved changes" : "Saved";
   return html`
@@ -533,7 +559,7 @@ function App() {
         onStop=${stop} tab=${tab} onTab=${setTab} build=${build}
         sceneRender=${sceneRender} onRender=${() => moment && renderScene(moment.scene)} onCancelRender=${cancelSceneRender}
         drag=${dragTarget}>
-        <${Inspector} analysis=${analysis} line=${cursorLine} onEdit=${editBlock} busy=${editing} />
+        <${Inspector} analysis=${analysis} line=${cursorLine} onEdit=${editBlock} busy=${editing || awaitingAnalysis} />
       </${Preview}>
     </main>
     <${Timeline} analysis=${analysis} playhead=${playhead} onSeek=${seekTo}

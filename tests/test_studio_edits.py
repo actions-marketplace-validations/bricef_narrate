@@ -138,7 +138,7 @@ def test_the_analysis_describes_each_picture_and_clip(tmp_path):
     picture, clip = report["media"]["5"], report["media"]["11"]
     assert (picture["kind"], picture["file"], picture["size"]) == ("picture", "photo.jpg", (640, 360))
     assert picture["options"] == {"fit": None, "motion": "zoom", "position": "left", "zoom": 2.0, "sync": None,
-                                  "segment": None, "volume": None}
+                                  "segment": None, "volume": None, "from": None, "to": None}
     first, last = picture["windows"]
     assert first == [0, 0, 640, 360] and last[2] == pytest.approx(320) and last[0] == 0  # zoomed in twice, at the left
     assert (clip["kind"], clip["size"], clip["length"]) == ("clip", [320, 240], pytest.approx(3.0, abs=0.05))
@@ -157,3 +157,37 @@ def test_the_edit_endpoint(tmp_path):
         assert apply(SCRIPT, change).split("\n")[4] == "![cover bottom](photo.jpg)"
         refused = client.post("/api/edit", json={"text": SCRIPT, "line": 7, "set": {"fit": "cover"}})
         assert refused.status_code == 400 and "isn't a picture" in refused.json()["error"]
+
+
+# -- free framing (#63) ----------------------------------------------------------------------
+
+def test_focal_points_and_windows_move_a_picture_to_the_map_form():
+    after, _, before, lines = edited(5, position="70% 25%")
+    only_line_changed(before, lines, 5, "(image: {file: photo.jpg, size: cover, position: 70% 25%})")
+    assert media(after, 5).focus == (0.7, 0.25)
+    after = edited(13, **{"from": "20% 50%", "to": "80% 40% 2", "fit": None})[0]
+    assert "  from: 20% 50%\n  to: 80% 40% 2)" in after
+    assert media(after, 13).windows == ((0.2, 0.5, 1.0), (0.8, 0.4, 2.0))
+    with pytest.raises(EditError, match="a window such as"):
+        edit_block(SCRIPT, 5, {"to": "far away"})
+    with pytest.raises(EditError, match="or a point such as"):
+        edit_block(SCRIPT, 5, {"position": "150% 2%"})
+
+
+def test_the_inspector_is_told_the_crop_and_the_focal_point(tmp_path):
+    from PIL import Image
+
+    from narrate.studio.analysis import run
+    from narrate.tts import SilentSynth
+
+    Image.new("RGB", (4000, 1000), "red").save(tmp_path / "wide.png")
+    text = ("---\nsize: 320x180\n---\n\n(image: {file: wide.png, position: 60% 50%})\n\nWords.\n\n"
+            "---\n\n(image: {file: wide.png, from: 30% 50%, to: 80% 50% 2})\n\nMore.\n")
+    media_entries = run(text, tmp_path / "s.md", SilentSynth()).report["media"]
+    still, moving = media_entries["5"], media_entries["11"]
+    x, y, w, h = still["crop"]
+    assert x + w / 2 == pytest.approx(2400, abs=0.2) and still["focus"] == [0.6, 0.5]
+    assert still["options"]["position"] == "60% 50%" and still["windows"] is None
+    assert moving["options"]["from"] == "30% 50%" and moving["options"]["to"] == "80% 50% 2"
+    first, last = moving["windows"]
+    assert first[0] + first[2] / 2 == pytest.approx(1200, abs=0.2) and last[2] == pytest.approx(first[2] / 2, abs=0.2)

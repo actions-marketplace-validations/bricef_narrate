@@ -76,7 +76,7 @@ def frame(plan: ScenePlan, t: float, settings: Settings, files: Files) -> dict:
         return {"kind": "frame", "html": frame_html(spec, w, h, files.url)}
     if visual.kind == "page":
         return {"kind": "page", "url": files.url(visual.path)}
-    spec = dataclasses.replace(spec, fit=visual.fit, position=visual.position)
+    spec = dataclasses.replace(spec, fit=visual.fit, position=visual.css_position)
     if visual.kind == "video":
         at = visual.start + min(into, max(0.0, visual.length - 0.05))
         still = files.scratch / f"clip-{hashlib.sha256(f'{visual.path}:{at:.2f}'.encode()).hexdigest()[:16]}.png"
@@ -97,7 +97,8 @@ def frame(plan: ScenePlan, t: float, settings: Settings, files: Files) -> dict:
     if visual.motion:
         with Image.open(image) as im:
             size = im.size
-        start, end = motion.endpoints(visual.motion, visual.position, size[0], size[1], w, h, visual.zoom)
+        start, end = motion.endpoints(visual.motion, visual.position, size[0], size[1], w, h, visual.zoom,
+                                      visual.focus, visual.windows)
         crop = tuple(a + (b - a) * fraction for a, b in zip(start, end))
         spec = dataclasses.replace(spec, crop=crop, image_size=size)
     return {"kind": "frame", "html": frame_html(spec, w, h, files.url)}

@@ -334,13 +334,14 @@ def test_the_inspector_edits_the_picture_at_the_cursor(tmp_path, page):
         expect(page.locator(".tl-visual.picture").first).to_have_attribute("title", re.compile("panzoom"))
         inspector.get_by_label("motion").select_option("")
         expect(picture_line).to_have_text("![](wide.png)")
+        expect(page.get_by_test_id("framing")).to_have_attribute("aria-label", "crop and focal point")  # re-analysed
 
-        # Dragging the picture to the right shows its left side
+        # Dragging the picture all the way right shows its left side: the named position, not a point
         surface = page.get_by_test_id("drag-surface")
         box = surface.bounding_box()
-        page.mouse.move(box["x"] + box["width"] * 0.5, box["y"] + box["height"] * 0.5)
+        page.mouse.move(box["x"] + box["width"] * 0.03, box["y"] + box["height"] * 0.5)
         page.mouse.down()
-        page.mouse.move(box["x"] + box["width"] * 0.85, box["y"] + box["height"] * 0.5, steps=5)
+        page.mouse.move(box["x"] + box["width"] * 0.99, box["y"] + box["height"] * 0.5, steps=5)
         expect(page.locator(".drag-hint")).to_have_text("left")
         page.mouse.up()
         expect(picture_line).to_have_text("![left](wide.png)")
@@ -349,3 +350,51 @@ def test_the_inspector_edits_the_picture_at_the_cursor(tmp_path, page):
         page.locator(".cm-content").focus()
         page.keyboard.press("Control+z")
         expect(picture_line).to_have_text("![](wide.png)")  # each change is one undo
+
+
+# -- free framing (#63) ------------------------------------------------------------------
+
+def test_focal_points_and_windows_from_the_inspector(tmp_path, page):
+    from PIL import Image
+
+    Image.new("RGB", (900, 180), "teal").save(tmp_path / "wide.png")
+    script = tmp_path / "s.md"
+    script.write_text("---\nsize: 320x180\n---\n\n![](wide.png)\n\nA picture, framed freely.\n")
+    with running(script) as url:
+        page.goto(url)
+        page.locator(".cm-narrate-media").click(position={"x": 4, "y": 4})
+        framing = page.get_by_test_id("framing")
+        expect(framing).to_have_attribute("aria-label", "crop and focal point")
+
+        # Part of the way: a focal point, kept as central as the picture allows
+        box = page.get_by_test_id("drag-surface").bounding_box()
+        page.mouse.move(box["x"] + box["width"] * 0.5, box["y"] + box["height"] * 0.5)
+        page.mouse.down()
+        page.mouse.move(box["x"] + box["width"] * 0.85, box["y"] + box["height"] * 0.5, steps=5)
+        expect(page.locator(".drag-hint")).to_have_text("38% 50%")
+        page.mouse.up()
+        expect(page.locator(".cm-activeLine")).to_have_text("(image: {file: wide.png, position: 38% 50%})")
+
+        # Clicking the whole picture puts the focal point there
+        expect(framing).to_have_attribute("data-focus", "38% 50%")  # re-analysed
+        expect(page.get_by_test_id("inspector")).to_have_attribute("aria-busy", "false")
+        framing.scroll_into_view_if_needed()
+        f = framing.bounding_box()
+        framing.click(position={"x": f["width"] * 0.7, "y": f["height"] * 0.5})
+        expect(page.locator(".cm-activeLine")).to_have_text("(image: {file: wide.png, position: 70% 50%})")
+
+        # Custom windows start from the crop, zooming in on the focal point; dragging the last one moves it
+        expect(framing).to_have_attribute("data-focus", "70% 50%")  # re-analysed
+        expect(page.get_by_test_id("inspector")).to_have_attribute("aria-busy", "false")
+        page.get_by_label("motion").select_option("custom")
+        expect(page.locator(".cm-activeLine")).to_contain_text("from: 70% 50%, to: 70% 50% 1.5")
+        expect(framing).to_have_attribute("aria-label", "first and last windows")
+        last = framing.locator("rect.last")
+        framing.scroll_into_view_if_needed()
+        f = framing.bounding_box()
+        r = last.bounding_box()
+        page.mouse.move(r["x"] + r["width"] * 0.5, r["y"] + r["height"] * 0.5)
+        page.mouse.down()
+        page.mouse.move(r["x"] + r["width"] * 0.5 - f["width"] * 0.2, r["y"] + r["height"] * 0.5, steps=5)
+        page.mouse.up()
+        expect(page.locator(".cm-activeLine")).to_contain_text("to: 50% 50% 1.5}")  # moved, its zoom kept
