@@ -205,7 +205,7 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
                             headers={"Cache-Control": "max-age=86400, immutable"})
 
     async def edit(request: Request) -> Response:
-        from .edits import EditError, delete_block, edit_block, edit_callout, insert_callout
+        from .edits import EditError, delete_block, edit_block, edit_callout, insert_callout, set_header, set_voice
 
         body = await request.json()
         text, line, changes = str(body.get("text", "")), int(body.get("line", 0)), dict(body.get("set") or {})
@@ -219,11 +219,55 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
                 change = insert_callout(text, int(body.get("after", 0)), dict(body.get("callout") or {}))
             elif op == "delete":
                 change = delete_block(text, line)
+            elif op == "header":
+                change = set_header(text, str(body.get("key", "")), str(body.get("value", "")))
+            elif op == "voice":
+                change = set_voice(text, line, str(body.get("voice", "")))
             else:
                 return JSONResponse({"error": f"no such edit: {op!r}"}, status_code=400)
         except EditError as e:
             return JSONResponse({"error": str(e)}, status_code=400)
         return JSONResponse(change)
+
+    async def voices(request: Request) -> Response:
+        from .voices import catalogue
+
+        try:
+            synth = session.synth()
+        except RuntimeError as e:
+            return JSONResponse({"error": str(e)}, status_code=503)
+        return JSONResponse(await run_in_threadpool(catalogue, synth, session.project))
+
+    async def audition(request: Request) -> Response:
+        from .audio import scene_audio as synthesise
+        from .voices import characters, sample_script
+
+        body = await request.json()
+        try:
+            text = sample_script(str(body.get("text", "")), str(body.get("voice", "")), str(body.get("sample", "")))
+            synth = session.synth()
+            if body.get("dry"):  # what it would send, before asking to spend it
+                return JSONResponse(await run_in_threadpool(characters, text, session.script, synth))
+            result = await run_in_threadpool(synthesise, text, session.script, synth, 1, session.scratch)
+        except ValueError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        except Exception as e:  # noqa: BLE001 - the engine's own message (no key, a refused request) is the answer
+            return JSONResponse({"error": str(e)}, status_code=502)
+        return JSONResponse(result)
+
+    async def put_pins(request: Request) -> Response:
+        from ..voicemap import VoiceMapError
+        from .voices import write_pins
+
+        pins = (await request.json()).get("pins") or {}
+        if not isinstance(pins, dict) or not all(isinstance(v, dict) for v in pins.values()):
+            return JSONResponse({"error": "pins are a map of name -> {engine: voice}"}, status_code=400)
+        try:
+            await run_in_threadpool(write_pins, session.project, pins)
+        except VoiceMapError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        session.publish({"type": "voices-changed"})  # timing may change with the voice
+        return JSONResponse({"saved": True})
 
     async def set_engine(request: Request) -> Response:
         from ..tts import make_synth
@@ -356,6 +400,9 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
         Route("/api/frame", preview, methods=["POST"]),
         Route("/api/engine", set_engine, methods=["POST"]),
         Route("/api/edit", edit, methods=["POST"]),
+        Route("/api/voices", voices, methods=["GET"]),
+        Route("/api/voices/audition", audition, methods=["POST"]),
+        Route("/api/voices/pins", put_pins, methods=["PUT"]),
         Route("/api/peaks/{sound}", waveform),
         Route("/api/scenes/{index:int}/audio", scene_audio, methods=["POST"]),
         Route("/api/build", start_build, methods=["POST"]),

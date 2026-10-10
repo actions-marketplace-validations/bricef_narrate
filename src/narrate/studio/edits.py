@@ -329,6 +329,55 @@ def delete_block(text: str, line: int) -> dict:
     return _smallest(text, "\n".join(kept))
 
 
+_SEPARATOR = re.compile(r"^ {0,3}-{3,}\s*$")
+_VOICE = re.compile(r"^(?P<indent>\s*)\(\s*voice\s*:\s*(?P<value>[^)]*)\)\s*$", re.I)
+_NAME = re.compile(r"^[\w .'/-]+$")
+
+
+def _voice_name(value: str) -> str:
+    value = str(value).strip()
+    if not value or not _NAME.match(value):
+        raise EditError(f"not a voice name: {value!r}")
+    return value
+
+
+def set_header(text: str, key: str, value: str) -> dict:
+    """The change that sets `key: value` in the header, adding the header if the script has none (#65)."""
+    if key != "voice":
+        raise EditError(f"the studio doesn't set {key!r} in the header")
+    value = _voice_name(value)
+    lines = text.split("\n")
+    end = None
+    if lines and _SEPARATOR.match(lines[0]):
+        end = next((k for k in range(1, len(lines)) if _SEPARATOR.match(lines[k])), None)
+    if end is None:
+        return {"from": 0, "to": 0, "insert": f"---\n{key}: {value}\n---\n\n"}
+    offsets = _offsets(lines)
+    for k in range(1, end):
+        if re.match(rf"^\s*{key}\s*:", lines[k], re.I):
+            indent = re.match(r"\s*", lines[k]).group(0)
+            return {"from": offsets[k], "to": offsets[k] + len(lines[k]), "insert": f"{indent}{key}: {value}"}
+    return {"from": offsets[end], "to": offsets[end], "insert": f"{key}: {value}\n"}
+
+
+def set_voice(text: str, line: int, voice: str) -> dict:
+    """The change that makes narration from `line` on use `voice`: the (voice: …) on that line rewritten,
+    or a new one before the paragraph `line` is in (#65)."""
+    voice = _voice_name(voice)
+    lines = text.split("\n")
+    if not 1 <= line <= len(lines):
+        raise EditError(f"there is no line {line}")
+    offsets = _offsets(lines)
+    i = line - 1
+    if m := _VOICE.match(lines[i]):
+        return {"from": offsets[i], "to": offsets[i] + len(lines[i]), "insert": f"{m.group('indent')}(voice: {voice})"}
+    if _SEPARATOR.match(lines[i]):
+        raise EditError(f"line {line} is a scene break: put the cursor in the scene")
+    while i > 0 and lines[i - 1].strip() and not _SEPARATOR.match(lines[i - 1]):
+        i -= 1  # back to the start of the paragraph
+    return {"from": offsets[i], "to": offsets[i], "insert": f"(voice: {voice})\n\n"}
+
+
 def edit_block(text: str, line: int, changes: dict[str, Any]) -> dict:
     """The change that sets `changes` on the media block at `line`: {"from", "to", "insert"} in characters."""
     _check(changes)
