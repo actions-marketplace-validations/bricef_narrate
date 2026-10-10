@@ -185,7 +185,7 @@ Decided with the author.
 | `POST /api/analyse` | parse, check and plan `{text}`: an id, scenes with times, blocks with lines, problems |
 | `POST /api/frame` | the frame HTML (or page URL) for `{id, scene, time}`, from that analysis |
 | `POST /api/engine` | switch the speech engine; refused if it can't start |
-| `POST /api/edit` | the text change that sets properties on the block at a line (`{text, line, set}`), for the inspector |
+| `POST /api/edit` | the text change for a direct manipulation: properties set on the block at a line (`{text, line, set}`), or `op` `callout` (set a callout's), `insert-callout` (`{after, callout}`) or `delete` (`{line}`) |
 | `POST /api/scenes/{n}/audio` | synthesise a scene's narration; returns a WAV URL and paragraph start times |
 | `GET /api/peaks/{sound}` | a scene's waveform, as min/max pairs, by the sound id the analysis gives |
 | `POST /api/build` | start a build; progress over the event stream |

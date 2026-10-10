@@ -12,6 +12,10 @@ edit doesn't touch, byte for byte:
   their keys in order, with new ones added at the end;
 - a render block's ```` ```render:NAME tokens ```` line takes the same tokens
   as a picture.
+
+Callouts (#64) are `(callout: …)` directions: one can be inserted after a
+line (in the multi-line form the docs use), have its properties set the same
+way, or be deleted with the blank line that separated it.
 """
 
 from __future__ import annotations
@@ -167,6 +171,10 @@ def _flow(props: dict[str, str]) -> str:
     return "{" + ", ".join(f"{k}: {_quote(v)}" for k, v in props.items()) + "}"
 
 
+CALLOUT_KEYS = ("type", "cx", "cy", "size", "left", "top", "right", "bottom", "alpha", "style")
+_CALLOUT = re.compile(r"^(?P<indent>\s*)\(\s*callout\s*:", re.I)
+
+
 def _directive_lines(lines: list[str], start: int) -> int:
     """The index of the last line of the directive starting at `start` (the parser's own rule)."""
     if lines[start].rstrip().endswith(")"):
@@ -179,6 +187,148 @@ def _directive_lines(lines: list[str], start: int) -> int:
     raise EditError(f"line {start + 1}: the direction is never closed with )")
 
 
+def _offsets(lines: list[str]) -> list[int]:
+    offsets = [0]
+    for ln in lines:
+        offsets.append(offsets[-1] + len(ln) + 1)
+    return offsets
+
+
+def _read_directive(lines: list[str], i: int, line: int) -> tuple[str, Any, int]:
+    """The direction starting on line index i: its key, its value (text or a map) and its last line index."""
+    last = _directive_lines(lines, i)
+    inner = "\n".join(lines[i:last + 1]).strip()[1:-1]
+    try:
+        data = yaml.load(inner, Loader=yaml.BaseLoader)
+    except yaml.YAMLError as e:
+        raise EditError(f"line {line}: can't read the direction: {e}") from None
+    if not isinstance(data, dict) or len(data) != 1:
+        raise EditError(f"line {line}: can't read the direction")
+    (key, value), = data.items()
+    return str(key), value, last
+
+
+def _write_directive(lines: list[str], i: int, last: int, key: str, props: dict[str, str], as_text: str | None) -> str:
+    """A direction rewritten in the form it had: one line (a flow map, or `as_text` when that's all there is)
+    or one key per line, indented as before."""
+    indent = re.match(r"\s*", lines[i]).group(0)
+    if last == i:
+        return f"{indent}({key}: {as_text if as_text is not None else _flow(props)})"
+    pad = re.match(r"\s*", lines[i + 1]).group(0) or indent + "  "
+    return f"{indent}({key}:\n" + "\n".join(f"{pad}{k}: {_quote(v)}" for k, v in props.items()) + ")"
+
+
+def _callout_changes(changes: dict[str, Any]) -> dict[str, str | None]:
+    unknown = set(changes) - set(CALLOUT_KEYS)
+    if unknown:
+        raise EditError(f"unknown callout properties: {', '.join(sorted(unknown))}")
+    out: dict[str, str | None] = {}
+    for key, value in changes.items():
+        if value is None:
+            out[key] = None
+        elif key == "type":
+            if value not in ("circle", "rectangle"):
+                raise EditError(f"a callout is a circle or a rectangle, not {value!r}")
+            out[key] = value
+        elif key == "style":
+            if value != "mask":
+                raise EditError(f"a callout's style is mask, not {value!r}")
+            out[key] = value
+        else:
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                raise EditError(f"callout {key} must be a number, not {value!r}") from None
+            if key == "alpha":
+                if not 0 <= number <= 1:
+                    raise EditError("callout alpha is from 0 to 1")
+                out[key] = f"{round(number, 2):g}"
+            else:
+                out[key] = str(round(number))  # frame pixels
+    return out
+
+
+def _callout_props(changes: dict[str, str | None], props: dict[str, str]) -> dict[str, str]:
+    """A callout's properties with the changes made: written keys stay where they are, new ones follow in
+    the usual order."""
+    props = dict(props)
+    # Switching shape drops the other shape's geometry
+    if changes.get("type") == "rectangle":
+        for key in ("cx", "cy", "size"):
+            props.pop(key, None)
+    elif changes.get("type") == "circle":
+        for key in ("left", "top", "right", "bottom"):
+            props.pop(key, None)
+    for key in CALLOUT_KEYS:
+        if key not in changes:
+            continue
+        value = changes[key]
+        if value is None or (key == "type" and value == "circle"):
+            props.pop(key, None)  # circle is the default type
+        else:
+            props[key] = value
+    return props
+
+
+def edit_callout(text: str, line: int, changes: dict[str, Any]) -> dict:
+    """The change that sets properties of the callout at `line` (None removes one)."""
+    wanted = _callout_changes(changes)
+    lines = text.split("\n")
+    if not 1 <= line <= len(lines) or not _CALLOUT.match(lines[line - 1]):
+        raise EditError(f"line {line} isn't a callout")
+    i = line - 1
+    key, value, last = _read_directive(lines, i, line)
+    if not isinstance(value, dict):
+        raise EditError(f"line {line}: a callout needs properties such as cx and cy")
+    old = {str(k).lower(): str(v) for k, v in value.items()}
+    props = _callout_props(wanted, old)
+    offsets = _offsets(lines)
+    return {"from": offsets[i], "to": offsets[last] + len(lines[last]),
+            "insert": _write_directive(lines, i, last, key, props, None)}
+
+
+def insert_callout(text: str, after: int, callout: dict[str, Any]) -> dict:
+    """The change that adds a callout after line `after` (0: at the very start), with blank lines around it."""
+    props = _callout_props(_callout_changes(callout), {})
+    lines = text.split("\n")
+    if not 0 <= after <= len(lines):
+        raise EditError(f"there is no line {after}")
+    block = "(callout:\n" + "\n".join(f"  {k}: {v}" for k, v in props.items()) + ")"
+    offsets = _offsets(lines)
+    if after == 0:
+        return {"from": 0, "to": 0, "insert": block + "\n\n"}
+    at = offsets[after - 1] + len(lines[after - 1])
+    following = lines[after] if after < len(lines) else ""
+    return {"from": at, "to": at, "insert": "\n\n" + block + ("\n" if following.strip() else "")}
+
+
+def _smallest(old: str, new: str) -> dict:
+    """The one change that turns `old` into `new`, trimmed to what differs."""
+    head = 0
+    while head < min(len(old), len(new)) and old[head] == new[head]:
+        head += 1
+    tail = 0
+    while tail < min(len(old), len(new)) - head and old[-1 - tail] == new[-1 - tail]:
+        tail += 1
+    return {"from": head, "to": len(old) - tail, "insert": new[head:len(new) - tail]}
+
+
+def delete_block(text: str, line: int) -> dict:
+    """The change that removes the direction at `line`, and one of the blank lines that separated it."""
+    lines = text.split("\n")
+    if not 1 <= line <= len(lines) or not lines[line - 1].lstrip().startswith("("):
+        raise EditError(f"line {line} isn't a direction")
+    i = line - 1
+    last = _directive_lines(lines, i)
+    kept = lines[:i] + lines[last + 1:]
+    # Where it was, two blank lines now meet (or one starts the file): one of them goes too
+    if i < len(kept) and not kept[i].strip() and (i == 0 or not kept[i - 1].strip()):
+        del kept[i]
+    elif i == len(kept) and i > 0 and not kept[i - 1].strip():
+        del kept[i - 1]
+    return _smallest(text, "\n".join(kept))
+
+
 def edit_block(text: str, line: int, changes: dict[str, Any]) -> dict:
     """The change that sets `changes` on the media block at `line`: {"from", "to", "insert"} in characters."""
     _check(changes)
@@ -186,9 +336,7 @@ def edit_block(text: str, line: int, changes: dict[str, Any]) -> dict:
     if not 1 <= line <= len(lines):
         raise EditError(f"there is no line {line}")
     i = line - 1
-    offsets = [0]
-    for ln in lines:
-        offsets.append(offsets[-1] + len(ln) + 1)
+    offsets = _offsets(lines)
 
     if m := _IMAGE.match(lines[i]):
         target = m.group("target").strip()
@@ -217,28 +365,14 @@ def edit_block(text: str, line: int, changes: dict[str, Any]) -> dict:
         new = m.group("lead") + "".join(f" {t}" for t in tokens)
         return {"from": offsets[i], "to": offsets[i] + len(lines[i]), "insert": new}
 
-    if m := _DIRECTIVE.match(lines[i]):
-        last = _directive_lines(lines, i)
-        raw = "\n".join(lines[i:last + 1])
-        inner = raw.strip()[1:-1]
-        try:
-            data = yaml.load(inner, Loader=yaml.BaseLoader)
-        except yaml.YAMLError as e:
-            raise EditError(f"line {line}: can't read the direction: {e}") from None
-        if not isinstance(data, dict) or len(data) != 1:
-            raise EditError(f"line {line}: can't read the direction")
-        (key, value), = data.items()
+    if _DIRECTIVE.match(lines[i]):
+        key, value, last = _read_directive(lines, i, line)
         props = {"file": value} if isinstance(value, str) else {str(k).lower(): str(v) for k, v in value.items()}
         props = _edit_props(props, changes)
-        indent = m.group("indent")
-        if last == i:  # one line: a flow map, or just the file when nothing else is left
-            body = props["file"] if list(props) == ["file"] and isinstance(value, str) else _flow(props)
-            new = f"{indent}({key}: {body})"
-        else:  # several lines: one key per line, indented as the first one was
-            pad = re.match(r"\s*", lines[i + 1]).group(0) or indent + "  "
-            entries = [f"{pad}{k}: {_quote(v)}" for k, v in props.items()]
-            new = f"{indent}({key}:\n" + "\n".join(entries) + ")"
-        return {"from": offsets[i], "to": offsets[last] + len(lines[last]), "insert": new}
+        # Written as just the file, it stays so while there's nothing else to say
+        as_text = props["file"] if list(props) == ["file"] and isinstance(value, str) else None
+        return {"from": offsets[i], "to": offsets[last] + len(lines[last]),
+                "insert": _write_directive(lines, i, last, key, props, as_text)}
 
     raise EditError(f"line {line} isn't a picture, clip, page or render block")
 

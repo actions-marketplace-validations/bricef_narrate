@@ -21,7 +21,7 @@ import numpy as np
 from .. import media, motion, render
 from ..build import SR, Builder, BuildError, ScenePlan, merge_groups
 from ..config import ConfigError, Settings
-from ..script import ANIMATED_SIZES, SIZES, Media, Narration, Render, Scene, ScriptError, Slide, parse
+from ..script import ANIMATED_SIZES, SIZES, Directive, Media, Narration, Render, Scene, ScriptError, Slide, parse
 from ..tts import EstimatingSynth
 
 _LINE = re.compile(r"^line (\d+): (.*)$", re.S)
@@ -158,6 +158,27 @@ def _media_entry(line: int, kind: str, block: Media, options: dict, base: Path, 
     return entry
 
 
+def _callouts(scene: Scene) -> list[dict]:
+    """A scene's callouts, as written, for drawing and editing on the preview (#64)."""
+    out = []
+    for block in scene.blocks:
+        if not (isinstance(block, Directive) and block.key == "callout" and isinstance(block.value, dict)):
+            continue
+        props = {str(k).lower(): str(v) for k, v in block.value.items()}
+        entry: dict = {"line": block.line, "type": props.get("type", "circle").lower(),
+                       "style": "mask" if props.get("style", "").lower() == "mask" else None}
+        try:
+            keys = ("cx", "cy") if entry["type"] == "circle" else ("left", "top", "right", "bottom")
+            entry.update({k: float(props[k]) for k in keys})
+            if entry["type"] == "circle":
+                entry["size"] = float(props.get("size", 100))
+            entry["alpha"] = float(props.get("alpha", 0.5))
+        except (KeyError, ValueError):
+            continue  # the planner reports it
+        out.append(entry)
+    return out
+
+
 def sound_id(audio: np.ndarray) -> str:
     return hashlib.blake2b(audio.tobytes(), digest_size=8).hexdigest()
 
@@ -249,6 +270,7 @@ def run(text: str, script: Path, synth: Any) -> Analysis:
         for scene, plan in zip(group, plans):
             entry = {"index": scene.index, "line": scene.line, "title": titles[scene.index], "start": round(start, 3),
                      "duration": None, "paragraphs": [], "visuals": [], "slides": [], "transition": None, "marks": {},
+                     "callouts": _callouts(scene),
                      "estimated": False, "sound": None,
                      # characters the engine would still be sent for this scene (merged scenes share one count)
                      "missing_chars": estimator.missing_chars - missing_before}

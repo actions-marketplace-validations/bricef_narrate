@@ -398,3 +398,63 @@ def test_focal_points_and_windows_from_the_inspector(tmp_path, page):
         page.mouse.move(r["x"] + r["width"] * 0.5 - f["width"] * 0.2, r["y"] + r["height"] * 0.5, steps=5)
         page.mouse.up()
         expect(page.locator(".cm-activeLine")).to_contain_text("to: 50% 50% 1.5}")  # moved, its zoom kept
+
+
+# -- callouts on the preview (#64) ------------------------------------------------------------
+
+def test_callouts_are_drawn_moved_and_deleted_on_the_preview(tmp_path, page):
+    from PIL import Image
+
+    Image.new("RGB", (320, 180), "orange").save(tmp_path / "photo.png")
+    script = tmp_path / "s.md"
+    script.write_text("---\nsize: 320x180\n---\n\n![](photo.png)\n\nA picture with callouts.\n")
+    with running(script) as url:
+        page.goto(url)
+        page.locator(".cm-narrate-media").click(position={"x": 4, "y": 4})
+        layer = page.get_by_test_id("callout-layer")
+        expect(layer).to_be_visible()
+        inspector = page.get_by_test_id("callout-inspector")
+
+        def drag(a, b):
+            box = layer.bounding_box()
+            page.mouse.move(box["x"] + box["width"] * a[0], box["y"] + box["height"] * a[1])
+            page.mouse.down()
+            page.mouse.move(box["x"] + box["width"] * b[0], box["y"] + box["height"] * b[1], steps=4)
+            page.mouse.up()
+
+        def idle():
+            expect(page.locator("[aria-busy=true]")).to_have_count(0)
+
+        # A circle, from its centre out: it goes in after the picture, and the cursor goes to it
+        page.get_by_role("button", name="◯ circle").click()
+        drag((0.5, 0.5), (0.75, 0.5))
+        expect(page.locator(".cm-content")).to_contain_text("(callout:  cx: 160  cy: 90  size: 80)")
+        expect(inspector).to_contain_text("centre 160, 90")
+        idle()
+        mask = page.frame_locator("iframe[title=frame]").locator("svg.callout mask circle")
+        expect(mask).to_have_attribute("cx", "160.0")
+
+        # A rectangle, corner to corner
+        page.get_by_role("button", name="▭ rectangle").click()
+        drag((0.1, 0.1), (0.3, 0.4))
+        expect(page.locator(".cm-content")).to_contain_text("type: rectangle  left: 32  top: 18  right: 96  bottom: 72")
+        idle()
+
+        # Move the circle by dragging it
+        expect(page.locator(".callout-shape")).to_have_count(2)
+        drag((0.5, 0.5), (0.6, 0.6))
+        expect(page.locator(".cm-content")).to_contain_text("cx: 192  cy: 108  size: 80")
+        idle()
+        expect(mask).to_have_attribute("cx", "192.0")
+
+        # Select the rectangle on the preview, then delete it from the inspector
+        layer.locator("rect.callout-shape").click(position={"x": 4, "y": 4})
+        expect(inspector).to_contain_text("32, 18 to 96, 72")
+        inspector.get_by_role("button", name="Delete callout").click()
+        expect(page.locator(".cm-content")).not_to_contain_text("rectangle")
+        idle()
+        expect(page.locator(".callout-shape")).to_have_count(1)
+
+        page.locator(".cm-content").focus()
+        page.keyboard.press("Control+z")
+        expect(page.locator(".cm-content")).to_contain_text("type: rectangle")  # each change is one undo

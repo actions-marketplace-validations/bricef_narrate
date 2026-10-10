@@ -108,14 +108,20 @@ The studio is a web app for writing a script, served from your computer.
   - **The written form is kept:** `![cover top](photo.jpg)` stays a picture
     line, with its words changed in place. A zoom amount or a volume other
     than mute needs `(image: {…})`, so the line switches to that form.
+- **Callouts:** **◯ circle** and **▭ rectangle**, under the preview, draw
+  one on the frame shown; it's written as a `(callout: …)` direction after
+  the scene's picture. The scene's callouts show as outlines: click one to
+  select it, drag it to move it, or drag its handles to resize it.
+  Coordinates are the frame's own pixels, so what you draw is what renders.
+  With the cursor on a callout, the inspector switches its shape, sets its
+  shading or makes it a black mask, and deletes it.
 - **Rendering a scene:** **Render scene**, under the preview, saves the
   script, then renders the scene at the cursor with the real builder, as
   `narrate build --scenes` does. It plays in the **Scene** tab: exactly that
   part of the video, with music, subtitles and theme. It goes in a temporary
   folder, never over the video, and a scene whose text, engine and files
   haven't changed isn't rendered again.
-- **What's next:** callouts drawn on the preview, a voice picker and HTML
-  scene tools are planned (narrate #28; the design is in
+- **What's next:** a voice picker and HTML scene tools are planned (narrate #28; the design is in
   [design/studio.md](design/studio.md)).
 
 **On another machine,** such as a server you reach over a VPN:

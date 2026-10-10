@@ -149,12 +149,17 @@ export function Timeline({ analysis, playhead, onSeek, onLine }) {
   };
   const onPointerDown = (e) => {
     if (e.button !== 0) return;
+    e.preventDefault();  // no text selection or native drag, which would cancel the pointer
+    scroller.current.focus({ preventScroll: true });  // so the arrow keys step from here
     dragging.current = true;
     e.currentTarget.setPointerCapture(e.pointerId);
     onSeek(timeAt(e.clientX));
   };
   const onPointerMove = (e) => { if (dragging.current) onSeek(timeAt(e.clientX)); };
-  const onPointerUp = () => { dragging.current = false; };
+  const onPointerUp = (e) => {
+    if (dragging.current && e.type === "pointerup") onSeek(timeAt(e.clientX));  // moves may have been coalesced
+    dragging.current = false;
+  };
   const onKeyDown = (e) => {
     const step = e.shiftKey ? 1 : FRAME;
     const to = { ArrowLeft: playhead - step, ArrowRight: playhead + step, Home: 0, End: duration - FRAME }[e.key];

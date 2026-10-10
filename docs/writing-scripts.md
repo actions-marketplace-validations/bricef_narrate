@@ -870,7 +870,8 @@ The circle draws the eye to the centre, and the black box hides a corner.
 - **Designer:** `narrate callouts photo.jpg --size 720p --fit cover` writes a
   web page showing the frame exactly as the build will. Drag to draw a callout,
   then copy the direction it prints. For a clip, add `--at 3.5` to pick the
-  moment.
+  moment. In the [studio](building.md#edit-in-the-studio), draw them straight
+  onto the preview instead.
 
 ## Set the size, poster and file size
 

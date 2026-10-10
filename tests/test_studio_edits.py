@@ -191,3 +191,68 @@ def test_the_inspector_is_told_the_crop_and_the_focal_point(tmp_path):
     assert moving["options"]["from"] == "30% 50%" and moving["options"]["to"] == "80% 50% 2"
     first, last = moving["windows"]
     assert first[0] + first[2] / 2 == pytest.approx(1200, abs=0.2) and last[2] == pytest.approx(first[2] / 2, abs=0.2)
+
+
+# -- callouts (#64) ----------------------------------------------------------------------------
+
+CALLOUTS = """![](photo.jpg)
+
+(callout:
+  cx: 640
+  cy: 360
+  size: 150)
+
+(callout: {type: rectangle, left: 10, top: 20, right: 110, bottom: 220, style: mask})
+
+Narration.
+"""
+
+
+def callouts_of(text):
+    return [b.value for scene in parse(text).scenes for b in scene.blocks if getattr(b, "key", None) == "callout"]
+
+
+def test_a_callout_is_inserted_after_a_line():
+    from narrate.studio.edits import insert_callout
+
+    after = apply(CALLOUTS, insert_callout(CALLOUTS, 1, {"cx": 100.4, "cy": 200, "size": 50.6}))
+    assert after.startswith("![](photo.jpg)\n\n(callout:\n  cx: 100\n  cy: 200\n  size: 51)\n\n(callout:\n  cx: 640")
+    assert callouts_of(after)[0] == {"cx": "100", "cy": "200", "size": "51"}
+    rect = apply(CALLOUTS, insert_callout(CALLOUTS, 10, {"type": "rectangle", "left": 1, "top": 2, "right": 3,
+                                                         "bottom": 4, "alpha": 0.7}))
+    assert rect.endswith("Narration.\n\n(callout:\n  type: rectangle\n  left: 1\n  top: 2\n  right: 3\n  bottom: 4\n  alpha: 0.7)\n")
+    assert len(callouts_of(rect)) == 3
+
+
+def test_a_callout_keeps_its_form_when_moved():
+    from narrate.studio.edits import edit_callout
+
+    after = apply(CALLOUTS, edit_callout(CALLOUTS, 3, {"cx": 700, "cy": 300}))
+    assert after == CALLOUTS.replace("cx: 640\n  cy: 360", "cx: 700\n  cy: 300")
+    after = apply(CALLOUTS, edit_callout(CALLOUTS, 8, {"left": 15, "style": None, "alpha": 0.3}))
+    assert after.split("\n")[7] == "(callout: {type: rectangle, left: 15, top: 20, right: 110, bottom: 220, alpha: 0.3})"
+    # Changing shape drops the old shape's geometry
+    after = apply(CALLOUTS, edit_callout(CALLOUTS, 3, {"type": "rectangle", "left": 1, "top": 2, "right": 3, "bottom": 4}))
+    assert callouts_of(after)[0] == {"type": "rectangle", "left": "1", "top": "2", "right": "3", "bottom": "4"}
+    with pytest.raises(EditError, match="from 0 to 1"):
+        edit_callout(CALLOUTS, 3, {"alpha": 2})
+    with pytest.raises(EditError, match="isn't a callout"):
+        edit_callout(CALLOUTS, 1, {"cx": 1})
+
+
+@pytest.mark.parametrize("line, left", [
+    (3, "![](photo.jpg)\n\n(callout: {type: rectangle"),  # the first: its blank line goes with it
+    (8, "  size: 150)\n\nNarration.\n"),                   # the second
+])
+def test_a_callout_is_deleted_with_its_blank_line(line, left):
+    from narrate.studio.edits import delete_block
+
+    after = apply(CALLOUTS, delete_block(CALLOUTS, line))
+    assert left in after and "\n\n\n" not in after and len(callouts_of(after)) == 1
+
+
+def test_deleting_the_last_block_leaves_no_trailing_blank():
+    from narrate.studio.edits import delete_block
+
+    text = "Words.\n\n(callout: {cx: 1, cy: 2})\n"
+    assert apply(text, delete_block(text, 3)) == "Words.\n"
