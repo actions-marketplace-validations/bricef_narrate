@@ -17,10 +17,10 @@ from typing import Any
 
 import numpy as np
 
-from .. import render
+from .. import media, motion, render
 from ..build import SR, Builder, BuildError, ScenePlan, merge_groups
 from ..config import ConfigError, Settings
-from ..script import Media, Narration, Render, Scene, ScriptError, Slide, parse
+from ..script import ANIMATED_SIZES, SIZES, Media, Narration, Render, Scene, ScriptError, Slide, parse
 from ..tts import EstimatingSynth
 
 _LINE = re.compile(r"^line (\d+): (.*)$", re.S)
@@ -91,6 +91,58 @@ def _slides(plan: ScenePlan, scene: Scene) -> list[dict]:
              "start": round(k * share, 3), "length": round(share, 3)} for k, b in enumerate(blocks)]
 
 
+def _options(block: Media) -> dict:
+    """A picture's or clip's options as written on its line (the inspector shows and edits these, #62)."""
+    segment = None
+    if block.segment:
+        segment = block.segment[0] + (f"-{block.segment[1]}" if block.segment[1] else "")
+    return {"fit": block.size if block.size in SIZES else None,
+            "motion": block.size if block.size in ANIMATED_SIZES else None,
+            "position": block.position, "zoom": block.zoom, "sync": block.sync, "segment": segment,
+            "volume": "mute" if block.volume == 0 else block.volume}
+
+
+_sizes: dict[tuple[Path, int], tuple[int, int] | None] = {}
+
+
+def _picture_size(path: Path) -> tuple[int, int] | None:
+    """A picture's own size, read from its header (cached by modification time)."""
+    try:
+        key = (path, path.stat().st_mtime_ns)
+    except OSError:
+        return None
+    if key not in _sizes:
+        from PIL import Image
+
+        try:
+            with Image.open(path) as im:
+                _sizes[key] = im.size
+        except OSError:
+            _sizes[key] = None
+    return _sizes[key]
+
+
+def _media_entry(line: int, kind: str, path: str, options: dict, base: Path, settings: Settings) -> dict:
+    """What the inspector needs about one picture, clip, page or render block."""
+    entry = {"line": line, "kind": kind, "file": path, "options": options, "size": None, "length": None,
+             "windows": None}
+    file = base / path if path else None
+    if kind == "picture" and file and file.is_file():
+        entry["size"] = _picture_size(file)
+        if entry["size"] and options["motion"]:
+            zoom = options["zoom"] or settings.image_zoom
+            start, end = motion.endpoints(options["motion"], options["position"] or "center", *entry["size"],
+                                          settings.width, settings.height, zoom)
+            entry["windows"] = [[round(v, 1) for v in start], [round(v, 1) for v in end]]
+    elif kind == "clip" and file and file.is_file():
+        try:
+            info = media.probe(file)
+            entry["size"], entry["length"] = [info.width, info.height], round(info.duration, 3)
+        except Exception:  # noqa: BLE001 - an unreadable clip is reported by the planner
+            pass
+    return entry
+
+
 def sound_id(audio: np.ndarray) -> str:
     return hashlib.blake2b(audio.tobytes(), digest_size=8).hexdigest()
 
@@ -136,6 +188,10 @@ def run(text: str, script: Path, synth: Any) -> Analysis:
                          "missing": None}, text=text)
     titles = {scene.index: _title(scene) for scene in parsed.scenes}  # before any stand-ins replace pictures
     names = {b.line: _name(b) for scene in parsed.scenes for b in scene.blocks if isinstance(b, Media)}
+    # Each picture and clip as written, before stand-ins replace missing ones
+    written = {b.line: ("render" if b.render else {"image": "picture", "video": "clip", "html": "page"}.get(b.kind, b.kind),
+                        b.path, _options(b))
+               for scene in parsed.scenes for b in scene.blocks if isinstance(b, Media) and b.kind != "audio"}
     problems: list[dict] = []
     missing: set[int] = set()
     for block in (b for scene in parsed.scenes for b in scene.blocks):
@@ -206,4 +262,7 @@ def run(text: str, script: Path, synth: Any) -> Analysis:
         "duration": round(start, 3),
         "missing": {"paragraphs": estimator.estimates, "characters": estimator.missing_chars},
         "notes": sorted(builder.notes),
+        "media": {str(line): _media_entry(line, kind, path, options, parsed.base_dir, builder.settings)
+                  for line, (kind, path, options) in written.items()},
+        "defaults": {"fit": builder.settings.asset_resize, "zoom": builder.settings.image_zoom},
     }, kept, builder.settings, text, sounds)

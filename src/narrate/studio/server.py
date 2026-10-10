@@ -204,6 +204,16 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
         return JSONResponse({"rate": PEAK_RATE, "peaks": session.peaks[key]},
                             headers={"Cache-Control": "max-age=86400, immutable"})
 
+    async def edit(request: Request) -> Response:
+        from .edits import EditError, edit_block
+
+        body = await request.json()
+        try:
+            change = edit_block(str(body.get("text", "")), int(body.get("line", 0)), dict(body.get("set") or {}))
+        except EditError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        return JSONResponse(change)
+
     async def set_engine(request: Request) -> Response:
         from ..tts import make_synth
 
@@ -334,6 +344,7 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
         Route("/api/analyse", analyse, methods=["POST"]),
         Route("/api/frame", preview, methods=["POST"]),
         Route("/api/engine", set_engine, methods=["POST"]),
+        Route("/api/edit", edit, methods=["POST"]),
         Route("/api/peaks/{sound}", waveform),
         Route("/api/scenes/{index:int}/audio", scene_audio, methods=["POST"]),
         Route("/api/build", start_build, methods=["POST"]),

@@ -1,6 +1,7 @@
 """narrate studio in a real browser (#51): edit, save, and follow edits made elsewhere."""
 
 import contextlib
+import re
 import threading
 import time
 from pathlib import Path
@@ -306,3 +307,45 @@ def test_render_the_scene_at_the_cursor(tmp_path, page, monkeypatch):
         expect(page.get_by_test_id("scene-video")).to_be_visible(timeout=60000)
         expect(page.get_by_test_id("scene-render")).to_contain_text("Scene 2, rendered")
         assert page.get_by_test_id("scene-video").get_attribute("src").startswith("/scratch/scene-2-")
+
+
+# -- picture inspector (#62) --------------------------------------------------------------
+
+def test_the_inspector_edits_the_picture_at_the_cursor(tmp_path, page):
+    from PIL import Image
+
+    Image.new("RGB", (900, 180), "teal").save(tmp_path / "wide.png")  # wider than the frame: room to move sideways
+    script = tmp_path / "s.md"
+    script.write_text("---\nsize: 320x180\n---\n\n![](wide.png)\n\nA picture, framed from the studio.\n")
+    with running(script) as url:
+        page.goto(url)
+        picture_line = page.locator(".cm-narrate-media")
+        picture_line.click(position={"x": 4, "y": 4})
+        inspector = page.get_by_test_id("inspector")
+        expect(inspector).to_contain_text("wide.png")
+
+        inspector.get_by_role("button", name="contain").click()
+        expect(picture_line).to_have_text("![contain](wide.png)")
+        inspector.get_by_role("button", name="cover").click()  # the default: the token goes again
+        expect(picture_line).to_have_text("![](wide.png)")
+        inspector.get_by_label("motion").select_option("panzoom")
+        expect(picture_line).to_have_text("![panzoom](wide.png)")
+        expect(inspector.locator(".windows svg rect")).to_have_count(2)  # the first and last windows
+        expect(page.locator(".tl-visual.picture").first).to_have_attribute("title", re.compile("panzoom"))
+        inspector.get_by_label("motion").select_option("")
+        expect(picture_line).to_have_text("![](wide.png)")
+
+        # Dragging the picture to the right shows its left side
+        surface = page.get_by_test_id("drag-surface")
+        box = surface.bounding_box()
+        page.mouse.move(box["x"] + box["width"] * 0.5, box["y"] + box["height"] * 0.5)
+        page.mouse.down()
+        page.mouse.move(box["x"] + box["width"] * 0.85, box["y"] + box["height"] * 0.5, steps=5)
+        expect(page.locator(".drag-hint")).to_have_text("left")
+        page.mouse.up()
+        expect(picture_line).to_have_text("![left](wide.png)")
+        expect(page.frame_locator("iframe[title=frame]").locator("img.media")).to_have_css("object-position", re.compile(r"^0(px|%) 50%$"))
+
+        page.locator(".cm-content").focus()
+        page.keyboard.press("Control+z")
+        expect(picture_line).to_have_text("![](wide.png)")  # each change is one undo
