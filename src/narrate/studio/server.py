@@ -205,11 +205,22 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
                             headers={"Cache-Control": "max-age=86400, immutable"})
 
     async def edit(request: Request) -> Response:
-        from .edits import EditError, edit_block
+        from .edits import EditError, delete_block, edit_block, edit_callout, insert_callout
 
         body = await request.json()
+        text, line, changes = str(body.get("text", "")), int(body.get("line", 0)), dict(body.get("set") or {})
+        op = body.get("op", "media")
         try:
-            change = edit_block(str(body.get("text", "")), int(body.get("line", 0)), dict(body.get("set") or {}))
+            if op == "media":
+                change = edit_block(text, line, changes)
+            elif op == "callout":
+                change = edit_callout(text, line, changes)
+            elif op == "insert-callout":
+                change = insert_callout(text, int(body.get("after", 0)), dict(body.get("callout") or {}))
+            elif op == "delete":
+                change = delete_block(text, line)
+            else:
+                return JSONResponse({"error": f"no such edit: {op!r}"}, status_code=400)
         except EditError as e:
             return JSONResponse({"error": str(e)}, status_code=400)
         return JSONResponse(change)

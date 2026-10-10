@@ -1,6 +1,7 @@
 // narrate studio: the app shell (docs/design/studio.md).
 import { html, render, useCallback, useEffect, useRef, useState } from "./vendor/htm-preact.js";
-import { createEditor, followLine, goToLine, seconds, showAnalysis } from "./editor.js";
+import { createEditor, followLine, goToLine, seconds, selectLine, showAnalysis } from "./editor.js";
+import { CalloutInspector, CalloutLayer } from "./callouts.js";
 import { Timeline } from "./timeline.js";
 import { Inspector, draggedPosition, positionFor, slack } from "./inspector.js";
 
@@ -153,7 +154,7 @@ function SceneRender({ render, onCancel }) {
 /** The frame at the cursor's moment, at the video's size, scaled to fit the pane. `drag`, when the
     picture at the cursor has room to move, lets the frame be dragged to change its position (#62). */
 function Preview({ analysis, shown, moment, error, playback, onPlay, onStop, tab, onTab, build, sceneRender,
-                   onRender, onCancelRender, drag, children }) {
+                   onRender, onCancelRender, drag, overlay, tools, children }) {
   const box = useRef(null);
   const [scale, setScale] = useState(0.4);
   const dragStart = useRef(null);
@@ -199,6 +200,7 @@ function Preview({ analysis, shown, moment, error, playback, onPlay, onStop, tab
       ${drag && html`<div class="drag-surface" data-testid="drag-surface" title="drag to move the picture"
         onPointerDown=${onPointerDown} onPointerMove=${onPointerMove} onPointerUp=${onPointerUp} onPointerCancel=${onPointerUp}></div>`}
       ${dragged && html`<span class="drag-hint">${dragged.label}</span>`}
+      ${overlay}
     </div>
     <p class="caption" data-testid="moment">
       ${moment ? `scene ${moment.scene} · ${seconds(moment.time)} into it · ${seconds(moment.start + moment.time)} in the video` : "No scene here"}
@@ -210,6 +212,7 @@ function Preview({ analysis, shown, moment, error, playback, onPlay, onStop, tab
         : html`<button onClick=${onPlay} disabled=${!moment || playback.state === "synthesising"}>▶ Play scene</button>`}
       <button onClick=${onRender} disabled=${!moment || (sceneRender && (sceneRender.state === "running" || sceneRender.state === "starting"))}
         title="render this scene with the real builder, exactly as the video will have it">Render scene</button>
+      ${tools}
       <span class="playback" data-testid="playback">${
         playback.state === "synthesising" ? `Synthesising scene ${playback.scene}…`
         : playback.state === "playing" ? `Playing scene ${playback.scene}: ${seconds(playback.time)} of ${seconds(playback.duration)}`
@@ -246,6 +249,7 @@ function App() {
   const [playback, setPlayback] = useState({ state: "idle" });
   const [build, setBuild] = useState(null);
   const [sceneRender, setSceneRender] = useState(null);
+  const [calloutTool, setCalloutTool] = useState(null);  // "circle" or "rectangle" while drawing (#64)
   const [awaitingAnalysis, setAwaitingAnalysis] = useState(false);  // an edit made, its analysis not back yet
   const [tab, setTab] = useState("frame");
   const cursorMoment = analysis ? momentAt(analysis, cursorLine) : null;
@@ -405,27 +409,32 @@ function App() {
 
   const cancelSceneRender = useCallback(() => getJSON("/api/scenes/render/cancel", { method: "POST" }), []);
 
-  /** Set properties of the block on `line`: the server writes the text, the editor applies it (#62). */
+  /** An edit the server writes and the editor applies as one undoable change (#62, #64): `request` is the
+      edit ({line, set}, or {op, …}); `cursorAt(change)`, if given, says where the cursor goes after it. */
   const [editing, setEditing] = useState(false);
-  const editBlock = useCallback(async (line, changes) => {
+  const requestEdit = useCallback(async (request, cursorAt = null) => {
     const view = editor.current.view;
     const sent = view.state.doc;
     setEditing(true);
     try {
       const { status, body } = await getJSON("/api/edit", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: sent.toString(), line, set: changes }),
+        body: JSON.stringify({ text: sent.toString(), ...request }),
       });
       if (status !== 200) { setError(body.error || `can't make that change (${status})`); return; }
       if (view.state.doc !== sent) return;  // typed meanwhile: the place it was for has moved
       if (sent.sliceString(body.from, body.to) === body.insert) return;  // nothing to change
-      view.dispatch({ changes: { from: body.from, to: body.to, insert: body.insert }, userEvent: "input.inspector" });
+      view.dispatch({
+        changes: { from: body.from, to: body.to, insert: body.insert }, userEvent: "input.inspector",
+        ...(cursorAt ? { selection: { anchor: cursorAt(body) }, scrollIntoView: true } : {}),
+      });
       setAwaitingAnalysis(true);
       setError(null);
     } finally {
       setEditing(false);
     }
   }, []);
+  const editBlock = useCallback((line, changes) => requestEdit({ line, set: changes }), [requestEdit]);
 
   /** Show the moment `t` seconds into the video, with the editor's cursor on the paragraph playing then. */
   const seekTo = useCallback((t) => {
@@ -529,6 +538,28 @@ function App() {
     }
   }
 
+  // Callouts on the preview (#64): the scene shown's, drawn into that scene
+  const shownScene = analysis && moment ? analysis.scenes.find((s) => s.index === moment.scene) : null;
+  const callouts = (shownScene && shownScene.callouts) || [];
+  const cursorCallout = analysis && analysis.scenes.flatMap((s) => s.callouts || []).find((c) => c.line === cursorLine);
+  const drawCallout = (geometry) => {
+    // Into the scene shown, after the picture at the cursor, else its first picture, else its start
+    const atCursor = shownScene.visuals.find((v) => v.line === cursorLine);
+    const after = atCursor ? atCursor.line : shownScene.visuals.length ? shownScene.visuals[0].line : shownScene.line - 1;
+    setCalloutTool(null);
+    requestEdit({ op: "insert-callout", after, callout: geometry },
+      (change) => change.from + (change.insert.startsWith("\n\n") ? 2 : 0));
+  };
+  const calloutTools = moment && tab === "frame" ? html`<span class="callout-tools" role="group" aria-label="draw a callout">
+    ${["circle", "rectangle"].map((shape) => html`<button aria-pressed=${calloutTool === shape} disabled=${editing || awaitingAnalysis}
+      title=${`draw a ${shape} callout on the frame`} onClick=${() => setCalloutTool(calloutTool === shape ? null : shape)}>
+      ${shape === "circle" ? "◯" : "▭"} ${shape}</button>`)}
+  </span>` : null;
+  const calloutLayer = moment && !playingMoment && analysis ? html`<${CalloutLayer} callouts=${callouts}
+    frame=${analysis.size || [1280, 720]} tool=${calloutTool} selected=${cursorCallout ? cursorCallout.line : null}
+    onDraw=${drawCallout} onSelect=${(line) => selectLine(editor.current.view, line)}
+    onChange=${(line, changes) => requestEdit({ op: "callout", line, set: changes })} />` : null;
+
   const status = !online ? "Offline: reconnecting…" : saving ? "Saving…" : dirty ? "Unsaved changes" : "Saved";
   return html`
     <header class="bar">
@@ -558,8 +589,11 @@ function App() {
         onPlay=${() => (seek ? play(seek.scene, seek.line, seek.time) : cursorMoment && play(cursorMoment.scene, cursorLine))}
         onStop=${stop} tab=${tab} onTab=${setTab} build=${build}
         sceneRender=${sceneRender} onRender=${() => moment && renderScene(moment.scene)} onCancelRender=${cancelSceneRender}
-        drag=${dragTarget}>
+        drag=${dragTarget} overlay=${calloutLayer} tools=${calloutTools}>
         <${Inspector} analysis=${analysis} line=${cursorLine} onEdit=${editBlock} busy=${editing || awaitingAnalysis} />
+        <${CalloutInspector} callout=${cursorCallout} busy=${editing || awaitingAnalysis}
+          onChange=${(changes) => requestEdit({ op: "callout", line: cursorCallout.line, set: changes })}
+          onDelete=${() => requestEdit({ op: "delete", line: cursorCallout.line })} />
       </${Preview}>
     </main>
     <${Timeline} analysis=${analysis} playhead=${playhead} onSeek=${seekTo}

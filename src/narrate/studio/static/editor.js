@@ -180,6 +180,13 @@ export function goToLine(view, line) {
   view.focus();
 }
 
+/** Put the cursor on `line` and bring it into view, leaving the focus where it is (picking something on the
+    preview, say). */
+export function selectLine(view, line) {
+  const target = view.state.doc.line(Math.max(1, Math.min(line, view.state.doc.lines)));
+  view.dispatch({ selection: { anchor: target.from }, scrollIntoView: true });
+}
+
 /** Move the cursor to `line` to follow something else (the timeline), without taking the focus. */
 export function followLine(view, line) {
   const target = view.state.doc.line(Math.max(1, Math.min(line, view.state.doc.lines)));
