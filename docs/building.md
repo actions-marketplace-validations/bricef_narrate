@@ -9,6 +9,7 @@ makes `narrate` work in any folder.
 - [Edit in the studio](#edit-in-the-studio)
 - [Build a video](#build-a-video)
 - [Preview quickly](#preview-quickly)
+- [Review a video without watching it](#review-a-video-without-watching-it)
 - [Make an audio file instead](#make-an-audio-file-instead)
 - [Choose a speech engine](#choose-a-speech-engine)
 - [Use ElevenLabs](#use-elevenlabs)
@@ -216,6 +217,27 @@ narrate build script.md --scenes 3-5    # script-scenes-3-5.mp4; also 2,4 or 1-2
 - **Merged scenes,** which share one narration (`narration-mode: merge`), are
   rendered together.
 - A problem in a scene you didn't ask for doesn't stop the build.
+
+## Review a video without watching it
+
+```sh
+narrate frames script.mp4 --script script.md   # one frame per scene: script-frames.png
+narrate frames script.mp4                      # 12 frames, evenly spaced
+narrate frames script.mp4 --at 1.5,12,30 -o look.png
+narrate frames script.mp4 --every 5
+```
+
+A contact sheet: the video's frames side by side, each labelled with its
+time, and with `--script`, its scene. It shows layout, framing, slides,
+callouts and subtitles at a glance, for a quick look on a phone, or for an AI
+agent that can read a picture but not play a video.
+
+- **One per scene:** `--script` takes each scene's middle from the script's
+  timing (as `narrate check --timing` gives it). Pass the `--tts` engine the
+  video was built with; if the script's length doesn't match the video's,
+  narrate says so.
+- **Size:** up to four frames across, each `--width` pixels wide (default
+  480).
 
 ## Make an audio file instead
 
@@ -533,6 +555,7 @@ models and the ElevenLabs key, and prints a fix for each problem.
 | `narrate studio SCRIPT [--open]` | edit the script in a web app (`--tts` for its engine; `--host`, `--port` to serve elsewhere) |
 | `narrate build SCRIPT [-o OUT.mp4]` | render a video (`SCRIPT` may be a `.zip`; `--source` picks the script inside; `--scenes 3-5` builds just those; `--regenerate` retakes web captures) |
 | `narrate audio SCRIPT [-o OUT]` | render the narration only |
+| `narrate frames VIDEO [--script SCRIPT]` | a contact sheet of the video's frames (`--at`, `--every`, `--count`, `-o`) |
 | `narrate check SCRIPT [--timing]` | report missing files and problems, without rendering; `--timing` adds scene lengths, the total and what synthesis would cost (`--json` for programs) |
 | `narrate callouts FILE` | write a page for placing callouts on an image or a clip's frame |
 | `narrate voices [SCRIPT]` | list voices, and a script's `voices.yaml` pins |
