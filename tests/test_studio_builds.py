@@ -71,3 +71,32 @@ def test_a_failed_build_reports_the_line(studio):
     failed = wait(client) if client.post("/api/build").status_code == 202 else None
     assert failed["state"] == "failed"
     assert failed["errors"] == [{"line": 5, "message": "file not found: missing.png"}]
+
+
+def wait_scene(client, seconds=120):
+    deadline = time.monotonic() + seconds
+    while (status := client.get("/api/scenes/render").json())["state"] not in ("done", "failed", "cancelled"):
+        assert time.monotonic() < deadline, status
+        time.sleep(0.2)
+    return status
+
+
+def test_a_scene_renders_into_scratch_and_is_reused(studio):
+    script, client = studio
+    assert client.get("/api/scenes/render").json() == {"state": "idle"}
+    started = client.post("/api/scenes/2/render")
+    assert started.status_code == 202 and started.json()["scene"] == 2
+    done = wait_scene(client)
+    assert done["state"] == "done" and done["scene"] == 2, done
+    assert done["video"].startswith("/scratch/scene-2-")
+    assert client.get(done["video"]).headers["content-type"] == "video/mp4"
+    assert not script.with_suffix(".mp4").exists()  # never the real video
+    assert "no transition" not in " ".join(done["notes"])  # nothing to drop: the script has none
+
+    again = client.post("/api/scenes/2/render")
+    assert again.status_code == 200 and again.json()["video"].split("?")[0] == done["video"].split("?")[0]
+
+    script.write_text(script.read_text().replace("The second scene.", "The second scene, changed."))
+    assert client.post("/api/scenes/2/render").status_code == 202  # a new text renders again
+    assert wait_scene(client)["state"] == "done"
+    assert client.post("/api/scenes/render/cancel").status_code == 409  # nothing running now

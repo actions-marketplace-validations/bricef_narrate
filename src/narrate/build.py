@@ -20,7 +20,7 @@ import tempfile
 import wave
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Collection
 
 import numpy as np
 
@@ -35,7 +35,7 @@ from .script import ANIMATED_SIZES, POSITIONS, SIZES, Directive, Media, Narratio
 from .subtitles import Cue
 from .ssml import ssml_runs
 from .text import Run, speech_runs, ssml_text, subtitle_text
-from .tts import SAMPLE_RATE, Prefetching, Synth, Voice
+from .tts import SAMPLE_RATE, EstimatingSynth, Prefetching, Synth, Voice
 
 SR = SAMPLE_RATE
 PARAGRAPH_PAUSE = {"normal": 0.4, "fragment": 0.1, "merge": 0.4}
@@ -188,7 +188,8 @@ def apply_gain(samples: np.ndarray, volume: float | str) -> np.ndarray:
 
 class Builder:
     def __init__(self, script: Script, synth: Synth, *, log: Callable[[str], None] | None = None,
-                 jobs: int | None = None, regenerate: bool = False, measure_pages: bool = True):
+                 jobs: int | None = None, regenerate: bool = False, measure_pages: bool = True,
+                 scenes: Collection[int] | None = None):
         self.script = script
         self.measure_pages = measure_pages  # load HTML scenes to time them (the studio's previews don't)
         self.regenerate = regenerate  # make stored render outputs (render:web) again
@@ -211,8 +212,26 @@ class Builder:
         except ConfigError as e:
             raise BuildError(f"header transition: {e}") from None
         self._voices: dict[tuple[str | None, str | None], Voice] = {}
+        self.selected = self._selection(scenes)  # render only these scenes (None: all of them)
         self._frames: FrameRenderer | None = None  # the build's Chromium, while frames render
         self._probe: FrameRenderer | None = None  # one started just to measure pages, when there isn't
+
+    def _selection(self, scenes: Collection[int] | None) -> set[int] | None:
+        """The scenes to render, widened to whole merge groups, which share one narration."""
+        if scenes is None:
+            return None
+        wanted = set(scenes)
+        known = {scene.index for scene in self.script.scenes}
+        if missing := sorted(wanted - known):
+            raise BuildError(f"no scene {', '.join(map(str, missing))}: the script has {len(known)}")
+        selected: set[int] = set()
+        for group in merge_groups(self.script.scenes):
+            indexes = {scene.index for scene in group}
+            if indexes & wanted:
+                selected |= indexes
+        if selected != wanted:
+            self.notes.add("scenes merged into one narration are rendered together")
+        return selected
 
     def close(self) -> None:
         """Stop the Chromium started to measure HTML scenes, if any."""
@@ -463,6 +482,8 @@ class Builder:
         """Render every render block, with its scene's theme and canvas, and point it at the output."""
         s = self.settings
         for scene in self.script.scenes:
+            if self.selected is not None and scene.index not in self.selected:
+                continue  # not rendered, so nothing to draw
             theme, canvas = self._theme(s.theme, 0) if s.theme else "default", s.canvas
             for block in scene.blocks:
                 try:
@@ -619,38 +640,63 @@ class Builder:
     def _render_all(self, out: Path, work: Path) -> BuildResult:
         s = self.settings
         scenes = self.script.scenes
+        if self.selected is not None:
+            # Part of the video: the header's fades only where the video itself starts or ends
+            if scenes[0].index not in self.selected:
+                s.fade_in = 0.0
+            if scenes[-1].index not in self.selected:
+                s.fade_out = 0.0
+            if s.loudness is not None:
+                self.notes.add("loudness is normalised over the scenes rendered, so it can differ slightly "
+                               "from the whole video's")
+        count = len(scenes) if self.selected is None else len(self.selected)
         plans: list[ScenePlan] = []
         pending: list[list[Future]] = []
         scene_frames: list[int] = []
         audio_parts: list[np.ndarray] = []
         cues: list[Cue] = []
         scene_samples: list[int] = []
-        frame = 0
+        whole_samples: list[int] = []  # every scene's, rendered or not, to place the music
+        kept: list[tuple[int, int]] = []  # where the rendered scenes' samples sit in the whole video
+        frame = 0  # in the whole video
+        out_frame = 0  # in what's rendered
         # Scene k's segments encode in the pool while scene k+1 is narrated
         with ThreadPoolExecutor(self.jobs) as pool, FrameRenderer(s.width, s.height, work) as renderer:
             self._frames = renderer
             self._render_blocks(renderer)
-            for plan in self.plans(scenes, work):
-                self.log(f"scene {plan.index}/{len(scenes)}")
-                plans.append(plan)
+            for plan, rendered in self._planned(work):
                 start_f = frame
                 end_f = max(start_f + 1, int(round(start_f + plan.duration * FPS)))
+                frame = end_f
+                lo, hi = int(round(start_f * SR / FPS)), int(round(end_f * SR / FPS))
+                whole_samples.append(hi - lo)
+                if not rendered:
+                    continue
+                if not plans and plan.transition and self.selected is not None:
+                    self.notes.add(f"no transition into scene {plan.index}: nothing comes before it in this render")
+                    plan.transition = None
+                self.log(f"scene {len(plans) + 1}/{count}")
+                plans.append(plan)
                 frames = end_f - start_f
-                samples = int(round(end_f * SR / FPS)) - int(round(start_f * SR / FPS))
-                audio_parts.append(fit_length(plan.audio, samples))
-                scene_samples.append(samples)
-                offset = start_f / FPS
+                audio_parts.append(fit_length(plan.audio, hi - lo))
+                scene_samples.append(hi - lo)
+                kept.append((lo, hi))
+                offset = out_frame / FPS
                 cues += [Cue(c.start + offset, min(c.end, frames / FPS) + offset, c.text) for c in plan.cues]
                 pending.append(self._render_scene(plan, frames, renderer, work, pool.submit))
                 scene_frames.append(frames)
-                frame = end_f
+                out_frame += frames
             scene_segments = [[f.result() for f in futures] for futures in pending]
             self._frames = None
 
-        total = frame / FPS
+        total = out_frame / FPS
         audio = np.concatenate(audio_parts)
         if s.background:
-            audio = audio + self._music(len(audio), scene_samples)
+            if self.selected is None:
+                audio = audio + self._music(len(audio), scene_samples)
+            else:  # the music as it plays under these scenes in the whole video
+                whole = self._music(sum(whole_samples), whole_samples)
+                audio = audio + np.concatenate([whole[lo:hi] for lo, hi in kept])
         if s.loudness is not None:
             audio = media.normalise_loudness(audio, SR, s.loudness)
         peak = float(np.abs(audio).max()) if len(audio) else 0.0
@@ -666,6 +712,38 @@ class Builder:
         poster = out.with_suffix(".jpg")
         media.extract_frame(out, _poster_time(s.poster_time, total), poster)
         return BuildResult(out, poster, subtitle_files, total, sorted(self.notes))
+
+    def _planned(self, work: Path):
+        """Every scene's plan, and whether it's rendered.
+
+        Scenes outside the selection are only timed, so that those rendered fall
+        where they do in the whole video (the music under them, say). They're
+        timed from speech already cached, estimated where it isn't, so nothing is
+        synthesised for them."""
+        if self.selected is None:
+            for plan in self.plans(self.script.scenes, work):
+                yield plan, True
+            return
+        real = self.synth
+        estimator = EstimatingSynth(real)
+        untimed: list[int] = []
+        for group in merge_groups(self.script.scenes):
+            rendered = group[0].index in self.selected
+            self.synth = real if rendered else estimator
+            try:
+                plans = list(self.plans(group, work))
+            except BuildError:
+                if rendered:
+                    raise
+                untimed += [scene.index for scene in group]  # its problem is for a build of that scene
+                continue
+            finally:
+                self.synth = real
+            for plan in plans:
+                yield plan, rendered
+        if self.settings.background and (estimator.estimates or untimed):
+            self.notes.add("the music is placed by estimated timing of scenes not rendered "
+                           f"({'their speech is not synthesised yet' if estimator.estimates else 'some have problems'})")
 
     def _render_scene(self, plan: ScenePlan, frames: int, renderer: FrameRenderer | None, work: Path,
                       submit: Callable[..., Future] | None = None) -> list[Future]:
@@ -792,8 +870,9 @@ class Builder:
                 return np.zeros(1, dtype=np.float32)
 
         shadow = Builder(dataclasses.replace(self.script, warnings=[]), Recorder(), log=lambda _: None, jobs=1)
+        scenes = [scene for scene in self.script.scenes if self.selected is None or scene.index in self.selected]
         try:
-            for _ in shadow.plans(self.script.scenes, work):
+            for _ in shadow.plans(scenes, work):
                 pass
         finally:
             shadow.close()

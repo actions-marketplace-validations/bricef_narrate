@@ -124,8 +124,31 @@ function Player({ build }) {
   </div>`;
 }
 
+/** A scene rendered by the real builder (#61): how far it's got, then the clip itself. */
+function SceneRender({ render, onCancel }) {
+  if (!render || render.state === "idle") {
+    return html`<p class="muted">Render scene shows the scene at the cursor exactly as the video will have it.</p>`;
+  }
+  if (render.state === "starting" || render.state === "running") {
+    return html`<p class="build-status" data-testid="scene-render">Rendering scene ${render.scene}…
+      <button class="quiet" onClick=${onCancel}>Cancel</button></p>`;
+  }
+  if (render.state === "cancelled") return html`<p class="muted" data-testid="scene-render">Render cancelled.</p>`;
+  if (render.state === "failed") {
+    return html`<div data-testid="scene-render"><p class="preview-error">Scene ${render.scene} couldn't be rendered:</p>
+      <ul class="build-errors">${render.errors.map((e) => html`<li>${e.line ? `line ${e.line}: ` : ""}${e.message}</li>`)}</ul></div>`;
+  }
+  return html`<div class="player">
+    <p class="caption" data-testid="scene-render"><span>Scene ${render.scene}, rendered</span></p>
+    <video controls autoplay src=${render.video} poster=${render.poster} data-testid="scene-video"></video>
+    ${render.notes && render.notes.length > 0 && html`<details class="notes" open><summary>Notes</summary>
+      <ul>${render.notes.map((n) => html`<li>${n.replace(/^note: /, "")}</li>`)}</ul></details>`}
+  </div>`;
+}
+
 /** The frame at the cursor's moment, at the video's size, scaled to fit the pane. */
-function Preview({ analysis, shown, moment, error, playback, onPlay, onStop, tab, onTab, build }) {
+function Preview({ analysis, shown, moment, error, playback, onPlay, onStop, tab, onTab, build, sceneRender,
+                   onRender, onCancelRender }) {
   const box = useRef(null);
   const [scale, setScale] = useState(0.4);
   const [w, h] = (analysis && analysis.size) || [1280, 720];
@@ -139,9 +162,12 @@ function Preview({ analysis, shown, moment, error, playback, onPlay, onStop, tab
   return html`<aside class="preview" aria-label="preview">
     <div class="tabs" role="tablist">
       <button role="tab" aria-selected=${tab === "frame"} onClick=${() => onTab("frame")}>Frame</button>
+      <button role="tab" aria-selected=${tab === "scene"} onClick=${() => onTab("scene")}>Scene</button>
       <button role="tab" aria-selected=${tab === "video"} onClick=${() => onTab("video")}>Video</button>
     </div>
-    ${tab === "video" ? html`<${Player} build=${build} />` : html`<div class="frame-tab">
+    ${tab === "video" ? html`<${Player} build=${build} />`
+      : tab === "scene" ? html`<${SceneRender} render=${sceneRender} onCancel=${onCancelRender} />`
+      : html`<div class="frame-tab">
     <div class="screen" ref=${box} style=${`height:${h * scale}px`}>
       ${shown && shown.kind === "frame" && html`<iframe title="frame" srcdoc=${shown.html} style=${frameStyle} tabindex="-1"></iframe>`}
       ${shown && shown.kind === "page" && html`<iframe title="frame" src=${shown.url} style=${frameStyle} tabindex="-1"></iframe>`}
@@ -154,6 +180,8 @@ function Preview({ analysis, shown, moment, error, playback, onPlay, onStop, tab
       ${playback.state === "playing"
         ? html`<button onClick=${onStop}>■ Stop</button>`
         : html`<button onClick=${onPlay} disabled=${!moment || playback.state === "synthesising"}>▶ Play scene</button>`}
+      <button onClick=${onRender} disabled=${!moment || (sceneRender && (sceneRender.state === "running" || sceneRender.state === "starting"))}
+        title="render this scene with the real builder, exactly as the video will have it">Render scene</button>
       <span class="playback" data-testid="playback">${
         playback.state === "synthesising" ? `Synthesising scene ${playback.scene}…`
         : playback.state === "playing" ? `Playing scene ${playback.scene}: ${seconds(playback.time)} of ${seconds(playback.duration)}`
@@ -188,6 +216,7 @@ function App() {
   const sceneAudio = useRef(new Map());  // "analysis id:scene" -> {url, paragraphs, duration}
   const [playback, setPlayback] = useState({ state: "idle" });
   const [build, setBuild] = useState(null);
+  const [sceneRender, setSceneRender] = useState(null);
   const [tab, setTab] = useState("frame");
   const cursorMoment = analysis ? momentAt(analysis, cursorLine) : null;
   // While narration plays, the preview follows it paragraph by paragraph
@@ -319,8 +348,11 @@ function App() {
 
   useEffect(() => { load(); }, [load]);
 
-  // The last build survives a reload
-  useEffect(() => { getJSON("/api/build").then(({ body }) => setBuild(body)).catch(() => {}); }, []);
+  // The last build and scene render survive a reload
+  useEffect(() => {
+    getJSON("/api/build").then(({ body }) => setBuild(body)).catch(() => {});
+    getJSON("/api/scenes/render").then(({ body }) => setSceneRender(body)).catch(() => {});
+  }, []);
 
   const startBuild = useCallback(async () => {
     if (dirtyRef.current && !(await save(false))) return;  // builds the file on disk, so save first
@@ -330,6 +362,17 @@ function App() {
   }, [save]);
 
   const cancelBuild = useCallback(() => getJSON("/api/build/cancel", { method: "POST" }), []);
+
+  /** Render scene `index` with the real builder (#61); like a build, from the saved file. */
+  const renderScene = useCallback(async (index) => {
+    if (dirtyRef.current && !(await save(false))) return;
+    setTab("scene");
+    const { status, body } = await getJSON(`/api/scenes/${index}/render`, { method: "POST" });
+    if (status !== 200 && status !== 202) setError(body.error || `can't render scene ${index} (${status})`);
+    else setSceneRender(body);
+  }, [save]);
+
+  const cancelSceneRender = useCallback(() => getJSON("/api/scenes/render/cancel", { method: "POST" }), []);
 
   /** Show the moment `t` seconds into the video, with the editor's cursor on the paragraph playing then. */
   const seekTo = useCallback((t) => {
@@ -371,6 +414,7 @@ function App() {
       setBuild(status);
       if (status.state === "done") setTab("video");
     });
+    events.addEventListener("scene-build", (e) => setSceneRender(JSON.parse(e.data)));
     events.addEventListener("script-changed", (e) => {
       const changed = JSON.parse(e.data);
       if (changed.version === version.current) return;  // our own save
@@ -426,7 +470,8 @@ function App() {
       <section class="editor" ref=${host} aria-label="script"></section>
       <${Preview} analysis=${analysis} shown=${shown} moment=${moment} error=${previewError} playback=${playback}
         onPlay=${() => (seek ? play(seek.scene, seek.line, seek.time) : cursorMoment && play(cursorMoment.scene, cursorLine))}
-        onStop=${stop} tab=${tab} onTab=${setTab} build=${build} />
+        onStop=${stop} tab=${tab} onTab=${setTab} build=${build}
+        sceneRender=${sceneRender} onRender=${() => moment && renderScene(moment.scene)} onCancelRender=${cancelSceneRender} />
     </main>
     <${Timeline} analysis=${analysis} playhead=${playhead} onSeek=${seekTo}
       onLine=${(line) => goToLine(editor.current.view, line)} />`;

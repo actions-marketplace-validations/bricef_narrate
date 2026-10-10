@@ -91,6 +91,12 @@ The studio is a web app for writing a script, served from your computer.
   - **Zoom:** **+** and **−**, or Ctrl and the mouse wheel. **Fit** shows
     the whole video again.
   - **Double-click** a picture or slide to go to its line.
+- **Rendering a scene:** **Render scene**, under the preview, saves the
+  script, then renders the scene at the cursor with the real builder, as
+  `narrate build --scenes` does. It plays in the **Scene** tab: exactly that
+  part of the video, with music, subtitles and theme. It goes in a temporary
+  folder, never over the video, and a scene whose text, engine and files
+  haven't changed isn't rendered again.
 - **What's next:** visual inspectors and HTML scene tools are planned
   (narrate #28; the design is in [design/studio.md](design/studio.md)).
 
@@ -142,6 +148,26 @@ narrate build script.md --tts silent -o preview.mp4
 takes seconds and spends no credits. Use it to check layout, timing and
 subtitles before rendering the real voices. It doesn't show which voice each
 name maps to; a real build's notes do.
+
+**Just some scenes:**
+
+```sh
+narrate build script.md --scenes 3      # script-scene-3.mp4
+narrate build script.md --scenes 3-5    # script-scenes-3-5.mp4; also 2,4 or 1-2,5
+```
+
+- **Exact:** the scenes look and sound as they will in the whole video. The
+  background music is the part that plays under them, not its beginning.
+- **Only those scenes cost anything:** the others are timed from speech
+  already synthesised, or estimated, and nothing is synthesised for them.
+  Until it is, the music's position is estimated, and the build says so.
+- **The edges:** the header's `fade-in` applies only if scene 1 is included,
+  and `fade-out` only if the last scene is. The first scene rendered has no
+  transition in, since nothing comes before it. Loudness is normalised over
+  the scenes rendered.
+- **Merged scenes,** which share one narration (`narration-mode: merge`), are
+  rendered together.
+- A problem in a scene you didn't ask for doesn't stop the build.
 
 ## Make an audio file instead
 
@@ -457,7 +483,7 @@ models and the ElevenLabs key, and prints a fix for each problem.
 | Command | Does |
 | --- | --- |
 | `narrate studio SCRIPT [--open]` | edit the script in a web app (`--tts` for its engine; `--host`, `--port` to serve elsewhere) |
-| `narrate build SCRIPT [-o OUT.mp4]` | render a video (`SCRIPT` may be a `.zip`; `--source` picks the script inside; `--regenerate` retakes web captures) |
+| `narrate build SCRIPT [-o OUT.mp4]` | render a video (`SCRIPT` may be a `.zip`; `--source` picks the script inside; `--scenes 3-5` builds just those; `--regenerate` retakes web captures) |
 | `narrate audio SCRIPT [-o OUT]` | render the narration only |
 | `narrate check SCRIPT` | report missing files and problems, without rendering |
 | `narrate callouts FILE` | write a page for placing callouts on an image or a clip's frame |

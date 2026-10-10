@@ -131,6 +131,7 @@ button.quiet { border-color: transparent; color: var(--muted); }
 .tabs button { border-radius: 6px 6px 0 0; border-bottom: 2px solid transparent; }
 .tabs button[aria-selected="true"] { border-bottom-color: var(--accent); color: var(--accent); }
 .player video { width: 100%; border-radius: 4px; background: #000; }
+.build-errors { margin: 4px 0; padding-left: 18px; color: var(--error); font-size: 12px; }
 .player .notes { margin-top: 8px; color: var(--muted); font-size: 12px; }
 .preview .muted { color: var(--muted); }
 
