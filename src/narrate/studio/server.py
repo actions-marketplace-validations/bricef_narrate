@@ -56,6 +56,8 @@ class Session:
         self.analyses: OrderedDict = OrderedDict()  # the last few analyses by text id, for previews
         self.peaks: OrderedDict = OrderedDict()  # waveforms by sound id (#60)
         self.build = None  # the latest BuildRun (#55)
+        self.scene_build = None  # the latest scene render (#61)
+        self.scene_renders: dict = {}  # fingerprint -> (summary, notes) of renders still in scratch
         self.scratch = Path(tempfile.mkdtemp(prefix="narrate-studio-"))  # clip stills, copies of renders
 
     def remember(self, analysis) -> None:
@@ -247,6 +249,38 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
         session.build.cancel()
         return JSONResponse({"state": "cancelling"})
 
+    async def render_scene(request: Request) -> Response:
+        from .builds import BuildRun, fingerprint
+
+        index = int(request.path_params["index"])
+        if session.scene_build is not None and session.scene_build.running:
+            return JSONResponse({"error": "a scene is already being rendered"}, status_code=409)
+        # The file on disk, as for a build: the page saves first
+        key = fingerprint(session.script, session.read()["text"], session.engine, index)
+        out = session.scratch / f"scene-{index}-{key}.mp4"
+        run = BuildRun(session, out=out, args=["--scenes", str(index)], event="scene-build", label={"scene": index})
+        session.scene_build = run
+        if key in session.scene_renders and out.exists():  # rendered already: the same text, engine and files
+            run.done(*session.scene_renders[key])
+            return JSONResponse(run.status)
+
+        async def render() -> None:
+            await run.run()
+            if run.status["state"] == "done":
+                session.scene_renders[key] = (run.status["summary"], run.status["notes"])
+
+        app.state.scene_task = asyncio.create_task(render())
+        return JSONResponse(run.status, status_code=202)
+
+    async def scene_render_status(request: Request) -> Response:
+        return JSONResponse(session.scene_build.status if session.scene_build else {"state": "idle"})
+
+    async def cancel_scene_render(request: Request) -> Response:
+        if session.scene_build is None or not session.scene_build.running:
+            return JSONResponse({"error": "no scene is being rendered"}, status_code=409)
+        session.scene_build.cancel()
+        return JSONResponse({"state": "cancelling"})
+
     async def scratch_file(request: Request) -> Response:
         path = (session.scratch / request.path_params["name"]).resolve()
         if not path.is_relative_to(session.scratch) or not path.is_file():
@@ -288,8 +322,9 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
             yield
         finally:
             watcher.cancel()
-            if session.build is not None:
-                session.build.cancel()  # don't leave a build running after the studio stops
+            for run in (session.build, session.scene_build):
+                if run is not None:
+                    run.cancel()  # don't leave a build running after the studio stops
             shutil.rmtree(session.scratch, ignore_errors=True)
 
     app = Starlette(routes=[
@@ -304,6 +339,9 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
         Route("/api/build", start_build, methods=["POST"]),
         Route("/api/build", build_status, methods=["GET"]),
         Route("/api/build/cancel", cancel_build, methods=["POST"]),
+        Route("/api/scenes/{index:int}/render", render_scene, methods=["POST"]),
+        Route("/api/scenes/render", scene_render_status, methods=["GET"]),
+        Route("/api/scenes/render/cancel", cancel_scene_render, methods=["POST"]),
         Route("/scratch/{name}", scratch_file),
         Route("/api/events", events),
         Route("/files/{path:path}", project_file),

@@ -562,7 +562,9 @@ class Prefetching:
     def resolve(self, name: str | None, lang: str | None, notes: set[str]) -> Voice:
         return self.backend.resolve(name, lang, notes)
 
-    def synth(self, text: str, voice: Voice, speed: float, notes: set[str]) -> np.ndarray:
+    def synth(self, text: str, voice: Voice, speed: float, notes: set[str], only_cached: bool = False) -> np.ndarray:
+        if only_cached:
+            return self.backend.synth(text, voice, speed, notes, only_cached=True)
         future = self._futures.get((text, voice, speed))
         return future.result() if future else self.backend.synth(text, voice, speed, notes)
 

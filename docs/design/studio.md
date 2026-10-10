@@ -190,6 +190,9 @@ Decided with the author.
 | `POST /api/build` | start a build; progress over the event stream |
 | `GET /api/build` | the latest build's state |
 | `POST /api/build/cancel` | stop the running build |
+| `POST /api/scenes/{n}/render` | render scene n into scratch (`narrate build --scenes n`), or reuse an unchanged render |
+| `GET /api/scenes/render` | the latest scene render's state |
+| `POST /api/scenes/render/cancel` | stop the scene render |
 | `GET /api/events` | the event stream (SSE) |
 | `GET /files/{path}` | the project's own files, nothing outside its folder and no hidden files |
 | `GET /scratch/{name}` | the session's scratch files: clip stills, scene audio, copies of renders |

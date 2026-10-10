@@ -55,14 +55,41 @@ def cmd_build(args: argparse.Namespace) -> int:
         return _build(args, path)
 
 
+def parse_scenes(spec: str) -> list[int]:
+    """Scene numbers from "3", "3-5" or "2,4" (and mixes such as "1-2,5"), in order."""
+    scenes: list[int] = []
+    for part in spec.replace(" ", "").split(","):
+        first, dash, last = part.partition("-")
+        if not first.isdigit() or (dash and not last.isdigit()) or int(first) < 1:
+            raise argparse.ArgumentTypeError(f"scenes are numbers such as 3, 3-5 or 2,4, not {spec!r}")
+        a, b = int(first), int(last) if dash else int(first)
+        if b < a:
+            raise argparse.ArgumentTypeError(f"{part} counts down: write {b}-{a}")
+        scenes += [n for n in range(a, b + 1) if n not in scenes]
+    return scenes
+
+
+def scenes_name(scenes: list[int]) -> str:
+    """How an excerpt's file is named: scene-3, scenes-3-5, scenes-2_4."""
+    ordered = sorted(scenes)
+    if len(ordered) == 1:
+        return f"scene-{ordered[0]}"
+    if ordered == list(range(ordered[0], ordered[-1] + 1)):
+        return f"scenes-{ordered[0]}-{ordered[-1]}"
+    return "scenes-" + "_".join(map(str, ordered))
+
+
 def _build(args: argparse.Namespace, path: Path) -> int:
     script = parse_file(path)
-    out = Path(args.output or path.with_suffix(".mp4").name)
+    default = path.with_suffix(".mp4").name
+    if args.scenes:  # never over the whole video
+        default = f"{path.stem}-{scenes_name(args.scenes)}.mp4"
+    out = Path(args.output or default)
     log = (lambda msg: None) if args.quiet else (lambda msg: print(msg, file=sys.stderr))
     started = time.monotonic()
     synth = make_synth(args.tts, args.tts_model)
     log(f"speech: {synth.name}" + (f" ({synth.model})" if hasattr(synth, "model") else ""))
-    builder = Builder(script, synth, log=log, jobs=args.jobs, regenerate=args.regenerate)
+    builder = Builder(script, synth, log=log, jobs=args.jobs, regenerate=args.regenerate, scenes=args.scenes)
     result = builder.build(out, workdir=Path(args.keep_work) if args.keep_work else None)
     _report(script, result.notes)
     extras = ", ".join(str(p) for p in [result.poster, *result.subtitle_files])
@@ -225,6 +252,8 @@ def main(argv: list[str] | None = None) -> int:
                        help="speech engine (default auto: ElevenLabs when ELEVENLABS_API_KEY is set, "
                             "else Kokoro); 'silent' renders timing-only silence for quick previews")
     build.add_argument("--tts-model", help="ElevenLabs model id (default eleven_multilingual_v2)")
+    build.add_argument("--scenes", type=parse_scenes, metavar="N",
+                       help="build only these scenes, as in 3, 3-5 or 2,4 (default output: <script>-scene-3.mp4)")
     build.add_argument("--keep-work", metavar="DIR", help="keep intermediate files in DIR")
     build.add_argument("--regenerate", action="store_true",
                        help="take web captures (render:web) again instead of reusing the stored ones")

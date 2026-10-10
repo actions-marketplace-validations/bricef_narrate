@@ -290,3 +290,19 @@ def test_the_timeline_seeks_and_follows_the_cursor(tmp_path, page):
         start = one["paragraphs"][1]["start"]
         expect(page.get_by_test_id("playhead")).to_have_text(f"{start:.1f} s / {report['duration']:.1f} s")
         expect(page.get_by_test_id("moment")).to_contain_text("scene 1")
+
+
+# -- scene renders (#61) ----------------------------------------------------------------
+
+def test_render_the_scene_at_the_cursor(tmp_path, page, monkeypatch):
+    monkeypatch.setenv("NARRATE_CACHE", str(tmp_path / "cache"))
+    script = tmp_path / "s.md"
+    script.write_text("---\nsize: 320x180\n---\n\nThe first scene.\n\n---\n\nThe second scene.\n")
+    with running(script) as url:
+        page.goto(url)
+        page.locator(".cm-line:not(.cm-narrate-scene)", has_text="The second scene").click(position={"x": 4, "y": 4})
+        expect(page.get_by_test_id("moment")).to_contain_text("scene 2")
+        page.get_by_role("button", name="Render scene").click()
+        expect(page.get_by_test_id("scene-video")).to_be_visible(timeout=60000)
+        expect(page.get_by_test_id("scene-render")).to_contain_text("Scene 2, rendered")
+        assert page.get_by_test_id("scene-video").get_attribute("src").startswith("/scratch/scene-2-")
