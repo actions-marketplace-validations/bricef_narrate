@@ -163,7 +163,8 @@ class SubtitleConfig:
 
     @property
     def files(self) -> bool:
-        return self.mode in ("external", "embed")
+        """Every mode but none writes .srt and .vtt files, burned-in ones too (#58)."""
+        return self.mode != "none"
 
 
 @dataclass
@@ -195,6 +196,7 @@ class Settings:
     fade_out: float = 0.0  # seconds to black at the end
     loudness: float | None = None  # integrated LUFS for the finished mix (narrate extension)
     image_zoom: float | None = None  # how far pan and zoom move by default (narrate extension)
+    transcript: bool = False  # write <name>.transcript.txt beside the output (narrate extension, #58)
 
 
 def parse_subtitles(value: Any) -> SubtitleConfig:
@@ -214,7 +216,20 @@ def parse_subtitles(value: Any) -> SubtitleConfig:
     mode = str(props.pop("mode", "")).strip().lower()
     if mode not in ("embed", "overlay"):
         raise ConfigError("subtitles map needs mode: embed or overlay")
-    cfg = SubtitleConfig(mode=mode)
+    return _style(SubtitleConfig(mode=mode), props)
+
+
+def subtitles_with_mode(header: Any, mode: str) -> SubtitleConfig:
+    """The header's subtitles with another mode (narrate build --subtitles, #58): the mode's own
+    defaults, then any style keys the header's map sets (break, color, font, position, ...)."""
+    cfg = parse_subtitles(mode)
+    if isinstance(header, dict):
+        cfg = _style(cfg, {str(k).lower(): v for k, v in header.items() if str(k).lower() != "mode"})
+    return cfg
+
+
+def _style(cfg: SubtitleConfig, props: dict[str, Any]) -> SubtitleConfig:
+    """`cfg` with the style keys of a subtitles map applied."""
     for key, raw in props.items():
         if key == "break":
             cfg.break_chars = int(parse_number(raw, "subtitles break"))
@@ -273,6 +288,7 @@ def settings_from_header(header: dict[str, Any], warnings: list[str]) -> Setting
         "fade-out": lambda v: setattr(s, "fade_out", _seconds(v, "fade-out")),
         "loudness": lambda v: setattr(s, "loudness", parse_loudness(v)),
         "image-zoom": lambda v: setattr(s, "image_zoom", parse_zoom(v)),
+        "transcript": lambda v: setattr(s, "transcript", parse_switch(v, "transcript")),
     }
     for key, value in header.items():
         handler = handlers.get(key)
@@ -284,6 +300,16 @@ def settings_from_header(header: dict[str, Any], warnings: list[str]) -> Setting
         except ConfigError as e:
             raise ConfigError(f"header {key}: {e}") from None
     return s
+
+
+def parse_switch(value: Any, what: str) -> bool:
+    """true/false, yes/no, on/off."""
+    text = str(value).strip().lower()
+    if text in ("true", "yes", "on"):
+        return True
+    if text in ("false", "no", "off"):
+        return False
+    raise ConfigError(f"{what} is true or false, not {value!r}")
 
 
 LOUDNESS_PRESETS = {"web": -16.0, "broadcast": -23.0}  # streaming norm; EBU R 128

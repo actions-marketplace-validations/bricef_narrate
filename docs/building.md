@@ -162,10 +162,24 @@ narrate build script.md -o out/video.mp4  # choose where
 narrate build project.zip                 # a ZIP of the script and its files
 ```
 
-- **Outputs:** the MP4, a poster JPG next to it and, when the script asks for
-  subtitle files (`subtitles: external` or `embed`), `.srt` and `.vtt` files.
-  They are named after the script (for a ZIP, the script inside it) and go in
-  the current folder, unless `-o` says otherwise.
+- **Outputs:** the MP4, a poster JPG next to it and, when subtitles are on
+  (any mode but `none`), `.srt` and `.vtt` files. They are named after the
+  script (for a ZIP, the script inside it) and go in the current folder,
+  unless `-o` says otherwise.
+- **Subtitles per build:** `--subtitles MODE` chooses the subtitles for this
+  build, over the script's header, keeping the header's style (font, colour,
+  `break` and so on). For example, from one script:
+
+  ```sh
+  narrate build talk.md --subtitles external -o youtube.mp4   # clean video + youtube.srt to upload
+  narrate build talk.md --subtitles tiktok -o tiktok.mp4      # captions burned in (and tiktok.srt)
+  ```
+
+- **Transcript:** `--transcript` also writes what's spoken as plain text,
+  `<output>.transcript.txt`: a line per paragraph and a blank line between
+  scenes, for show notes, a blog post or an accessibility page. Recordings
+  are transcribed for it, which downloads the speech-to-text model the first
+  time.
 - **Progress** goes to the terminal: one line per scene, then notes about
   anything narrate adapted, such as a voice it matched. `-q` keeps it quiet.
 - **Check first:** `narrate check script.md` finds missing pictures, clips and
@@ -248,8 +262,8 @@ narrate audio script.md -o talk.m4a      # .mp3, .m4a, .aac, .ogg, .opus, .flac 
 
 The audio holds the narration, recordings, clip soundtracks and background
 music, timed exactly as in the video. Pictures, slides and callouts are
-skipped. When the script turns subtitles on, `.srt` and `.vtt` files come
-with it.
+skipped. When subtitles are on, `.srt` and `.vtt` files come with it.
+`--subtitles` and `--transcript` work as for videos.
 
 ## Choose a speech engine
 
@@ -421,10 +435,12 @@ jobs:
 | `output` | `narrate/result.mp4` | where to write the video; the poster and subtitles go next to it |
 | `tts` | `auto` | the speech engine, as `--tts` |
 | `elevenlabs-api-key` | none | an ElevenLabs key, from a secret |
+| `subtitles` | none | the subtitles for this build, as `--subtitles` (the script decides when empty) |
+| `transcript` | `false` | `true` also writes a transcript, as `--transcript` |
 | `image` | `ghcr.io/bricef/narrate:latest` | the narrate image to build with |
 
-Outputs: `video-file`, `poster-file`, and `srt-file` and `vtt-file` when the
-script asks for subtitle files.
+Outputs: `video-file`, `poster-file`, `srt-file` and `vtt-file` when subtitles
+are on, and `transcript-file` when a transcript is asked for.
 
 - The voice model and synthesised speech are cached between runs, so
   unchanged paragraphs cost nothing.
@@ -553,8 +569,8 @@ models and the ElevenLabs key, and prints a fix for each problem.
 | Command | Does |
 | --- | --- |
 | `narrate studio SCRIPT [--open]` | edit the script in a web app (`--tts` for its engine; `--host`, `--port` to serve elsewhere) |
-| `narrate build SCRIPT [-o OUT.mp4]` | render a video (`SCRIPT` may be a `.zip`; `--source` picks the script inside; `--scenes 3-5` builds just those; `--regenerate` retakes web captures) |
-| `narrate audio SCRIPT [-o OUT]` | render the narration only |
+| `narrate build SCRIPT [-o OUT.mp4]` | render a video (`SCRIPT` may be a `.zip`; `--source` picks the script inside; `--scenes 3-5` builds just those; `--subtitles MODE` and `--transcript` choose the extra outputs; `--regenerate` retakes web captures) |
+| `narrate audio SCRIPT [-o OUT]` | render the narration only (also takes `--subtitles` and `--transcript`) |
 | `narrate frames VIDEO [--script SCRIPT]` | a contact sheet of the video's frames (`--at`, `--every`, `--count`, `-o`) |
 | `narrate check SCRIPT [--timing]` | report missing files and problems, without rendering; `--timing` adds scene lengths, the total and what synthesis would cost (`--json` for programs) |
 | `narrate callouts FILE` | write a page for placing callouts on an image or a clip's frame |

@@ -1170,3 +1170,31 @@ to:   X% Y% [ZOOM]
 - **Invalid values** are warned about with their line and ignored, as other
   properties are.
 
+### 18.7 Subtitle outputs and transcripts (narrate #58)
+
+- **Files from every mode:** every subtitle mode but `none` writes `.srt` and
+  `.vtt` beside the output, burned-in modes included; Narakeet writes them for
+  `external` and `embed` only (§8.1). The files hold the same cues as those
+  burned in.
+- **Per build:** `narrate build` and `narrate audio` take `--subtitles MODE`
+  (`none`, `external`, `embed`, `overlay`, `overlay-background`, `tiktok`). It
+  replaces the header's mode before planning, so cues are made (and
+  recordings transcribed) as if the header had said it. The mode's own
+  defaults apply, then any style keys of the header's map form (`break`,
+  `scale`, `size`, `color`, `outline`, `background`, `font`, `position`).
+  Narakeet's API has no such option.
+- **Transcript:** header `transcript: true` (or `false`), or `--transcript`,
+  writes `<output name>.transcript.txt` beside the output: UTF-8 plain text, a
+  line per narration block in order and a blank line between scenes (scenes
+  with nothing spoken are left out).
+  - **What's spoken:** paragraphs as subtitle text (no markup, emphasis or
+    SSML tags), SSML blocks as their text, and each recording as the words its
+    speech-to-text transcription heard, joined into one line. Block quotes,
+    which replace a scene's subtitles, don't replace its narration here.
+  - **Merged scenes** (§4.4) put their one narration under the first scene.
+  - **Without speech-to-text** (faster-whisper missing, or a recording it
+    can't read), the build notes it and the transcript leaves the recording
+    out.
+  - Not `<name>.txt`: a `.txt` script built in its own folder would be
+    overwritten.
+
