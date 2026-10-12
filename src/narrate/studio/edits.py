@@ -16,16 +16,26 @@ edit doesn't touch, byte for byte:
 Callouts (#64) are `(callout: …)` directions: one can be inserted after a
 line (in the multi-line form the docs use), have its properties set the same
 way, or be deleted with the blank line that separated it.
+
+A timing mark (#75) is a `<mark name="…"/>` put before a word of narration,
+plain or SSML, named after the word.
+
+Positions are characters here; the editor counts UTF-16 units, so the server
+converts at its edge (for_editor, index_of).
 """
 
 from __future__ import annotations
 
 import re
+import unicodedata
+from pathlib import Path
 from typing import Any
 
 import yaml
 
-from ..script import ANIMATED_SIZES, POSITIONS, SIZES, SYNCS, media_kind, parse_focus, parse_window
+from ..script import (ANIMATED_SIZES, POSITIONS, SIZES, SYNCS, Narration, ScriptError, media_kind, parse,
+                      parse_focus, parse_window)
+from ..text import MARK_NAME, MARK_RE
 
 _IMAGE = re.compile(r'^(?P<indent>\s*)!\[(?P<alt>[^\]]*)\]\((?P<target>\s*(?:<[^>]*>|[^)\s]+)(?:\s+"[^"]*")?\s*)\)(?P<tail>\s*)$')
 _FENCE = re.compile(r"^(?P<lead>\s{0,3}(?:`{3,}|~{3,})\s*render:\S+)(?P<tokens>[^\n]*)$", re.I)
@@ -424,6 +434,106 @@ def edit_block(text: str, line: int, changes: dict[str, Any]) -> dict:
                 "insert": _write_directive(lines, i, last, key, props, as_text)}
 
     raise EditError(f"line {line} isn't a picture, clip, page or render block")
+
+
+# A word: letters and digits, with apostrophes or hyphens inside it
+_WORD = re.compile(r"[^\W_]+(?:['’-][^\W_]+)*")
+_TAG = re.compile(r"<[^>]*>?")
+_TOKEN = re.compile(r"[^\s<>]+")  # what the voice reads as one: no spaces, and tags break it as spaces do
+# Plain markup a mark can't go inside, as it would be spelled or read as phonetics: it goes before it
+_WHOLE_PLAIN = re.compile(r"`[^`]+`|\[[^\]]+\]\{[^}]+\}|\[[^\]]+\]\([^)]*\)")
+_WHOLE_SSML = re.compile(r"<(say-as|phoneme|sub)\b[^>]*>.*?</\1\s*>", re.I)
+# What the words in it aren't: a span's style or language, a link's address
+_UNSPOKEN = re.compile(r"(?<=\])\{[^}]+\}|(?<=\])\([^)]*\)")
+
+
+def _mark_name(word: str, taken: set[str]) -> str:
+    """A mark name from a word: plain lowercase ASCII, unique among `taken` (fleet, fleet-2, …)."""
+    ascii_ = unicodedata.normalize("NFKD", word).encode("ascii", "ignore").decode().lower()
+    base = re.sub(r"[^a-z0-9_]+", "-", ascii_).strip("-") or "mark"
+    if not base[0].isalpha():
+        base = f"mark-{base}"
+    name, n = base, 1
+    while name in taken:
+        n += 1
+        name = f"{base}-{n}"
+    return name
+
+
+def insert_mark(text: str, at: int, name: str | None = None) -> dict:
+    """The change that puts a timing mark before the word at character `at` (#75): the word the cursor is in
+    or touches, else the next on its line. An HTML scene or overlay times something to it with --cue-NAME.
+
+    The paragraph stays as written, plain or SSML: plain narration takes marks too. A mark goes before any
+    markup it can't go inside (code, a phonetic or language span, a link; SSML's say-as, phoneme, sub). It's
+    named after the word, unless `name` is given, and unique in its scene. `select` is the name, in the new
+    text, so it can be renamed by typing."""
+    try:
+        script = parse(text, Path("script.md"))
+    except ScriptError as e:
+        raise EditError(str(e)) from None
+    lines = text.split("\n")
+    offsets = _offsets(lines)
+    if not 0 <= at <= len(text):
+        raise EditError(f"there is no position {at}")
+    i = max(k for k, o in enumerate(offsets) if o <= at)
+    line = lines[i]
+    starts = sorted((b.line, b, scene) for scene in script.scenes for b in scene.blocks)
+    holder = next(((b, scene) for start, b, scene in reversed(starts) if start <= i + 1), None)
+    if not line.strip() or holder is None or not isinstance(holder[0], Narration):
+        raise EditError("put the cursor in narration: a mark goes before one of its words")
+    block, scene = holder
+
+    hidden = [(m.start(), m.end()) for m in _TAG.finditer(line)]
+    if not block.ssml:
+        hidden += [(m.start(), m.end()) for m in _UNSPOKEN.finditer(line)]
+    words = [w for w in _WORD.finditer(line) if not any(a < w.end() and w.start() < b for a, b in hidden)]
+    if not words:
+        raise EditError("there's no word on this line to mark")
+    column = at - offsets[i]
+    word = next((w for w in words if w.end() >= column), words[-1])
+    # Before the whole token it's in (A&B, *this*): the voice reads a token as one, so a mark can't split it
+    pos = next(t.start() for t in _TOKEN.finditer(line) if t.start() <= word.start() < t.end())
+    for m in (_WHOLE_SSML if block.ssml else _WHOLE_PLAIN).finditer(line):
+        if m.start() < pos < m.end():
+            pos = m.start()
+    named = "-".join(w.group(0) for w in words if pos <= w.start() <= word.start())
+
+    later = [s.line for s in script.scenes if s.line > scene.line]
+    end = (later[0] - 1) if later else len(lines)
+    taken = {m["name"] for row in lines[scene.line - 1:end] for m in MARK_RE.finditer(row)}
+    if name is None:
+        name = _mark_name(named, taken)
+    elif not MARK_NAME.fullmatch(name):
+        raise EditError(f"not a mark name: {name!r} (letters, digits, - and _, starting with a letter)")
+    tag = f'<mark name="{name}"/>'
+    where = offsets[i] + pos
+    first = where + len('<mark name="')
+    return {"from": where, "to": where, "insert": tag, "select": {"anchor": first, "head": first + len(name)}}
+
+
+def units(text: str, index: int) -> int:
+    """Where character `index` of `text` is for the editor, which counts UTF-16 units (an emoji is two)."""
+    return index + sum(1 for ch in text[:index] if ord(ch) > 0xFFFF)
+
+
+def index_of(text: str, unit: int) -> int:
+    """The character of `text` at the editor's position `unit`."""
+    count = 0
+    for i, ch in enumerate(text):
+        if count >= unit:
+            return i
+        count += 2 if ord(ch) > 0xFFFF else 1
+    return len(text)
+
+
+def for_editor(text: str, change: dict) -> dict:
+    """A change in the editor's units: `from` and `to` in `text`, and a selection in the text after it."""
+    out = {**change, "from": units(text, change["from"]), "to": units(text, change["to"])}
+    if "select" in change:
+        after = apply(text, change)
+        out["select"] = {k: units(after, v) for k, v in change["select"].items()}
+    return out
 
 
 def apply(text: str, change: dict) -> str:

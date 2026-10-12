@@ -1,6 +1,6 @@
 // narrate studio: the app shell (docs/design/studio.md).
 import { html, render, useCallback, useEffect, useRef, useState } from "./vendor/htm-preact.js";
-import { createEditor, followLine, goToLine, lineKinds, seconds, selectLine, showAnalysis } from "./editor.js";
+import { createEditor, followLine, followPlace, goToLine, lineKinds, seconds, selectLine, showAnalysis } from "./editor.js";
 import { VoicePicker } from "./voices.js";
 import { CalloutInspector, CalloutLayer } from "./callouts.js";
 import { Timeline } from "./timeline.js";
@@ -252,6 +252,7 @@ function App() {
   const [cursorLine, setCursorLine] = useState(1);
   const [seek, setSeek] = useState(null);  // a moment chosen on the timeline, until the cursor moves (#60)
   const analyseTimer = useRef(null);
+  const markRef = useRef(null);  // adds a mark at the cursor (#75): Alt-M in the editor
   const [shown, setShown] = useState(null);
   const [previewError, setPreviewError] = useState(null);
   const previewTimer = useRef(null);
@@ -358,6 +359,7 @@ function App() {
     else editor.current = createEditor(host.current, body.text, {
       onChange: () => setDirty(true),
       onSave: () => save(false),
+      onMark: () => markRef.current && markRef.current(),
       onCursor: (line, docChanged, followed) => {
         setCursorLine(line);
         if (!followed) setSeek(null);  // the user moved on: the preview follows the cursor again
@@ -423,7 +425,8 @@ function App() {
   const cancelSceneRender = useCallback(() => getJSON("/api/scenes/render/cancel", { method: "POST" }), []);
 
   /** An edit the server writes and the editor applies as one undoable change (#62, #64): `request` is the
-      edit ({line, set}, or {op, …}); `cursorAt(change)`, if given, says where the cursor goes after it. */
+      edit ({line, set}, or {op, …}); `cursorAt(change)`, if given, says where the cursor goes after it (a
+      position, or a selection {anchor, head}). */
   const [editing, setEditing] = useState(false);
   const requestEdit = useCallback(async (request, cursorAt = null) => {
     const view = editor.current.view;
@@ -439,7 +442,8 @@ function App() {
       if (sent.sliceString(body.from, body.to) === body.insert) return;  // nothing to change
       view.dispatch({
         changes: { from: body.from, to: body.to, insert: body.insert }, userEvent: "input.inspector",
-        ...(cursorAt ? { selection: { anchor: cursorAt(body) }, scrollIntoView: true } : {}),
+        ...(cursorAt ? { selection: ((at) => (typeof at === "number" ? { anchor: at } : at))(cursorAt(body)),
+                         scrollIntoView: true } : {}),
       });
       setAwaitingAnalysis(true);
       setError(null);
@@ -449,6 +453,14 @@ function App() {
   }, []);
   const editBlock = useCallback((line, changes) => requestEdit({ line, set: changes }), [requestEdit]);
 
+  /** A timing mark before the word at the cursor (#75), its name selected in the editor to rename by typing. */
+  const addMark = useCallback(async () => {
+    const view = editor.current.view;
+    await requestEdit({ op: "mark", at: view.state.selection.main.from }, (change) => change.select);
+    view.focus();
+  }, [requestEdit]);
+  markRef.current = addMark;
+
   /** Show the moment `t` seconds into the video, with the editor's cursor on the paragraph playing then. */
   const seekTo = useCallback((t) => {
     const found = momentOf(analysisRef.current, t);
@@ -457,6 +469,13 @@ function App() {
     setSeek(found);
     followLine(editor.current.view, found.line);
   }, [stop]);
+
+  /** A cue's flag on the timeline: its moment in the preview, and its <mark> selected in the text. */
+  const goToMark = useCallback((scene, name) => {
+    seekTo(scene.start + scene.marks[name]);
+    const place = scene.mark_places && scene.mark_places[name];
+    if (place) followPlace(editor.current.view, place.line, place.column, place.length);
+  }, [seekTo]);
 
   // A paragraph's play button (editor.js) plays its scene from there
   useEffect(() => {
@@ -610,6 +629,14 @@ function App() {
     return /^\s*\(\s*voice\s*:/i.test(text) || (lineKinds(doc)[cursorLine] === "header" && /^\s*voice\s*:/i.test(text));
   })();
 
+  // Narration at the cursor: a timing mark can go before one of its words (#75)
+  const onNarration = (() => {
+    const doc = editor.current && editor.current.view.state.doc;
+    if (!doc || cursorLine > doc.lines) return false;
+    const kind = lineKinds(doc)[cursorLine], text = doc.line(cursorLine).text.trim();
+    return kind === "ssml" || (!kind && text !== "" && !text.startsWith(">"));
+  })();
+
   const status = !online ? "Offline: reconnecting…" : saving ? "Saving…" : dirty ? "Unsaved changes" : "Saved";
   return html`
     <header class="bar">
@@ -644,6 +671,10 @@ function App() {
         ${onVoiceLine && html`<section class="inspector" aria-label="voice"><h3>Voice</h3>
           <p class="row"><span class="muted small">Hear the voices with a sample of your script, and pick one.</span>
           <button onClick=${() => setTab("voices")}>Choose a voice by ear…</button></p></section>`}
+        ${onNarration && html`<section class="inspector" aria-label="timing mark"><h3>Timing mark</h3>
+          <p class="row"><span class="muted small">Mark the word at the cursor, so an HTML scene or overlay can time
+            something to it (<code>--cue-NAME</code>).</span>
+          <button onClick=${addMark} disabled=${editing || awaitingAnalysis} title="Alt-M in the editor">Add mark</button></p></section>`}
         <${Inspector} analysis=${analysis} line=${cursorLine} onEdit=${editBlock} busy=${editing || awaitingAnalysis} />
         <${CalloutInspector} callout=${cursorCallout} busy=${editing || awaitingAnalysis}
           onChange=${(changes) => requestEdit({ op: "callout", line: cursorCallout.line, set: changes })}
@@ -651,7 +682,7 @@ function App() {
       </${Preview}>
     </main>
     <${Timeline} analysis=${analysis} playhead=${playhead} onSeek=${seekTo}
-      onLine=${(line) => goToLine(editor.current.view, line)} />`;
+      onLine=${(line) => goToLine(editor.current.view, line)} onMark=${goToMark} />`;
 }
 
 render(html`<${App} />`, document.getElementById("app"));

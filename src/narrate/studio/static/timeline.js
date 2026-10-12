@@ -58,7 +58,7 @@ function Ruler({ duration, pps }) {
     <span class="tl-tick-label" style=${`left:${t * pps}px`}>${seconds(t)}</span>`)}</div>`;
 }
 
-function Scene({ scene, pps, peaks, current, onLine }) {
+function Scene({ scene, pps, peaks, current, onLine, onMark }) {
   const width = scene.duration * pps;
   const marks = Object.entries(scene.marks || {}).filter(([name]) => !/^\d+$/.test(name));
   return html`<div class=${`tl-scene ${scene.estimated ? "estimated" : ""} ${current ? "current" : ""}`}
@@ -80,13 +80,16 @@ function Scene({ scene, pps, peaks, current, onLine }) {
         <div class="tl-estimate" style=${`left:${p.start * pps}px;width:${Math.max(1, (p.end - p.start) * pps)}px`}
           title="estimated from the text: not synthesised yet"></div>`)}
       ${scene.paragraphs.map((p) => html`<div class="tl-cue" style=${`left:${p.start * pps}px`} title=${`paragraph on line ${p.line}`}></div>`)}
-      ${marks.map(([name, t]) => html`<div class="tl-mark" style=${`left:${t * pps}px`} title=${`cue "${name}" at ${seconds(t)}`}><span>${name}</span></div>`)}
+      ${marks.map(([name, t]) => html`<div class="tl-mark" style=${`left:${t * pps}px`}>
+        <button class="tl-mark-name" title=${`cue "${name}" at ${seconds(t)}: click to go to its word`}
+          onPointerDown=${(e) => { e.stopPropagation(); e.preventDefault(); onMark(scene, name); }}>${name}</button></div>`)}
     </div>
   </div>`;
 }
 
-/** The whole video. `playhead` is in seconds from the start; `onSeek(t)` is called while clicking or dragging. */
-export function Timeline({ analysis, playhead, onSeek, onLine }) {
+/** The whole video. `playhead` is in seconds from the start; `onSeek(t)` is called while clicking or dragging,
+    `onLine(line)` on double-clicking a picture or slide, `onMark(scene, name)` on clicking a cue's flag (#75). */
+export function Timeline({ analysis, playhead, onSeek, onLine, onMark }) {
   const scroller = useRef(null);
   const track = useRef(null);
   const dragging = useRef(false);
@@ -191,7 +194,7 @@ export function Timeline({ analysis, playhead, onSeek, onLine }) {
           ? html`<div class="tl-untimed" style=${`left:${scene.start * pps}px`} title=${`scene ${scene.index} can't be timed: see the problems`}></div>`
           : html`<${Scene} key=${scene.index} scene=${scene} pps=${pps} current=${currentScene === scene}
               peaks=${typeof fetched.current.get(scene.sound) === "object" ? fetched.current.get(scene.sound) : null}
-              onLine=${onLine} />`)}
+              onLine=${onLine} onMark=${onMark} />`)}
         <div class="tl-playhead" style=${`left:${playhead * pps}px`}></div>
       </div>
     </div>

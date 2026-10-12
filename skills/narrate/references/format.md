@@ -218,7 +218,7 @@ flowchart LR
   `requestAnimationFrame`, `Date`).
 - Lasts as long as the scene; with no narration or duration, until its last finite animation ends.
 - **Cues** (CSS custom properties, in seconds from the page's start): `--cue-1`, `--cue-2`, … when each
-  narration block starts; `--cue-NAME` when the voice reaches `<mark name="NAME"/>`;
+  narration block starts; `--cue-NAME` when the voice reaches `<mark name="NAME"/>` (plain or SSML);
   `--narrate-duration`. Scripts get `window.narrate.duration` and `window.narrate.cues`.
 - No network, and no `<video>`/`<audio>` inside. See `html-scenes.md` for how to write them.
 

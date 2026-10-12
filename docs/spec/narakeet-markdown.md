@@ -1098,8 +1098,10 @@ animated page (narrate #44).
   - `--narrate-duration`: how long the page is on screen.
   - `--cue-N`: when the scene's Nth narration block (a paragraph or a
     recording) starts, after any pause before its first words.
-  - `--cue-NAME`: when an SSML `<mark name="NAME"/>` is reached. A mark splits
-    the run there, and names match `[A-Za-z_][A-Za-z0-9_-]*`.
+  - `--cue-NAME`: when a `<mark name="NAME"/>` is reached, in an SSML
+    paragraph or, as narrate's own extension (#75), in plain narration. A mark
+    splits the run there without a pause, and names match
+    `[A-Za-z_][A-Za-z0-9_-]*`.
   - Times count from the page's start, and may be negative.
   - Pages in merged scenes get no cues.
 

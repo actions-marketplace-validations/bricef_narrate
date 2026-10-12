@@ -67,6 +67,17 @@ def test_cues_time_each_block_and_mark(tmp_path):
     assert marks["2"] < marks["fleet"] < marks["3"]  # the recording is the third block
 
 
+def test_plain_narration_takes_marks_too(tmp_path):
+    """#75: a mark in plain narration times the same moment as in SSML, and keeps the paragraph's markup."""
+    plain = write(tmp_path, '![](scene.html)\n\nThen the second, *with* <mark name="fleet"/>a mark.\n', "", "plain")
+    # The same speech in SSML: plain emphasis is paused as a join, 60 ms, on either side
+    ssml = write(tmp_path, '![](scene.html)\n\n<speak>Then the second,<break time="60ms"/> <emphasis>with</emphasis>'
+                           '<break time="60ms"/> <mark name="fleet"/>a mark.</speak>\n', "", "ssml")
+    assert plans(plain)[0].marks["fleet"] == pytest.approx(plans(ssml)[0].marks["fleet"], abs=1e-6)
+    [plan] = plans(plain)
+    assert plan.spoken == ["Then the second, with a mark."]  # what's shown and transcribed has no mark
+
+
 # -- in pages --------------------------------------------------------------------
 
 def test_a_page_reveals_when_the_second_paragraph_starts(tmp_path):

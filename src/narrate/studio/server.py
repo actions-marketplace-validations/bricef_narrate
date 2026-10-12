@@ -205,7 +205,8 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
                             headers={"Cache-Control": "max-age=86400, immutable"})
 
     async def edit(request: Request) -> Response:
-        from .edits import EditError, delete_block, edit_block, edit_callout, insert_callout, set_header, set_voice
+        from .edits import (EditError, delete_block, edit_block, edit_callout, for_editor, index_of, insert_callout,
+                            insert_mark, set_header, set_voice)
 
         body = await request.json()
         text, line, changes = str(body.get("text", "")), int(body.get("line", 0)), dict(body.get("set") or {})
@@ -223,11 +224,14 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
                 change = set_header(text, str(body.get("key", "")), str(body.get("value", "")))
             elif op == "voice":
                 change = set_voice(text, line, str(body.get("voice", "")))
+            elif op == "mark":
+                name = body.get("name")
+                change = insert_mark(text, index_of(text, int(body.get("at", 0))), str(name) if name else None)
             else:
                 return JSONResponse({"error": f"no such edit: {op!r}"}, status_code=400)
         except EditError as e:
             return JSONResponse({"error": str(e)}, status_code=400)
-        return JSONResponse(change)
+        return JSONResponse(for_editor(text, change))
 
     async def voices(request: Request) -> Response:
         from .voices import catalogue

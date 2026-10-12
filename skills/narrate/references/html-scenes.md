@@ -30,7 +30,7 @@ canvas: "#0d1117"
 
 ![](scenes/numbers.html)
 
-<speak>Five hundred pull requests merged. <mark name="fleet"/>A hundred and fifty of them by the fleet.</speak>
+Five hundred pull requests merged. <mark name="fleet"/>A hundred and fifty of them by the fleet.
 
 And the first one landed in July.
 ````
@@ -73,14 +73,14 @@ start:
 | Property | When |
 | --- | --- |
 | `--cue-1`, `--cue-2`, … | each narration block (a paragraph, an SSML paragraph or a recording) starts |
-| `--cue-NAME` | the voice reaches `<mark name="NAME"/>` inside a `<speak>` paragraph |
+| `--cue-NAME` | the voice reaches `<mark name="NAME"/>` in the narration |
 | `--narrate-duration` | how long the page is on screen |
 
 - **Use them as animation delays:** `animation-delay: var(--cue-2, 1.2s)`. Always give a fallback.
   It keeps the page working when you open it in a browser, and documents the intended timing.
 - **Words inside a paragraph:** a `<mark name="x"/>` where the word is said gives an exact cue for
   something to land on that word. Mark names use letters, digits, `-` and `_`, starting with a
-  letter. Marks need a `<speak>…</speak>` paragraph.
+  letter. Marks work in plain paragraphs and in `<speak>` ones.
 - **Leaving:** `animation-delay: calc(var(--narrate-duration) - .5s)` starts an exit half a second
   before the scene ends.
 - **Scripts:** the same numbers are in `window.narrate.cues` (`window.narrate.cues["2"]`,

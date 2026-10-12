@@ -194,8 +194,17 @@ export function followLine(view, line) {
   view.dispatch({ selection: { anchor: target.from }, scrollIntoView: true, annotations: quiet.of(true) });
 }
 
-/** An editor in `parent` holding `text`; calls onChange() on typing and onSave() on Mod-S. */
-export function createEditor(parent, text, { onChange, onSave, onCursor = () => {}, extensions = [] }) {
+/** Select `length` characters from `column` of `line`, to follow something else (a cue's flag on the timeline),
+    without taking the focus. */
+export function followPlace(view, line, column, length = 0) {
+  const target = view.state.doc.line(Math.max(1, Math.min(line, view.state.doc.lines)));
+  const from = Math.min(target.from + column, target.to);
+  view.dispatch({ selection: { anchor: from, head: Math.min(from + length, target.to) }, scrollIntoView: true,
+                  annotations: quiet.of(true) });
+}
+
+/** An editor in `parent` holding `text`; calls onChange() on typing, onSave() on Mod-S and onMark() on Alt-M (#75). */
+export function createEditor(parent, text, { onChange, onSave, onMark = () => {}, onCursor = () => {}, extensions = [] }) {
   const view = new EditorView({
     parent,
     doc: text,
@@ -208,7 +217,8 @@ export function createEditor(parent, text, { onChange, onSave, onCursor = () => 
       labels,
       lintGutter(),
       EditorView.lineWrapping,
-      keymap.of([indentWithTab, { key: "Mod-s", preventDefault: true, run: () => { onSave(); return true; } }]),
+      keymap.of([indentWithTab, { key: "Mod-s", preventDefault: true, run: () => { onSave(); return true; } },
+                 { key: "Alt-m", preventDefault: true, run: () => { onMark(); return true; } }]),
       EditorView.updateListener.of((update) => {
         if (update.docChanged && !update.transactions.some((t) => t.annotation(fromDisk))) onChange(update);
         if (update.docChanged || update.selectionSet) {

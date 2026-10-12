@@ -223,14 +223,27 @@ top.
   its page has by default. Otherwise a browser showing the studio in dark
   mode paints the page opaque, because the schemes differ.
 
-### D14. Marks are placed by an edit
+### D14. Marks are placed by an edit, in narration as it's written
 
-Selecting a word and adding a mark is a direct manipulation like the others
-(D11):
-- the server writes `<mark name="…"/>` before the word;
-- a plain paragraph is wrapped in `<speak>`, with narrate's inline markup
-  carried over to SSML;
-- the editor applies it as one undoable change.
+Adding a mark at a word is a direct manipulation like the others (D11): the
+server writes `<mark name="…"/>` before the word, and the editor applies it as
+one undoable change.
+- **Plain paragraphs take marks** (#75) and stay plain, rather than being
+  wrapped in `<speak>` as first planned. Converting plain markup to SSML
+  can't keep the speech identical:
+  - emphasis and ellipses pause where SSML doesn't, so matching them would
+    take `<break>`s through the user's text;
+  - pinyin and jyutping spans have no SSML form;
+  - an escaped `&` shows in subtitles.
+
+  A mark in plain text splits the speech there without a pause, as in SSML,
+  and changes nothing else. A test checks this for every word of paragraphs
+  with each kind of markup.
+- **Where it goes:** before the whole token the word is in (the voice reads
+  `A&B` as one), and before markup it can't go inside: code, spans and links
+  in plain text; `say-as`, `phoneme` and `sub` in SSML.
+- **Positions:** the editor counts UTF-16 units, the server characters; the
+  server converts at its edge, for every edit.
 
 ### D15. Mermaid is drawn live with narrate's own copy
 

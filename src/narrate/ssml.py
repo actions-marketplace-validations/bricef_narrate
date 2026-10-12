@@ -22,7 +22,7 @@ import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, replace
 
-from .text import SENTENCE_PAUSE, Run, spell
+from .text import MARK_NAME, SENTENCE_PAUSE, Run, spell
 
 RATES = {"x-slow": 0.6, "slow": 0.8, "medium": 1.0, "default": 1.0, "fast": 1.2, "x-fast": 1.4}
 PITCHES = {"x-low": -4.0, "low": -2.0, "medium": 0.0, "default": 0.0, "high": 2.0, "x-high": 4.0}
@@ -119,7 +119,7 @@ class _Builder:
             # The speech splits here, so the mark's time is exact
             self.flush()
             mark = (element.get("name") or "").strip()
-            if re.fullmatch(r"[A-Za-z_][\w-]*", mark):
+            if MARK_NAME.fullmatch(mark):
                 self.marks.append(mark)
             else:
                 self.notes.add(f"SSML <mark name={mark!r}> (ignored: use a name such as \"fleet\")")

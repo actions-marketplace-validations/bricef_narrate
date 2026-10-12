@@ -99,7 +99,8 @@ The studio is a web app for writing a script, served from your computer.
   - **What it shows:** each scene's pictures, clips, pages, render blocks and
     slides, as long as each is on screen; the narration's waveform, with
     paragraphs not yet synthesised shown as grey blocks; where each
-    transition and paragraph starts; and named cues (SSML `<mark>`).
+    transition and paragraph starts; and named cues (`<mark>`). Click a cue's
+    name to go to its word.
   - **Seeking:** click or drag to show that moment in the preview. The
     editor's cursor moves to the paragraph playing then, and **Play scene**
     starts from there. Moving the cursor yourself moves the playhead back.
@@ -146,15 +147,21 @@ The studio is a web app for writing a script, served from your computer.
     `voices.yaml` are shown, not changed.
   - With the cursor on a `voice:` line or a `(voice: …)`, the inspector offers
     the picker.
+- **Timing marks:** with the cursor in narration, **Add mark** (or Alt-M)
+  puts a `<mark name="…"/>` before the word at the cursor, so an HTML scene or
+  overlay can time something to it with `--cue-NAME`.
+  - **The name:** it's named after the word (`fleet`, or `fleet-2` if the
+    scene has one), and the name is selected, so typing renames it.
+  - **The paragraph:** it keeps its markup and is spoken the same way, only
+    split at the mark.
 - **Rendering a scene:** **Render scene**, under the preview, saves the
   script, then renders the scene at the cursor with the real builder, as
   `narrate build --scenes` does. It plays in the **Scene** tab: exactly that
   part of the video, with music, subtitles and theme. It goes in a temporary
   folder, never over the video, and a scene whose text, engine and files
   haven't changed isn't rendered again.
-- **What's next:** marks placed by selecting a word, live Mermaid diagrams and
-  retaking web captures (narrate #57; the design is in
-  [design/studio.md](design/studio.md)).
+- **What's next:** live Mermaid diagrams and retaking web captures (narrate
+  #57; the design is in [design/studio.md](design/studio.md)).
 
 **On another machine,** such as a server you reach over a VPN:
 `narrate studio script.md --host 0.0.0.0`, then open port 8787 on that
