@@ -180,8 +180,9 @@ button.quiet { border-color: transparent; color: var(--muted); }
                background: color-mix(in srgb, var(--muted) 30%, transparent); }
 .tl-cue { position: absolute; top: 0; bottom: 0; border-left: 1px dashed color-mix(in srgb, var(--fg) 30%, transparent); }
 .tl-mark { position: absolute; top: 0; bottom: 0; border-left: 2px solid var(--warn); }
-.tl-mark span { position: absolute; top: 0; left: 2px; padding: 0 3px; font-size: 10px; color: var(--warn);
-                background: var(--panel); border-radius: 2px; white-space: nowrap; }
+.tl-mark-name { position: absolute; top: 0; left: 2px; padding: 0 3px; font: inherit; font-size: 10px; color: var(--warn);
+                background: var(--panel); border: 0; border-radius: 2px; white-space: nowrap; cursor: pointer; }
+.tl-mark-name:hover { color: var(--fg); }
 .tl-untimed { position: absolute; top: 18px; bottom: 4px; width: 4px; background: var(--error); }
 .tl-playhead { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px solid var(--error); pointer-events: none; z-index: 2; }
 .tl-playhead::before { content: ""; position: absolute; top: 0; left: -6px; border: 5px solid transparent;

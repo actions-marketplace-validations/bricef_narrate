@@ -22,9 +22,24 @@ from .. import media, motion, render
 from ..build import SR, Builder, BuildError, ScenePlan, merge_groups
 from ..config import ConfigError, Settings, parse_overlay
 from ..script import ANIMATED_SIZES, SIZES, Directive, Media, Narration, Render, Scene, ScriptError, Slide, parse
+from ..text import MARK_RE
 from ..tts import EstimatingSynth
+from .edits import units
 
 _LINE = re.compile(r"^line (\d+): (.*)$", re.S)
+
+
+def _mark_places(text: str, scenes: list[Scene]) -> dict[int, dict[str, dict]]:
+    """Where each scene's SSML marks are written (#75), so a cue on the timeline leads to its word:
+    each <mark/>'s line, column and length (in the editor's units), by scene and name."""
+    places: dict[int, dict[str, dict]] = {}
+    for n, line in enumerate(text.split("\n"), 1):
+        for m in MARK_RE.finditer(line):
+            scene = next((s.index for s in reversed(scenes) if s.line <= n), None)
+            if scene is not None:
+                places.setdefault(scene, {}).setdefault(m["name"], {
+                    "line": n, "column": units(line, m.start()), "length": units(line, m.end()) - units(line, m.start())})
+    return places
 PEAK_RATE = 50  # waveform min/max pairs per second (#60)
 MAX_SHOWINGS = 200  # a quickly looping sequence is listed this far, not to the end of a long scene
 
@@ -264,6 +279,7 @@ def run(text: str, script: Path, synth: Any) -> Analysis:
 
     scenes: list[dict] = []
     kept: dict[int, ScenePlan] = {}
+    places = _mark_places(text, parsed.scenes)
     sounds: dict[str, np.ndarray] = {}
     start = 0.0
     for group in merge_groups(parsed.scenes):
@@ -294,6 +310,8 @@ def run(text: str, script: Path, synth: Any) -> Analysis:
                 entry["slides"] = _slides(plan, scene)
                 entry["transition"] = {"type": plan.transition[0], "seconds": plan.transition[1]} if plan.transition else None
                 entry["marks"] = {name: round(t, 3) for name, t in plan.marks.items()}
+                entry["mark_places"] = {name: place for name, place in places.get(scene.index, {}).items()
+                                        if name in plan.marks}
                 entry["estimated"] = any(p.estimated for p in plan.paragraphs)
                 if len(plan.audio):
                     entry["sound"] = sound_id(plan.audio)
