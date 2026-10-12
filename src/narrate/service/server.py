@@ -10,18 +10,35 @@ import asyncio
 import contextlib
 import hashlib
 import json
+import secrets
+import shutil
 from pathlib import Path
 
 from starlette.applications import Starlette
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
+from ..child import Child
 from . import openapi
 from .jobs import Runner, view
-from .options import OptionError
-from .projects import ProjectError
+from .options import ENGINES, OptionError
+from .projects import ProjectError, lay_out
+from .projects import parse as parse_project
 from .store import FINAL, HashMismatch, Store, is_sha256
+
+AUDITION_WAIT = 120  # seconds an audition is waited for before it's answered as a job still running
+
+
+def check_options(body: dict, engine: str) -> list[str]:
+    """The engine a check times and prices with, as flags: the service's own unless it names one."""
+    tts, model = body.get("tts", engine), body.get("tts_model")
+    if tts is not None and tts not in ENGINES:
+        raise OptionError(f"tts must be one of {', '.join(ENGINES)}, not {tts!r}")
+    if model is not None and not (isinstance(model, str) and model.strip()):
+        raise OptionError("tts_model must be a string")
+    return [*(["--tts", tts] if tts else []), *(["--tts-model", model] if model else [])]
 
 
 def _error(message: str, status: int = 400, **more) -> JSONResponse:
@@ -76,12 +93,68 @@ def create_app(root: Path, engine: str = "kokoro", workers: int = 1) -> Starlett
     async def start(request: Request) -> Response:
         try:
             body = await _body(request)
-            job = runner.submit(str(body.get("kind", "build")), body.get("project"), body.get("options") or {})
+            job = runner.submit(str(body.get("kind", "build")), body.get("project"), body.get("options") or {},
+                                body.get("media"))
         except ProjectError as e:
             return _error(str(e), **({"missing": e.missing} if e.missing else {}))
         except (OptionError, ValueError) as e:
             return _error(str(e))
         return JSONResponse(view(job), status_code=202)
+
+    async def check(request: Request) -> Response:
+        """`narrate check --timing --json` on the project, laid out in a folder of its own for the purpose."""
+        try:
+            body = await _body(request)
+            project = parse_project(body.get("project"))
+            args = check_options(body, engine)
+        except (ProjectError, OptionError, ValueError) as e:
+            return _error(str(e), **({"missing": e.missing} if getattr(e, "missing", None) else {}))
+        folder = store.root / "checks" / secrets.token_hex(8)
+        try:
+            script = lay_out(project, store, folder)
+            outcome = await Child(["check", str(script), "--timing", "--json", *args], cwd=folder).run()
+        except ProjectError as e:
+            return _error(str(e), **({"missing": e.missing} if e.missing else {}))
+        finally:
+            shutil.rmtree(folder, ignore_errors=True)
+        try:
+            report = json.loads(outcome.stdout)
+        except ValueError:
+            return _error("; ".join(e["message"] for e in outcome.errors) or "the check didn't finish", 500)
+        return JSONResponse(report)
+
+    async def voices(request: Request) -> Response:
+        from ..studio.voices import catalogue
+        from ..tts import make_synth
+
+        tts = request.query_params.get("tts", engine)
+        if tts not in ENGINES:
+            return _error(f"tts must be one of {', '.join(ENGINES)}")
+        return JSONResponse(await run_in_threadpool(catalogue, make_synth(tts, planning=True), store.root))
+
+    async def audition(request: Request) -> Response:
+        """A voice heard: an audio job of a one-paragraph script, waited for, since it's short."""
+        from ..studio.voices import sample_script
+
+        try:
+            body = await _body(request)
+            text = sample_script("", str(body.get("voice", "")), str(body.get("text", "")))
+            options = {"format": "wav", **({"tts": body["tts"]} if body.get("tts") else {})}
+            job = runner.submit("audio", {"script": "audition.md", "text": text}, options)
+        except (ProjectError, OptionError, ValueError) as e:
+            return _error(str(e))
+        queue = runner.listen(job["id"])
+        try:
+            deadline = asyncio.get_running_loop().time() + AUDITION_WAIT
+            while (job := store.job(job["id"]))["state"] not in FINAL:
+                left = deadline - asyncio.get_running_loop().time()
+                if left <= 0:
+                    return JSONResponse(view(job), status_code=202)
+                with contextlib.suppress(asyncio.TimeoutError):
+                    await asyncio.wait_for(queue.get(), timeout=left)
+        finally:
+            runner.unlisten(job["id"], queue)
+        return JSONResponse(view(job))
 
     async def listing(request: Request) -> Response:
         try:
@@ -147,6 +220,9 @@ def create_app(root: Path, engine: str = "kokoro", workers: int = 1) -> Starlett
         Route("/v1/openapi.json", document),
         Route("/v1/files/missing", missing, methods=["POST"]),
         Route("/v1/files/{sha256}", upload, methods=["PUT"]),
+        Route("/v1/check", check, methods=["POST"]),
+        Route("/v1/voices", voices),
+        Route("/v1/auditions", audition, methods=["POST"]),
         Route("/v1/jobs", start, methods=["POST"]),
         Route("/v1/jobs", listing, methods=["GET"]),
         Route("/v1/jobs/{id}", one),

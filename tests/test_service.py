@@ -253,7 +253,9 @@ def test_every_option_is_a_flag_the_cli_takes():
 def test_the_openapi_document_describes_the_options(client):
     doc = client.get("/v1/openapi.json").json()
     assert doc["openapi"].startswith("3.1")
-    [build, audio] = doc["components"]["schemas"]["JobRequest"]["oneOf"]
+    requests = {r["title"]: r for r in doc["components"]["schemas"]["JobRequest"]["oneOf"]}
+    build, audio = requests["build"], requests["audio"]
+    assert requests["frames"]["required"] == ["kind", "media"]
     assert set(build["properties"]["options"]["properties"]) == {n for n, o in job_options.OPTIONS.items()
                                                                    if "build" in o.kinds}
     assert audio["properties"]["options"]["properties"]["format"]["enum"] == list(job_options.AUDIO_FORMATS)
