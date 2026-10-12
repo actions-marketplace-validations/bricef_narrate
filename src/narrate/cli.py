@@ -65,6 +65,28 @@ def _output_options(parser: argparse.ArgumentParser) -> None:
                         + " (every mode but none also writes .srt and .vtt)")
     parser.add_argument("--transcript", action="store_true",
                         help="also write what's spoken as plain text, <output>.transcript.txt")
+    _usage_option(parser)
+
+
+def _usage_option(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--usage", metavar="FILE",
+                        help="write what this run spent to FILE, as JSON: speech characters and credits by model, "
+                             "what the cache saved, renders drawn, CPU time")
+
+
+def _write_usage(path: str | None, started: float, synth=None, **more) -> None:
+    """What a run spent (#81), for cost reports: the speech engine's usage, what else it did, and its time,
+    CPU time included (its own and its finished child processes': ffmpeg, Chromium)."""
+    if not path:
+        return
+    import json
+    import resource
+
+    own, children = resource.getrusage(resource.RUSAGE_SELF), resource.getrusage(resource.RUSAGE_CHILDREN)
+    usage = {"speech": synth.usage.report() if hasattr(synth, "usage") else None, **more,
+             "wall_seconds": round(time.monotonic() - started, 3),
+             "cpu_seconds": round(own.ru_utime + own.ru_stime + children.ru_utime + children.ru_stime, 3)}
+    Path(path).write_text(json.dumps(usage, indent=2) + "\n")
 
 
 def parse_scenes(spec: str) -> list[int]:
@@ -105,6 +127,7 @@ def _build(args: argparse.Namespace, path: Path) -> int:
                       subtitles=args.subtitles, transcript=args.transcript)
     result = builder.build(out, workdir=Path(args.keep_work) if args.keep_work else None)
     _report(script, result.notes)
+    _write_usage(args.usage, started, synth, rendered=builder.rendered, video_seconds=round(result.duration, 3))
     extras = ", ".join(str(p) for p in [result.poster, *result.subtitle_files, result.transcript] if p)
     print(f"{result.video} ({result.duration:.1f}s video, built in {time.monotonic() - started:.1f}s); {extras}")
     return 0
@@ -120,6 +143,7 @@ def cmd_audio(args: argparse.Namespace) -> int:
         result = Builder(script, synth, log=log, jobs=args.jobs, subtitles=args.subtitles,
                          transcript=args.transcript).build_audio(out)
         _report(script, result.notes)
+        _write_usage(args.usage, started, synth, audio_seconds=round(result.duration, 3))
         extras = "".join(f", {p}" for p in [*result.subtitle_files, result.transcript] if p)
         print(f"{result.video} ({result.duration:.1f}s audio, built in {time.monotonic() - started:.1f}s){extras}")
     return 0
@@ -244,6 +268,7 @@ def _check(path: Path) -> int:
 def cmd_frames(args: argparse.Namespace) -> int:
     from . import review
 
+    started = time.monotonic()
     video = Path(args.video)
     if not video.is_file():
         print(f"error: {video} not found", file=sys.stderr)
@@ -271,6 +296,7 @@ def cmd_frames(args: argparse.Namespace) -> int:
     for at, label in moments:
         print(f"{review.clock(at):>7}  {label}".rstrip())
     print(out)
+    _write_usage(args.usage, started)
     return 0
 
 
@@ -279,10 +305,18 @@ def cmd_hear(args: argparse.Namespace) -> int:
 
     from . import review
 
+    from . import stt
+
+    started = time.monotonic()
     source = Path(args.media)
     if not source.is_file():
         print(f"error: {source} not found", file=sys.stderr)
         return 2
+
+    def spent() -> None:
+        if args.usage:
+            _write_usage(args.usage, started, speech_to_text={"model": stt.model_name(),
+                                                              "seconds": round(media.probe(source).duration, 3)})
     language = args.language
     if args.script and not language:  # the script's own narration language, if it sets one
         lang = parse_file(Path(args.script)).header.get("narration-language")
@@ -293,12 +327,12 @@ def cmd_hear(args: argparse.Namespace) -> int:
         print("error: narrate hear needs faster-whisper (narrate's speech-to-text); see narrate doctor", file=sys.stderr)
         return 2
     if not args.script:  # just what's heard, with when
-        from . import stt
-
         for phrase in stt.transcribe(source, language):
             print(f"{review.clock(phrase[0][0]):>7}  {' '.join(w for _, _, w in phrase)}")
+        spent()
         return 0
     report = review.compare(review.written_words(Path(args.script)), heard)
+    spent()
     if args.json:
         print(json.dumps(report, indent=2))
         return 0
@@ -335,10 +369,16 @@ def cmd_studio(args: argparse.Namespace) -> int:
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
+    from .service.costs import Prices, PricesError
     from .service.server import serve
     from .service.store import default_root
 
-    serve(Path(args.data) if args.data else default_root(), args.host, args.port, args.tts, args.workers)
+    try:
+        prices = Prices.load(Path(args.prices)) if args.prices else None
+    except PricesError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    serve(Path(args.data) if args.data else default_root(), args.host, args.port, args.tts, args.workers, prices)
     return 0
 
 
@@ -484,6 +524,9 @@ def parser() -> argparse.ArgumentParser:
     serve.add_argument("--workers", type=int, default=1, help="how many jobs run at once (default 1)")
     serve.add_argument("--tts", choices=["auto", "kokoro", "elevenlabs", "silent"], default="kokoro",
                        help="speech engine for jobs that don't name one (default kokoro, which is free)")
+    serve.add_argument("--prices", metavar="FILE",
+                       help="what speech and CPU time cost, to price each job: a YAML file with currency, "
+                            "elevenlabs_per_1000_credits and cpu_per_hour")
     serve.set_defaults(func=cmd_serve)
 
     frames = sub.add_parser("frames", help="a contact sheet of a video's frames, to review it without watching it")
@@ -497,6 +540,7 @@ def parser() -> argparse.ArgumentParser:
     frames.add_argument("--every", type=float, metavar="SECONDS", help="a frame every SECONDS")
     frames.add_argument("--count", type=int, default=12, help="frames spread evenly across the video (default 12)")
     frames.add_argument("--width", type=int, default=480, help="each frame's width in pixels (default 480)")
+    _usage_option(frames)
     frames.set_defaults(func=cmd_frames)
 
     hear = sub.add_parser("hear", help="what speech-to-text hears in a video, and where it differs from the script")
@@ -504,6 +548,7 @@ def parser() -> argparse.ArgumentParser:
     hear.add_argument("--script", help="the script it was built from: report where the narration sounds different")
     hear.add_argument("--language", help="the narration's language, as in en or fr (default: the script's, else detected)")
     hear.add_argument("--json", action="store_true", help="the comparison as JSON, for programs")
+    _usage_option(hear)
     hear.set_defaults(func=cmd_hear)
 
     check = sub.add_parser("check", help="parse a script and check its files, without rendering")

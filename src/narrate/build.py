@@ -218,6 +218,7 @@ class Builder:
         self.script = script
         self.measure_pages = measure_pages  # load HTML scenes to time them (the studio's previews don't)
         self.regenerate = regenerate  # make stored render outputs (render:web) again
+        self.rendered: dict[str, int] = {}  # render blocks drawn afresh by this build, by renderer (#81)
         self.synth = synth
         # Encodes run in a thread pool alongside narration; x264 threads each one too
         self.jobs = max(1, jobs or int(os.environ.get("NARRATE_JOBS", 0)) or min(4, os.cpu_count() or 1))
@@ -553,7 +554,10 @@ class Builder:
                         block.kind = render.renderer(block.render.name).kind
                         ctx = render.Context(s.width, s.height, theme, canvas, frames,
                                              self.script.base_dir, self.regenerate)
+                        kept = render.existing(block.render, ctx) is not None
                         block.path = str(render.output(block, ctx))
+                        if not kept or (self.regenerate and render.renderer(block.render.name).stored):
+                            self.rendered[block.render.name] = self.rendered.get(block.render.name, 0) + 1
                 except (ConfigError, render.RenderError) as e:
                     raise BuildError(str(e), getattr(e, "line", None) or block.line) from None
 

@@ -21,7 +21,8 @@ from starlette.responses import FileResponse, JSONResponse, Response, StreamingR
 from starlette.routing import Route
 
 from ..child import Child
-from . import openapi
+from . import costs, openapi
+from .costs import Prices
 from .jobs import Runner, view
 from .options import ENGINES, OptionError
 from .projects import ProjectError, lay_out
@@ -55,9 +56,9 @@ async def _body(request: Request) -> dict:
     return body
 
 
-def create_app(root: Path, engine: str = "kokoro", workers: int = 1) -> Starlette:
+def create_app(root: Path, engine: str = "kokoro", workers: int = 1, prices: Prices | None = None) -> Starlette:
     store = Store(root)
-    runner = Runner(store, engine, workers)
+    runner = Runner(store, engine, workers, prices)
 
     async def index(request: Request) -> Response:
         return JSONResponse({"service": "narrate", "api": "/v1", "openapi": "/v1/openapi.json",
@@ -156,6 +157,23 @@ def create_app(root: Path, engine: str = "kokoro", workers: int = 1) -> Starlett
             runner.unlisten(job["id"], queue)
         return JSONResponse(view(job))
 
+    async def usage(request: Request) -> Response:
+        """Usage and cost over a period (#81): ?since=2026-10-01&until=2026-10-31&by=day|job&format=json|csv."""
+        q = request.query_params
+        by, form = q.get("by", "day"), q.get("format", "json")
+        if by not in ("day", "job") or form not in ("json", "csv"):
+            return _error("by is day or job, and format json or csv")
+        try:
+            start, end = costs.period(q.get("since"), q.get("until"))
+        except ValueError as e:
+            return _error(str(e))
+        result = costs.report(store.between(start, end), by)
+        if form == "csv":
+            return Response(costs.as_csv(result), media_type="text/csv",
+                            headers={"Content-Disposition": f'attachment; filename="narrate-usage-by-{by}.csv"'})
+        return JSONResponse({"since": q.get("since"), "until": q.get("until"),
+                             "currency": prices.currency if prices else None, **result})
+
     async def listing(request: Request) -> Response:
         try:
             limit = max(1, min(1000, int(request.query_params.get("limit", 50))))
@@ -229,6 +247,7 @@ def create_app(root: Path, engine: str = "kokoro", workers: int = 1) -> Starlett
         Route("/v1/jobs/{id}/events", events),
         Route("/v1/jobs/{id}/cancel", cancel, methods=["POST"]),
         Route("/v1/jobs/{id}/outputs/{name:path}", output),
+        Route("/v1/usage", usage),
     ], lifespan=lifespan)
     app.state.runner = runner
     app.state.store = store
@@ -252,7 +271,8 @@ def server(app: Starlette, host: str, port: int):
     return ServiceServer(uvicorn.Config(app, host=host, port=port, log_level="warning", timeout_graceful_shutdown=2))
 
 
-def serve(root: Path, host: str, port: int, engine: str = "kokoro", workers: int = 1) -> None:
+def serve(root: Path, host: str, port: int, engine: str = "kokoro", workers: int = 1,
+          prices: Prices | None = None) -> None:
     url = f"http://{'127.0.0.1' if host in ('0.0.0.0', '::') else host}:{port}/v1"
     print(f"narrate service at {url}, keeping its data in {root} (Ctrl-C to stop)", flush=True)
-    server(create_app(root, engine, workers), host, port).run()
+    server(create_app(root, engine, workers, prices), host, port).run()

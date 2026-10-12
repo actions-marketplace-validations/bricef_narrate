@@ -135,24 +135,30 @@ While it runs:
 
 ## Costs
 
-A job's usage comes from the CLI itself. `narrate build`, `audio` and `hear`
-gain `--usage FILE`, a JSON report of what the run spent, which is useful
-locally too. The service adds the process's wall and CPU time, then prices it
-all.
+A job's usage comes from the CLI itself (#81). `narrate build`, `audio`,
+`frames` and `hear` take `--usage FILE`, a JSON report of what the run spent,
+which is useful locally too. The service prices it.
 
 ```json
 "usage": {
-  "speech": {"elevenlabs": {"model": "eleven_multilingual_v2", "characters": 1412, "credits": 1412,
-                            "requests": 9, "cached_characters": 380},
-             "kokoro": {"characters": 0, "cached_characters": 0}},
-  "captures": 1, "video_seconds": 83.4, "wall_seconds": 61.2, "cpu_seconds": 402.7,
-  "cost": {"currency": "USD", "speech": 0.4236, "compute": 0.0112, "total": 0.4348,
-           "prices": {"elevenlabs_per_1000_credits": 0.30, "cpu_per_hour": 0.10}}}
+  "speech": {"engine": "elevenlabs",
+             "models": {"eleven_multilingual_v2": {"characters": 1412, "requests": 9, "cached_characters": 380,
+                                                   "credits": 1412.0, "estimated_requests": 0}}},
+  "rendered": {"web": 1}, "video_seconds": 83.4, "wall_seconds": 61.2, "cpu_seconds": 402.7,
+  "cost": {"currency": "USD", "speech": 0.4236, "compute": 0.0056, "total": 0.4292,
+           "prices": {"currency": "USD", "elevenlabs_per_1000_credits": 0.30, "cpu_per_hour": 0.05}}}
 ```
 
-- **Characters and credits:** characters are those actually sent to the
-  engine. Speech served from the cache costs nothing and is counted
-  separately. Credits are what ElevenLabs bills, which depends on the model.
+- **Characters:** those actually sent, in requests that succeeded: the
+  ElevenLabs engine counts them as it sends them, phonetic markup included.
+- **Credits:** as ElevenLabs bills them (its `character-cost` header). Where
+  it doesn't say, they're estimated at the model's rate: half a credit a
+  character for flash and turbo, one for the others.
+  `estimated_requests` counts the estimated ones.
+- **Cached characters:** distinct requests the cache answered. A paragraph
+  said twice in one run is sent once, and isn't counted as saved.
+- **CPU time:** the command's own, and that of its finished child processes
+  (ffmpeg, Chromium).
 - **Prices:** set when starting the service (`--prices prices.yaml`), and
   stored with each job. A later change of price doesn't rewrite what earlier
   jobs cost.

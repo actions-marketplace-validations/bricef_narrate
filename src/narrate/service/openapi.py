@@ -90,6 +90,18 @@ def document() -> dict:
                                       "content": {"text/event-stream": {"schema": {"type": "string"}}}}}}},
             "/v1/jobs/{id}/cancel": {"post": {"summary": "Stop a job", "parameters": [job_id],
                                               "responses": {"200": _json(_ref("Job")), "404": _ERROR}}},
+            "/v1/usage": {"get": {
+                "summary": "Usage and cost over a period, a row per day or per job, with totals",
+                "parameters": [{"name": "since", "in": "query", "schema": {"type": "string", "format": "date"}},
+                               {"name": "until", "in": "query", "schema": {"type": "string", "format": "date"}},
+                               {"name": "by", "in": "query", "schema": {"type": "string", "enum": ["day", "job"],
+                                                                         "default": "day"}},
+                               {"name": "format", "in": "query", "schema": {"type": "string", "enum": ["json", "csv"],
+                                                                             "default": "json"}}],
+                "responses": {"200": {"description": "the report",
+                                      "content": {"application/json": {"schema": {"type": "object"}},
+                                                  "text/csv": {"schema": {"type": "string"}}}},
+                              "400": _ERROR}}},
             "/v1/jobs/{id}/outputs/{name}": {"get": {
                 "summary": "One of a job's outputs, by the name in its address",
                 "parameters": [job_id, {"name": "name", "in": "path", "required": True, "schema": {"type": "string"}}],
@@ -149,6 +161,8 @@ def document() -> dict:
                 "errors": {"type": "array", "items": {"type": "object", "properties": {
                     "line": {"type": ["integer", "null"]}, "message": {"type": "string"}}}},
                 "summary": {"type": "string"},
-                "usage": {"type": ["object", "null"]}}},
+                "usage": {"type": ["object", "null"], "description": "what the job spent, as its command reported "
+                          "it (speech characters and credits by model, cached characters, renders, CPU and wall "
+                          "seconds), and `cost` at the service's prices, with those prices"}}},
         }},
     }
