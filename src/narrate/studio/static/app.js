@@ -413,11 +413,14 @@ function App() {
 
   const cancelBuild = useCallback(() => getJSON("/api/build/cancel", { method: "POST" }), []);
 
-  /** Render scene `index` with the real builder (#61); like a build, from the saved file. */
-  const renderScene = useCallback(async (index) => {
+  /** Render scene `index` with the real builder (#61); like a build, from the saved file. With `regenerate`,
+      its web captures are taken again (#77). */
+  const renderScene = useCallback(async (index, regenerate = false) => {
     if (dirtyRef.current && !(await save(false))) return;
     setTab("scene");
-    const { status, body } = await getJSON(`/api/scenes/${index}/render`, { method: "POST" });
+    const { status, body } = await getJSON(`/api/scenes/${index}/render`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ regenerate }),
+    });
     if (status !== 200 && status !== 202) setError(body.error || `can't render scene ${index} (${status})`);
     else setSceneRender(body);
   }, [save]);
@@ -508,7 +511,11 @@ function App() {
       setBuild(status);
       if (status.state === "done") setTab("video");
     });
-    events.addEventListener("scene-build", (e) => setSceneRender(JSON.parse(e.data)));
+    events.addEventListener("scene-build", (e) => {
+      const status = JSON.parse(e.data);
+      setSceneRender(status);
+      if (status.state === "done" && status.regenerate) scheduleAnalysis();  // a new capture to show (#77)
+    });
     events.addEventListener("voices-changed", () => { setVoicesChanged((n) => n + 1); scheduleAnalysis(); });
     events.addEventListener("script-changed", (e) => {
       const changed = JSON.parse(e.data);
@@ -675,7 +682,9 @@ function App() {
           <p class="row"><span class="muted small">Mark the word at the cursor, so an HTML scene or overlay can time
             something to it (<code>--cue-NAME</code>).</span>
           <button onClick=${addMark} disabled=${editing || awaitingAnalysis} title="Alt-M in the editor">Add mark</button></p></section>`}
-        <${Inspector} analysis=${analysis} line=${cursorLine} onEdit=${editBlock} busy=${editing || awaitingAnalysis} />
+        <${Inspector} analysis=${analysis} line=${cursorLine} onEdit=${editBlock} busy=${editing || awaitingAnalysis}
+          onRetake=${(line) => renderScene(sceneAt(analysis, line), true)}
+          retaking=${sceneRender && (sceneRender.state === "running" || sceneRender.state === "starting")} />
         <${CalloutInspector} callout=${cursorCallout} busy=${editing || awaitingAnalysis}
           onChange=${(changes) => requestEdit({ op: "callout", line: cursorCallout.line, set: changes })}
           onDelete=${() => requestEdit({ op: "delete", line: cursorCallout.line })} />

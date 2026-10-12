@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
+import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -18,7 +19,7 @@ from typing import Any
 
 import numpy as np
 
-from .. import media, motion, render
+from .. import media, motion, render, web
 from ..build import SR, Builder, BuildError, ScenePlan, merge_groups
 from ..config import ConfigError, Settings, parse_overlay
 from ..script import ANIMATED_SIZES, SIZES, Directive, Media, Narration, Render, Scene, ScriptError, Slide, parse
@@ -170,7 +171,27 @@ def _media_entry(line: int, kind: str, block: Media, options: dict, base: Path, 
             entry["size"], entry["length"] = [info.width, info.height], round(info.duration, 3)
         except Exception:  # noqa: BLE001 - an unreadable clip is reported by the planner
             pass
+    elif kind == "render" and block.render:
+        entry["capture"] = _capture(block.render, base, settings)
     return entry
+
+
+def _capture(block: Render, base: Path, settings: Settings) -> dict | None:
+    """A stored render's capture (render:web, #77): the page it's of, whether one is kept in the project,
+    and when it was taken (its sidecar); None for render blocks drawn afresh."""
+    try:
+        if not render.renderer(block.name).stored:
+            return None
+        stored = render.existing(block, render.Context(settings.width, settings.height, "default", None, project=base))
+    except render.RenderError:
+        return None
+    made = None
+    if stored is not None:
+        try:
+            made = json.loads(stored.with_suffix(".json").read_text()).get("made")
+        except (OSError, ValueError):
+            pass
+    return {"url": web.url_of(block) if block.name == "web" else None, "stored": stored is not None, "made": made}
 
 
 def _callouts(scene: Scene) -> list[dict]:

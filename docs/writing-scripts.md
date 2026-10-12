@@ -474,7 +474,8 @@ https://example.com
   script, in `.narrate/generated/web/`, with a note of the URL and when it was
   taken.
   - Later builds reuse the capture, offline too.
-  - `narrate build --regenerate` takes it again.
+  - `narrate build --regenerate` takes it again, as does **Retake capture**
+    in the studio, for one block's scene.
   - Commit the folder to keep the video stable.
   - A ZIP project is unpacked afresh each time, so its pages are captured on
     every build.
