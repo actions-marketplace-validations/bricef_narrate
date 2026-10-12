@@ -543,8 +543,8 @@ narakeet-api-client --repository-type github --repository owner/repo --source vi
 
 ## Serve narrate over HTTP
 
-`narrate serve` offers narrate's builds over HTTP, so your own programs
-(agents, CI jobs, other services) can make videos by calling it.
+`narrate serve` offers narrate over HTTP, so your own programs (agents, CI
+jobs, other services) can check, build and review videos by calling it.
 
 ```sh
 narrate serve                                    # http://127.0.0.1:8788/v1
@@ -586,7 +586,10 @@ curl -sO $api/jobs/j_19a…/outputs/intro.mp4
 | --- | --- |
 | `POST /v1/files/missing` | `{hashes}`: which of these files to upload |
 | `PUT /v1/files/{sha256}` | upload one; refused if its content doesn't match |
-| `POST /v1/jobs` | start a job: `{kind, project, options}` |
+| `POST /v1/check` | `{project, tts}`: `narrate check --timing --json`, answered at once: problems with their lines, scene times, and what the engine would be sent |
+| `GET /v1/voices` | every voice, with what it becomes on an engine (`?tts=elevenlabs`) |
+| `POST /v1/auditions` | `{voice, text, tts}`: a short sample as a script would read it; an audio job, answered when it's done |
+| `POST /v1/jobs` | start a job: `{kind, project, options}`, or `{kind, media, options}` to review |
 | `GET /v1/jobs` | recent jobs, newest first (`?state=running`, `?limit=`) |
 | `GET /v1/jobs/{id}` | a job: state, progress, outputs, notes, errors |
 | `GET /v1/jobs/{id}/events` | the job as it changes (server-sent events), ending with it |
@@ -594,18 +597,31 @@ curl -sO $api/jobs/j_19a…/outputs/intro.mp4
 | `GET /v1/jobs/{id}/outputs/{name}` | an output file |
 | `GET /v1/openapi.json` | all of it, as OpenAPI |
 
-- **Kinds:** `build` makes a video, `audio` the narration alone.
+- **Kinds:**
+  - `build` makes a video, and `audio` the narration alone.
+  - `frames` makes a contact sheet ([Review a video](#review-a-video-without-watching-it)).
+  - `hear` reports what speech-to-text hears, and where it differs from the
+    script.
+- **What to review:** a review job's `media` is a finished job's output,
+  `{"job": "j_…"}`, which brings the job's script and engine. Or it's an
+  uploaded file, `{"file": sha256, "name": "talk.mp4"}`, with a `project` to
+  compare it with.
 - **Projects:** files by hash (`{"script": "intro.md", "files": {path: sha256}}`),
   a script sent as `text`, with or without files, or an uploaded ZIP
   (`{"zip": sha256}`, with `"source"` if it holds more than one script).
-- **Options:** those of `narrate build` and `narrate audio`: `tts`,
-  `tts_model`, `scenes`, `subtitles`, `transcript`, `regenerate`; and
-  `format` for audio (`mp3`, `m4a`, `ogg`, `opus`, `flac`, `wav`).
+- **Options:** those of the matching command.
+  - `build` and `audio`: `tts`, `tts_model`, `subtitles` and `transcript`.
+  - `build` only: `scenes` and `regenerate`.
+  - `audio` only: `format` (`mp3`, `m4a`, `ogg`, `opus`, `flac` or `wav`).
+  - `frames`: `at`, `every`, `count`, `width`, `tts` and `tts_model`.
+  - `hear`: `language`.
+
+  A job records the engine it used.
 - **States:** `queued`, `running`, `done`, `failed` (with `errors`, giving
   script lines where they're known) and `cancelled`. Restarting the service
   fails the jobs that were running, and runs those queued.
 - **Outputs:** by name, `video` (or `audio`), `poster`, `srt`, `vtt` and
-  `transcript`. Any `render:web` capture taken is also an output, under
+  `transcript`, or a review's `sheet` (PNG) or `report` (JSON). Any `render:web` capture taken is also an output, under
   `captures`, by its path in the project, so you can keep it there for later
   builds.
 

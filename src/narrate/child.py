@@ -22,11 +22,12 @@ ERROR = re.compile(r"^error: .*?:(\d+): (.*)$")
 
 @dataclass
 class Outcome:
-    """How a run ended: its exit code (None if it never started), the summary it printed, and the notes and
-    errors it reported (errors with their script lines where it gave them)."""
+    """How a run ended: its exit code (None if it never started), what it printed (all of it, and its last line
+    as the summary), and the notes and errors it reported (errors with their script lines where it gave them)."""
 
     code: int | None
     summary: str = ""
+    stdout: str = ""
     notes: list[str] = field(default_factory=list)
     errors: list[dict] = field(default_factory=list)
     cancelled: bool = False
@@ -57,6 +58,7 @@ class Child:
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             if self.cancelled:  # cancelled while the process was starting
                 self.process.terminate()
+            printed = asyncio.create_task(self.process.stdout.read())  # read alongside, so a full pipe can't stall it
             async for raw in self.process.stderr:
                 line = raw.decode(errors="replace").strip()
                 if not line:
@@ -73,13 +75,13 @@ class Child:
                     errors.append({"line": int(m.group(1)), "message": m.group(2)})
                 elif line.startswith(("error: ", "setup problem: ")):
                     errors.append({"line": None, "message": line.split(": ", 1)[1]})
-            summary = (await self.process.stdout.read()).decode(errors="replace").strip()
+            summary = (await printed).decode(errors="replace").strip()
             code = await self.process.wait()
         except Exception as e:  # noqa: BLE001 - reported like a failed run
             return Outcome(None, notes=notes, errors=[{"line": None, "message": f"couldn't run narrate: {e}"}])
         if code and not errors:
             errors = [{"line": None, "message": "\n".join(tail) or f"narrate stopped ({code})"}]
-        return Outcome(code, summary.splitlines()[-1] if summary else "", notes, errors, self.cancelled)
+        return Outcome(code, summary.splitlines()[-1] if summary else "", summary, notes, errors, self.cancelled)
 
     def cancel(self) -> None:
         # Recorded even before the process exists: run() stops it as soon as it does

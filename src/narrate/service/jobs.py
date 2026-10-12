@@ -1,29 +1,33 @@
-"""Running the service's jobs (#79): the CLI in a child process per job, a few at a time.
+"""Running the service's jobs (#79, #80): the CLI in a child process per job, a few at a time.
 
-A job is laid out in its folder (projects.lay_out), run as `narrate build` or
-`narrate audio` (child.Child, as the studio's builds are), and its outputs
-collected: the video or audio, poster, subtitle files, transcript, and any web
-captures taken. Every change is saved to the job's record and announced to
+A job is laid out in its folder (projects.lay_out), run as `narrate build`,
+`audio`, `frames` or `hear` (child.Child, as the studio's builds are), and its
+outputs collected: the video or audio, poster, subtitle files, transcript, any
+web captures taken, a contact sheet, or what `hear` found. Every change is saved to the job's record and announced to
 whoever follows its events.
 """
 
 from __future__ import annotations
 
 import asyncio
+import os
+import re
+import shutil
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
+from .. import project as zips
 from ..child import Child
 from . import options as job_options
 from .projects import ProjectError, lay_out
 from .projects import parse as parse_project
-from .store import FINAL, Store
+from .store import FINAL, Store, is_sha256
 
 # An output's name, by what its file ends in
 _OUTPUTS = ((".transcript.txt", "transcript"), (".mp4", "video"), (".jpg", "poster"), (".srt", "srt"), (".vtt", "vtt"),
-            *((f".{fmt}", "audio") for fmt in job_options.AUDIO_FORMATS))
+            ("frames.png", "sheet"), ("hear.json", "report"), *((f".{fmt}", "audio") for fmt in job_options.AUDIO_FORMATS))
 GENERATED = ".narrate/generated"
 
 
@@ -74,16 +78,48 @@ class Runner:
 
     # -- jobs -----------------------------------------------------------------------------------
 
-    def submit(self, kind: str, project: dict, options: dict) -> dict:
-        """A new job, queued. Raises OptionError or ProjectError (with what to upload) if it can't run."""
+    def submit(self, kind: str, project: dict | None, options: dict, media: dict | None = None) -> dict:
+        """A new job, queued. Raises OptionError or ProjectError (with what to upload) if it can't run.
+
+        A build or audio job makes something from `project`. A frames or hear job looks at, or listens to,
+        `media`: what an earlier job made ({"job": id}, which brings its script and engine), or an uploaded
+        file ({"file": sha256, "name": "talk.mp4"}); a `project` gives it a script to compare with."""
         checked = job_options.check(kind, options)
-        parsed = parse_project(project)
-        missing = self.store.missing(parsed.hashes())
-        if missing:
-            raise ProjectError(f"upload these files first: {', '.join(missing)}", missing)
-        job = self.store.new_job(kind, {"project": project, "options": checked})
+        request: dict = {"options": checked}
+        if kind in job_options.RENDERS:
+            checked.setdefault("tts", self.engine)  # the engine it ran with, on record
+        else:
+            request["media"] = self._media(media)
+        if project is not None or kind in job_options.RENDERS:
+            parsed = parse_project(project)
+            missing = self.store.missing(parsed.hashes())
+            if missing:
+                raise ProjectError(f"upload these files first: {', '.join(missing)}", missing)
+            request["project"] = project
+        job = self.store.new_job(kind, request)
         self.queue.put_nowait(job["id"])
         return job
+
+    def _media(self, media) -> dict:
+        """What a review job looks at, checked: a finished job's video or audio, or an uploaded file."""
+        if not isinstance(media, dict):
+            raise ProjectError('media must be {"job": id} or {"file": sha256, "name": …}')
+        if "job" in media:
+            source = self.store.job(str(media["job"]))
+            if source is None or source["kind"] not in job_options.RENDERS:
+                raise ProjectError(f"no build or audio job {media['job']!r}")
+            if source["state"] != "done":
+                raise ProjectError(f"job {source['id']} is {source['state']}: it has nothing to look at yet")
+            return {"job": source["id"]}
+        digest, name = media.get("file"), media.get("name") or "media"
+        if not isinstance(digest, str) or not is_sha256(digest):
+            raise ProjectError("media file must be the SHA-256 of an uploaded file")
+        if not isinstance(name, str) or not re.fullmatch(r"[\w][\w .-]*", name):
+            raise ProjectError(f"media name must be a plain file name, not {name!r}")
+        missing = self.store.missing([digest])
+        if missing:
+            raise ProjectError(f"upload these files first: {', '.join(missing)}", missing)
+        return {"file": digest, "name": name}
 
     def cancel(self, job_id: str) -> dict | None:
         job = self.store.job(job_id)
@@ -117,30 +153,28 @@ class Runner:
                 await self._run(job)
 
     async def _run(self, job: dict) -> None:
-        job_id, kind = job["id"], job["kind"]
-        options = dict(job["request"]["options"])
+        job_id = job["id"]
         folder = self.store.folder(job_id)
         self._set(job_id, state="running", started=time.time(),
                   progress={"scene": 0, "of": None, "message": "starting"})
+        out = folder / "out"
+        out.mkdir(parents=True, exist_ok=True)
         try:
-            project = parse_project(job["request"]["project"])
-            target = lay_out(project, self.store, folder / "project")
+            args, output, printed = self._plan(job, folder, out)
         except ProjectError as e:
             self._set(job_id, state="failed", finished=time.time(), errors=[{"line": None, "message": str(e)}])
             return
-        out = folder / "out"
-        out.mkdir(parents=True, exist_ok=True)
-        output = out / f"{target.stem}.{'mp4' if kind == 'build' else options.pop('format', 'mp3')}"
-        args = [kind, str(target), "-o", str(output), "--tts", options.pop("tts", self.engine),
-                *job_options.arguments(kind, options)]
         captures = folder / "project" / GENERATED
         before = _versions(captures)
-        child = Child(args, cwd=folder / "project", on_progress=lambda p: self._set(job_id, progress=p))
+        cwd = folder / "project" if (folder / "project").is_dir() else folder
+        child = Child(args, cwd=cwd, on_progress=lambda p: self._set(job_id, progress=p))
         self.children[job_id] = child
         try:
             outcome = await child.run()
         finally:
             self.children.pop(job_id, None)
+        if printed and outcome.code == 0:
+            output.write_text(outcome.stdout + "\n", encoding="utf-8")
         outputs = self._outputs(job_id, out, captures, before)
         if outcome.cancelled:
             state = "cancelled"
@@ -150,6 +184,48 @@ class Runner:
             state = "failed"
         self._set(job_id, state=state, finished=time.time(), outputs=outputs, notes=outcome.notes,
                   errors=[] if state == "done" else outcome.errors, summary=outcome.summary)
+
+    def _plan(self, job: dict, folder: Path, out: Path) -> tuple[list[str], Path, bool]:
+        """A job's command line, the output that says it worked, and whether that output is what the command
+        prints (hear's report) rather than a file it writes."""
+        kind, request = job["kind"], job["request"]
+        options = dict(request["options"])
+        script = lay_out(parse_project(request["project"]), self.store, folder / "project") \
+            if request.get("project") is not None else None
+        if kind in job_options.RENDERS:
+            output = out / f"{script.stem}.{'mp4' if kind == 'build' else options.pop('format', 'mp3')}"
+            return ([kind, str(script), "-o", str(output), "--tts", options.pop("tts", self.engine),
+                     *job_options.arguments(kind, options)], output, False)
+        media, source_script, source_tts = self._media_path(request["media"], folder)
+        script = script or source_script
+        with_script = ["--script", str(script)] if script else []
+        if kind == "frames":
+            output = out / "frames.png"
+            engine = ["--tts", options.pop("tts", source_tts)] if script and (options.get("tts") or source_tts) else []
+            return (["frames", str(media), "-o", str(output), *with_script, *engine,
+                     *job_options.arguments(kind, options)], output, False)
+        return (["hear", str(media), "--json", *with_script, *job_options.arguments(kind, options)],
+                out / "hear.json", True)
+
+    def _media_path(self, media: dict, folder: Path) -> tuple[Path, Path | None, str | None]:
+        """The file a review job looks at; with an earlier job's, the script it was made from and its engine."""
+        if "file" in media:
+            target = folder / "media" / media["name"]
+            target.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                os.link(self.store.file(media["file"]), target)
+            except OSError:
+                shutil.copyfile(self.store.file(media["file"]), target)
+            return target, None, None
+        source = self.store.job(media["job"])
+        made = source["outputs"].get("video") or source["outputs"].get("audio")
+        path = self.output(source["id"], unquote(made.rsplit("/outputs/", 1)[1])) if made else None
+        if path is None:
+            raise ProjectError(f"job {source['id']} kept no video or audio")
+        project = self.store.folder(source["id"]) / "project"
+        written = source["request"]["project"].get("script")
+        script = project / written if written else zips.find_script(project)
+        return path, script if script.is_file() else None, source["request"]["options"].get("tts")
 
     def _outputs(self, job_id: str, out: Path, captures: Path, before: dict[str, tuple]) -> dict:
         """The job's outputs, by name, as addresses: the files it wrote, and the web captures it took (by

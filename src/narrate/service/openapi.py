@@ -53,8 +53,27 @@ def document() -> dict:
                                                                                     "format": "binary"}}}},
                 "responses": {"201": {"description": "kept"}, "200": {"description": "already kept"},
                               "400": _ERROR}}},
+            "/v1/check": {"post": {
+                "summary": "Check a project: problems with their lines, scenes with times, what speech would cost",
+                "requestBody": {"content": {"application/json": {"schema": {
+                    "type": "object", "required": ["project"],
+                    "properties": {"project": _ref("Project"), "tts": {"type": "string", "enum": list(options.ENGINES)},
+                                   "tts_model": {"type": "string"}}}}}},
+                "responses": {"200": _json(_ref("Check")), "400": _ERROR}}},
+            "/v1/voices": {"get": {
+                "summary": "Every voice, grouped, with what each becomes on an engine",
+                "parameters": [{"name": "tts", "in": "query", "schema": {"type": "string", "enum": list(options.ENGINES)}}],
+                "responses": {"200": _json({"type": "object"})}}},
+            "/v1/auditions": {"post": {
+                "summary": "Hear a voice: a short sample, read as a script would read it (an audio job)",
+                "requestBody": {"content": {"application/json": {"schema": {
+                    "type": "object", "required": ["voice"],
+                    "properties": {"voice": {"type": "string"}, "text": {"type": "string"},
+                                   "tts": {"type": "string", "enum": list(options.ENGINES)}}}}}},
+                "responses": {"200": _json(_ref("Job"), "done: its audio is an output"),
+                              "202": _json(_ref("Job"), "still running"), "400": _ERROR}}},
             "/v1/jobs": {
-                "post": {"summary": "Start a job: build a video, or the narration alone",
+                "post": {"summary": "Start a job: build a video or narration, or review one (frames, hear)",
                          "requestBody": {"content": {"application/json": {"schema": _ref("JobRequest")}}},
                          "responses": {"202": _json(_ref("Job"), "queued"), "400": _ERROR}},
                 "get": {"summary": "Recent jobs, newest first",
@@ -92,9 +111,28 @@ def document() -> dict:
                  "properties": {"zip": sha, "source": {"type": "string",
                                                        "description": "the script inside it, if it has several"}}}]},
             "JobRequest": {"oneOf": [
-                {"type": "object", "required": ["kind", "project"],
-                 "properties": {"kind": {"const": kind}, "project": _ref("Project"), "options": options.schema(kind)}}
-                for kind in options.KINDS]},
+                *({"type": "object", "required": ["kind", "project"], "title": kind,
+                   "properties": {"kind": {"const": kind}, "project": _ref("Project"), "options": options.schema(kind)}}
+                  for kind in options.RENDERS),
+                *({"type": "object", "required": ["kind", "media"], "title": kind,
+                   "properties": {"kind": {"const": kind}, "media": _ref("Media"),
+                                  "project": {**_ref("Project"), "description": "a script to compare with, if "
+                                                                                "media isn't a job's"},
+                                  "options": options.schema(kind)}}
+                  for kind in options.REVIEWS)]},
+            "Media": {"oneOf": [
+                {"type": "object", "required": ["job"], "description": "what a finished build or audio job made; "
+                                                                       "its script and engine come with it",
+                 "properties": {"job": {"type": "string"}}},
+                {"type": "object", "required": ["file"], "description": "an uploaded video or audio file",
+                 "properties": {"file": sha, "name": {"type": "string"}}}]},
+            "Check": {"type": "object", "description": "what `narrate check --timing --json` reports",
+                      "properties": {"problems": {"type": "array", "items": {"type": "object"}},
+                                     "scenes": {"type": "array", "items": {"type": "object"}},
+                                     "duration": {"type": ["number", "null"]},
+                                     "missing": {"type": ["object", "null"],
+                                                 "description": "paragraphs and characters the engine would be sent"},
+                                     "engine": {"type": "string"}}},
             "Job": {"type": "object", "properties": {
                 "id": {"type": "string"}, "kind": {"type": "string", "enum": list(options.KINDS)},
                 "state": _ref("State"),
