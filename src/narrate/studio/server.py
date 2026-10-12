@@ -324,18 +324,27 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
         index = int(request.path_params["index"])
         if session.scene_build is not None and session.scene_build.running:
             return JSONResponse({"error": "a scene is already being rendered"}, status_code=409)
+        try:
+            options = await request.json()
+        except ValueError:
+            options = {}
+        # Retaking its web captures (#77): the scene's render blocks are made again, not reused
+        regenerate = isinstance(options, dict) and bool(options.get("regenerate"))
         # The file on disk, as for a build: the page saves first
         key = fingerprint(session.script, session.read()["text"], session.engine, index)
         out = session.scratch / f"scene-{index}-{key}.mp4"
-        run = BuildRun(session, out=out, args=["--scenes", str(index)], event="scene-build", label={"scene": index})
+        run = BuildRun(session, out=out, args=["--scenes", str(index), *(["--regenerate"] if regenerate else [])],
+                       event="scene-build", label={"scene": index, "regenerate": regenerate})
         session.scene_build = run
-        if key in session.scene_renders and out.exists():  # rendered already: the same text, engine and files
+        if not regenerate and key in session.scene_renders and out.exists():  # the same text, engine and files
             run.done(*session.scene_renders[key])
             return JSONResponse(run.status)
 
         async def render() -> None:
             await run.run()
             if run.status["state"] == "done":
+                if regenerate:  # the captures changed, so renders that show them are out of date
+                    session.scene_renders.clear()
                 session.scene_renders[key] = (run.status["summary"], run.status["notes"])
 
         app.state.scene_task = asyncio.create_task(render())

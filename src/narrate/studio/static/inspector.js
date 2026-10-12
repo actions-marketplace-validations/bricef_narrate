@@ -182,8 +182,15 @@ function Framing({ entry, frame, moving, onSet, busy }) {
   </div>`;
 }
 
-/** Controls for the media block on `line`; `onEdit(line, changes)` asks for the edit. */
-export function Inspector({ analysis, line, onEdit, busy }) {
+/** When a stored capture was taken, said plainly. */
+function taken(made) {
+  if (!made) return "taken (when isn't recorded)";
+  return `taken ${new Date(made).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}`;
+}
+
+/** Controls for the media block on `line`; `onEdit(line, changes)` asks for the edit, `onRetake(line)` takes a
+    render:web capture again (#77), `retaking` while a scene render runs. */
+export function Inspector({ analysis, line, onEdit, onRetake, retaking, busy }) {
   const entry = analysis && analysis.media && analysis.media[String(line)];
   const [zoomDraft, setZoomDraft] = useState(null);
   const [segment, setSegment] = useState(["", ""]);
@@ -288,6 +295,14 @@ export function Inspector({ analysis, line, onEdit, busy }) {
         <label class="small"><input type="checkbox" checked=${volume === 0} disabled=${busy}
           onChange=${(e) => set({ volume: e.target.checked ? "mute" : null })} /> mute</label>
       </div>`}
+    ${entry.capture && html`<div class="row capture" data-testid="capture">
+      <span class="label">Capture</span>
+      <span class="small">${entry.capture.stored ? taken(entry.capture.made) : "not taken yet"}${entry.capture.url
+        && html` from <a href=${entry.capture.url} target="_blank" rel="noreferrer">${entry.capture.url}</a>`}</span>
+      <button disabled=${busy || retaking} onClick=${() => onRetake(entry.line)}
+        title="capture the page again, with the scene's render, and keep the new capture">
+        ${entry.capture.stored ? "Retake capture" : "Capture now"}</button>
+    </div>`}
     ${room.x || room.y ? html`<p class="hint">Drag the preview to move the picture ${room.x && room.y ? "" : room.x ? "sideways" : "up or down"}.</p>` : ""}
   </section>`;
 }

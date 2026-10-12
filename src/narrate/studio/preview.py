@@ -42,7 +42,10 @@ class Files:
     def url(self, path: Path) -> str:
         path = path.resolve()
         if path.is_relative_to(self.project) and not path.is_relative_to(self.scratch):
-            return "/files/" + quote(path.relative_to(self.project).as_posix())
+            url = "/files/" + quote(path.relative_to(self.project).as_posix())
+            if path.is_relative_to(self.project / ".narrate" / "generated"):
+                url += f"?v={path.stat().st_mtime_ns}"  # replaced in place when retaken (#77): show the new one
+            return url
         if not path.is_relative_to(self.scratch):  # a render cache file, outside the project
             copy = self.scratch / f"{hashlib.sha256(str(path).encode()).hexdigest()[:16]}{path.suffix}"
             if not copy.exists():

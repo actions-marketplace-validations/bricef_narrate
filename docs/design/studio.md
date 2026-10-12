@@ -277,7 +277,7 @@ capture where a build would. No new command or code path is needed.
 | `POST /api/build` | start a build; progress over the event stream |
 | `GET /api/build` | the latest build's state |
 | `POST /api/build/cancel` | stop the running build |
-| `POST /api/scenes/{n}/render` | render scene n into scratch (`narrate build --scenes n`), or reuse an unchanged render |
+| `POST /api/scenes/{n}/render` | render scene n into scratch (`narrate build --scenes n`), or reuse an unchanged render; `{regenerate: true}` takes its web captures again (D16) |
 | `GET /api/scenes/render` | the latest scene render's state |
 | `POST /api/scenes/render/cancel` | stop the scene render |
 | `GET /api/events` | the event stream (SSE) |
