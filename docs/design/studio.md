@@ -216,6 +216,12 @@ Each overlay (#59) is a transparent page over the frame, in the build's order
 (the scene's, then the video's). Each runs on its own clock (the scene's or
 the video's) with D12's runtime, so the preview shows what a build lays on
 top.
+- **The video's clock:** a video overlay's address is the same in every
+  scene, so its page runs on across cuts instead of reloading. Scenes start
+  on whole frames, as a build counts them.
+- **Transparency:** each overlay iframe declares the light colour scheme
+  its page has by default. Otherwise a browser showing the studio in dark
+  mode paints the page opaque, because the schemes differ.
 
 ### D14. Marks are placed by an edit
 

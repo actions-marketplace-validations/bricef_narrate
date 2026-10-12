@@ -5,7 +5,8 @@ Composed from the analysis's own scene plan, by the HTML a build uses
 file:// (design D9). A clip shows a still from that moment, a pan or zoom
 the crop it has reached, and an HTML scene the page itself, on a clock the
 studio moves (#73, D12). A render block shows the output a build already
-made, or a card until then.
+made, or a card until then. Overlays go over the frame as pages of their
+own (#74, D13).
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ from PIL import Image
 
 from .. import media, motion, pages, render
 from ..build import FPS, ScenePlan, Visual, allocate_frames
-from ..config import Settings
+from ..config import OverlaySpec, Settings
 from ..frames import frame_html
 
 
@@ -126,11 +127,59 @@ def page_html(source: str, narrate: dict) -> str:
     return head + source
 
 
-def frame(plan: ScenePlan, t: float, settings: Settings, files: Files) -> dict:
-    """{"kind": "frame", "html": …} composed at `t` seconds into the scene, or {"kind": "page", "url": …}
-    for an HTML scene (_page)."""
+def _timeline(plans: dict[int, ScenePlan]) -> dict[int, tuple[int, int]]:
+    """Each scene's first frame in the whole video, and how many frames it has, counted as a build counts them."""
+    placed, at = {}, 0
+    for index in sorted(plans):
+        count = max(1, int(round(at + plans[index].duration * FPS)) - at)
+        placed[index], at = (at, count), at + count
+    return placed
+
+
+def _overlay(spec: OverlaySpec, narrate: dict, start: float, t: float, settings: Settings, files: Files) -> dict | None:
+    """An overlay page (#59) to lay over the frame: like an HTML scene (_page), on a clock `start` seconds
+    behind the scene's, laid out at its viewport and centred as a build lays it (build._capture_overlay)."""
+    path = files.project / spec.file
+    url = files.page(path, narrate) if path.is_file() else None
+    if url is None:  # missing (the analysis says so), or outside the project
+        return None
     w, h = settings.width, settings.height
+    vw, vh = spec.viewport or (w, h)
+    scale = min(w / vw, h / vh)
+    return {"url": url, "start": round(start, 4), "time": round(max(0.0, t - start), 4), "size": [vw, vh],
+            "box": {"left": float((w - round(vw * scale)) // 2), "top": float((h - round(vh * scale)) // 2),
+                    "scale_x": scale, "scale_y": scale}}
+
+
+def _overlays(plan: ScenePlan, t: float, settings: Settings, files: Files, plans: dict[int, ScenePlan]) -> list[dict]:
+    """The overlays over the scene at `t`, in the order a build lays them: the scene's own, on its clock
+    with its cues, then the video's that cover it, on the whole video's clock with each scene's start."""
+    placed = _timeline(plans)
+    first, count = placed.get(plan.index, (0, max(1, round(plan.duration * FPS))))
+    shown = [_overlay(spec, {"duration": round(count / FPS, 4), "params": spec.params,
+                             "cues": {k: round(c, 4) for k, c in plan.marks.items()}}, 0.0, t, settings, files)
+             for spec in plan.overlays]
+    if not plan.hide_overlays:
+        end = max(a + n for a, n in placed.values()) if placed else count
+        scenes = [{"index": i, "start": round(a / FPS, 4), "duration": round(n / FPS, 4)} for i, (a, n) in placed.items()]
+        shown += [_overlay(spec, {"duration": round(end / FPS, 4), "cues": {}, "params": spec.params, "scenes": scenes},
+                           -first / FPS, t, settings, files)
+                  for spec in settings.overlays if spec.scenes is None or spec.scenes[0] <= plan.index <= spec.scenes[1]]
+    return [o for o in shown if o is not None]
+
+
+def frame(plan: ScenePlan, t: float, settings: Settings, files: Files, plans: dict[int, ScenePlan] | None = None) -> dict:
+    """What's on screen `t` seconds into the scene: {"kind": "frame", "html": …} composed as a build composes
+    it, or {"kind": "page", "url": …} for an HTML scene (_page); with the overlays to lay over it (#74).
+    `plans`, every scene's, place the scene in the whole video for the video's overlays."""
     t = max(0.0, min(t, plan.duration - 1 / FPS))
+    shown = _picture(plan, t, settings, files)
+    shown["overlays"] = _overlays(plan, t, settings, files, plans or {plan.index: plan})
+    return shown
+
+
+def _picture(plan: ScenePlan, t: float, settings: Settings, files: Files) -> dict:
+    w, h = settings.width, settings.height
     spec = plan.spec
     if plan.slides:
         share = plan.duration / len(plan.slides)
