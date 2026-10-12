@@ -44,24 +44,28 @@ def find_script(root: Path) -> Path:
     raise ProjectError(f"choose the script with --source (candidates: {names})")
 
 
-@contextmanager
-def unpacked(archive_path: Path, source: str | None = None):
-    """Extract a project archive to a temporary directory; yield the main script's path."""
+def extract(archive_path: Path, folder: Path, source: str | None = None) -> Path:
+    """Extract a project archive into `folder`; the main script's path (`source`, or the only script)."""
     try:
         archive = zipfile.ZipFile(archive_path)
     except (zipfile.BadZipFile, OSError) as e:
         raise ProjectError(f"cannot open {archive_path}: {e}") from None
+    with archive:
+        for info in _safe_members(archive):
+            archive.extract(info, folder)
+    if source:
+        script = (folder / source).resolve()
+        if folder.resolve() not in script.parents or not script.is_file():
+            raise ProjectError(f"{source} is not in the archive")
+        return script
+    return find_script(folder)
+
+
+@contextmanager
+def unpacked(archive_path: Path, source: str | None = None):
+    """Extract a project archive to a temporary directory; yield the main script's path."""
     workdir = Path(tempfile.mkdtemp(prefix="narrate-project-"))
     try:
-        with archive:
-            for info in _safe_members(archive):
-                archive.extract(info, workdir)
-        if source:
-            script = (workdir / source).resolve()
-            if workdir.resolve() not in script.parents or not script.is_file():
-                raise ProjectError(f"{source} is not in the archive")
-        else:
-            script = find_script(workdir)
-        yield script
+        yield extract(archive_path, workdir, source)
     finally:
         shutil.rmtree(workdir, ignore_errors=True)

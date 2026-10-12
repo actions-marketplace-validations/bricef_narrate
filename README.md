@@ -23,7 +23,8 @@ Narakeet projects build unchanged, without uploading anything.
 - **Sound and text:** recorded audio, background music, and subtitles, burned
   in or as files.
 - **Ways to run it:** a command line, a web studio for writing scripts
-  (`narrate studio script.md`), a Docker image and a GitHub Action.
+  (`narrate studio script.md`), an HTTP API for your own programs
+  (`narrate serve`), a Docker image and a GitHub Action.
 
 ## Install
 

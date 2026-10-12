@@ -11,17 +11,12 @@ scratch folder rather than next to the script.
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
-import re
-import sys
 from pathlib import Path
 from urllib.parse import quote
 
+from ..child import Child
 from ..script import Media, ScriptError, parse
-
-PROGRESS = re.compile(r"^scene (\d+)/(\d+)$")
-ERROR = re.compile(r"^error: .*?:(\d+): (.*)$")
 
 
 def fingerprint(script: Path, text: str, engine: str, scene: int) -> str:
@@ -56,7 +51,7 @@ class BuildRun:
         self.args = args or []
         self.event = event
         self.label = label or {}
-        self.process: asyncio.subprocess.Process | None = None
+        self.child: Child | None = None
         self.cancelled = False
         self.status: dict = {**self.label, "state": "starting"}
 
@@ -81,50 +76,25 @@ class BuildRun:
 
     async def run(self) -> None:
         script = self.session.script
-        out = self.out
-        command = [sys.executable, "-m", "narrate", "build", str(script), "--tts", self.session.engine,
-                   "-o", str(out), *self.args]
-        notes: list[str] = []
-        errors: list[dict] = []
-        tail: list[str] = []
-        try:
-            self.process = await asyncio.create_subprocess_exec(
-                *command, cwd=script.parent, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-            if self.cancelled:  # cancelled while the process was starting
-                self.process.terminate()
-            else:
-                self.update(state="running", scene=0, of=None, message="starting")
-            async for raw in self.process.stderr:
-                line = raw.decode(errors="replace").strip()
-                if not line:
-                    continue
-                tail = (tail + [line])[-12:]
-                if m := PROGRESS.match(line):
-                    self.update(state="running", scene=int(m.group(1)), of=int(m.group(2)), message=line)
-                elif line == "muxing":
-                    self.update(state="running", scene=self.status.get("of"), of=self.status.get("of"),
-                                message="putting it together")
-                elif line.startswith(("note: ", "warning: ")):
-                    notes.append(line)
-                elif m := ERROR.match(line):
-                    errors.append({"line": int(m.group(1)), "message": m.group(2)})
-                elif line.startswith(("error: ", "setup problem: ")):
-                    errors.append({"line": None, "message": line.split(": ", 1)[1]})
-            summary = (await self.process.stdout.read()).decode(errors="replace").strip()
-            code = await self.process.wait()
-        except Exception as e:  # noqa: BLE001 - reported like a failed build
-            self.update(state="failed", errors=[{"line": None, "message": f"couldn't run the build: {e}"}], notes=notes)
-            return
-        if self.cancelled:
-            self.update(state="cancelled", notes=notes)
-        elif code == 0 and out.exists():
-            self.done(summary.splitlines()[-1] if summary else "", notes)
+        self.child = Child(["build", str(script), "--tts", self.session.engine, "-o", str(self.out), *self.args],
+                           cwd=script.parent, on_progress=lambda p: self.update(state="running", **p))
+        if self.cancelled:  # cancelled before it started
+            self.child.cancel()
         else:
-            self.update(state="failed", notes=notes,
-                        errors=errors or [{"line": None, "message": "\n".join(tail) or f"the build stopped ({code})"}])
+            self.update(state="running", scene=0, of=None, message="starting")
+        outcome = await self.child.run()
+        if outcome.code is None:
+            self.update(state="failed", errors=outcome.errors, notes=outcome.notes)
+        elif outcome.cancelled:
+            self.update(state="cancelled", notes=outcome.notes)
+        elif outcome.code == 0 and self.out.exists():
+            self.done(outcome.summary, outcome.notes)
+        else:
+            self.update(state="failed", notes=outcome.notes,
+                        errors=outcome.errors or [{"line": None, "message": f"the build stopped ({outcome.code})"}])
 
     def cancel(self) -> None:
         # Recorded even before the process exists: run() stops it as soon as it does
         self.cancelled = True
-        if self.process is not None and self.process.returncode is None:
-            self.process.terminate()
+        if self.child is not None:
+            self.child.cancel()

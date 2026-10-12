@@ -334,6 +334,14 @@ def cmd_studio(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_serve(args: argparse.Namespace) -> int:
+    from .service.server import serve
+    from .service.store import default_root
+
+    serve(Path(args.data) if args.data else default_root(), args.host, args.port, args.tts, args.workers)
+    return 0
+
+
 def cmd_voices(args: argparse.Namespace) -> int:
     print("Kokoro (--tts kokoro):", " ".join(KOKORO_VOICES))
     print("\nElevenLabs (--tts elevenlabs; a raw voice id also works):")
@@ -400,7 +408,8 @@ def cmd_models(args: argparse.Namespace) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
+def parser() -> argparse.ArgumentParser:
+    """Every command, its arguments, and the function that runs it."""
     parser = argparse.ArgumentParser(
         prog="narrate", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="examples:\n"
@@ -464,6 +473,19 @@ def main(argv: list[str] | None = None) -> int:
                         help="speech engine for previews and builds (default kokoro, which is free)")
     studio.set_defaults(func=cmd_studio)
 
+    serve = sub.add_parser("serve", help="serve narrate's capabilities over HTTP, for your own programs")
+    serve.add_argument("--host", default="127.0.0.1",
+                       help="address to listen on (default 127.0.0.1; 0.0.0.0 for other machines, "
+                            "with no access control)")
+    serve.add_argument("--port", type=int, default=8788, help="port to listen on (default 8788)")
+    serve.add_argument("--data", metavar="DIR",
+                       help="where to keep uploaded files, jobs and their records "
+                            "(default $XDG_DATA_HOME/narrate/service, else ~/.local/share/narrate/service)")
+    serve.add_argument("--workers", type=int, default=1, help="how many jobs run at once (default 1)")
+    serve.add_argument("--tts", choices=["auto", "kokoro", "elevenlabs", "silent"], default="kokoro",
+                       help="speech engine for jobs that don't name one (default kokoro, which is free)")
+    serve.set_defaults(func=cmd_serve)
+
     frames = sub.add_parser("frames", help="a contact sheet of a video's frames, to review it without watching it")
     frames.add_argument("video", help="a built video")
     frames.add_argument("-o", "--output", help="the sheet to write (default: <video>-frames.png beside it)")
@@ -510,7 +532,11 @@ def main(argv: list[str] | None = None) -> int:
                            help="never prune entries used in the last MINUTES (default 60; protects running builds)")
     cache_cmd.set_defaults(func=cmd_cache)
 
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parser().parse_args(argv)
     load_dotenv(Path.cwd(), *([Path(args.script).resolve().parent] if getattr(args, "script", None) else []))
     try:
         return args.func(args)

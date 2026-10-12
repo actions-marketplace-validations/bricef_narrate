@@ -17,6 +17,7 @@ makes `narrate` work in any folder.
 - [Build in Docker](#build-in-docker)
 - [Build in GitHub Actions](#build-in-github-actions)
 - [Use Narakeet's command line](#use-narakeets-command-line)
+- [Serve narrate over HTTP](#serve-narrate-over-http)
 - [Manage downloads and caches](#manage-downloads-and-caches)
 - [Make builds faster](#make-builds-faster)
 - [Troubleshoot](#troubleshoot)
@@ -540,6 +541,74 @@ narakeet-api-client --repository-type github --repository owner/repo --source vi
 - **narrate's own flags:** `--tts` picks the engine. It runs quietly;
   `--verbose` shows progress.
 
+## Serve narrate over HTTP
+
+`narrate serve` offers narrate's builds over HTTP, so your own programs
+(agents, CI jobs, other services) can make videos by calling it.
+
+```sh
+narrate serve                                    # http://127.0.0.1:8788/v1
+narrate serve --host 0.0.0.0 --workers 2 --data /srv/narrate
+docker run -p 8788:8788 -v narrate-data:/data -v narrate-cache:/cache -e ELEVENLABS_API_KEY \
+  ghcr.io/bricef/narrate serve --host 0.0.0.0 --data /data
+```
+
+- **No access control:** keep it on localhost or a private network.
+  Anything that can reach the port can spend its ElevenLabs credits.
+- **Speech:** jobs use Kokoro unless they ask for another engine, or you
+  start it with `--tts`. With `"tts": "elevenlabs"`, a job uses the service's
+  own `ELEVENLABS_API_KEY`, from its environment or a `.env` where it starts.
+- **Workers:** `--workers` jobs run at once (default 1). A build already uses
+  every core.
+- **Its data:** uploaded files, each job's project and outputs, and the job
+  records (SQLite) go in `--data`. Nothing is deleted on its own.
+- **The design:** [design/service.md](design/service.md).
+
+**A project** is the script and its files, each uploaded once and named by its
+SHA-256. A rebuild after an edit uploads only what changed. Send the whole
+project folder: HTML scenes load files narrate can't see in the script.
+Hidden files (`.env`, `.git`) are refused, apart from `.narrate/`.
+
+```sh
+api=http://127.0.0.1:8788/v1
+h=$(sha256sum photo.jpg | cut -d' ' -f1)
+curl -s -X POST $api/files/missing -H 'Content-Type: application/json' -d "{\"hashes\": [\"$h\"]}"
+curl -s -X PUT --data-binary @photo.jpg $api/files/$h
+curl -s -X POST $api/jobs -H 'Content-Type: application/json' -d @- <<JSON
+{"kind": "build", "options": {"tts": "kokoro", "subtitles": "external"},
+ "project": {"script": "intro.md", "text": "![](photo.jpg)\n\nHello there.\n", "files": {"photo.jpg": "$h"}}}
+JSON
+curl -s $api/jobs/j_19a…                         # its state, progress and outputs
+curl -sO $api/jobs/j_19a…/outputs/intro.mp4
+```
+
+| Request | Does |
+| --- | --- |
+| `POST /v1/files/missing` | `{hashes}`: which of these files to upload |
+| `PUT /v1/files/{sha256}` | upload one; refused if its content doesn't match |
+| `POST /v1/jobs` | start a job: `{kind, project, options}` |
+| `GET /v1/jobs` | recent jobs, newest first (`?state=running`, `?limit=`) |
+| `GET /v1/jobs/{id}` | a job: state, progress, outputs, notes, errors |
+| `GET /v1/jobs/{id}/events` | the job as it changes (server-sent events), ending with it |
+| `POST /v1/jobs/{id}/cancel` | stop it |
+| `GET /v1/jobs/{id}/outputs/{name}` | an output file |
+| `GET /v1/openapi.json` | all of it, as OpenAPI |
+
+- **Kinds:** `build` makes a video, `audio` the narration alone.
+- **Projects:** files by hash (`{"script": "intro.md", "files": {path: sha256}}`),
+  a script sent as `text`, with or without files, or an uploaded ZIP
+  (`{"zip": sha256}`, with `"source"` if it holds more than one script).
+- **Options:** those of `narrate build` and `narrate audio`: `tts`,
+  `tts_model`, `scenes`, `subtitles`, `transcript`, `regenerate`; and
+  `format` for audio (`mp3`, `m4a`, `ogg`, `opus`, `flac`, `wav`).
+- **States:** `queued`, `running`, `done`, `failed` (with `errors`, giving
+  script lines where they're known) and `cancelled`. Restarting the service
+  fails the jobs that were running, and runs those queued.
+- **Outputs:** by name, `video` (or `audio`), `poster`, `srt`, `vtt` and
+  `transcript`. Any `render:web` capture taken is also an output, under
+  `captures`, by its path in the project, so you can keep it there for later
+  builds.
+
 ## Manage downloads and caches
 
 narrate fetches some files on first use and caches synthesised speech:
@@ -640,6 +709,7 @@ models and the ElevenLabs key, and prints a fix for each problem.
 | Command | Does |
 | --- | --- |
 | `narrate studio SCRIPT [--open]` | edit the script in a web app (`--tts` for its engine; `--host`, `--port` to serve elsewhere) |
+| `narrate serve` | serve builds over HTTP for your own programs (`--host`, `--port`, `--data`, `--workers`, `--tts`) |
 | `narrate build SCRIPT [-o OUT.mp4]` | render a video (`SCRIPT` may be a `.zip`; `--source` picks the script inside; `--scenes 3-5` builds just those; `--subtitles MODE` and `--transcript` choose the extra outputs; `--regenerate` retakes web captures) |
 | `narrate audio SCRIPT [-o OUT]` | render the narration only (also takes `--subtitles` and `--transcript`) |
 | `narrate hear VIDEO [--script SCRIPT]` | what speech-to-text hears, and where it differs from the script (`--json`) |
