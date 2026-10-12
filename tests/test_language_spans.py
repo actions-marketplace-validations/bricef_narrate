@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from narrate import tts
-from narrate.text import speech_runs, speech_text, subtitle_text
+from narrate.text import JOIN_PAUSE, speech_runs, speech_text, subtitle_text
 from narrate.tts import ElevenLabsSynth, SilentSynth, Voice
 
 
@@ -69,3 +69,9 @@ def test_tags_leave_no_space_before_punctuation():
     assert caption("<speak>(<sub alias='see'>c</sub>) and <emphasis>Bob</emphasis>'s</speak>") == "(c) and Bob's"
     # Between words a tag is still a space, and the text's own spaces stay
     assert caption('<speak>One.<break time="1s"/>Two. <mark name="x"/>Three ?</speak>') == "One. Two. Three ?"
+
+
+def test_emphasis_after_a_span_is_paused_as_after_any_words():
+    """A span's run ends in a segment, not a string: what it ends with is still read (it raised before #75)."""
+    runs = speech_runs("Say [See]{de} and *this*.", "en", set())
+    assert [r.emphasis for r in runs] == ["none", "moderate"] and runs[1].pause == JOIN_PAUSE

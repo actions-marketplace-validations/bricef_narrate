@@ -551,7 +551,7 @@ scene's timing as CSS custom properties:
 ````markdown
 ![](scene.html)
 
-<speak>Five hundred and thirty-one pull requests merged. <mark name="fleet"/>A hundred and fifty-two by the fleet.</speak>
+Five hundred and thirty-one pull requests merged. <mark name="fleet"/>A hundred and fifty-two by the fleet.
 ````
 
 - **Delays:** use them as animation delays: `animation-delay: var(--cue-fleet)`.
@@ -561,10 +561,14 @@ scene's timing as CSS custom properties:
   half a second before the page goes.
 - **Scripts** get the same numbers, in seconds, before they run:
   `window.narrate.duration` and `window.narrate.cues["2"]`.
-- **Marks:** a mark splits the speech at that point, so its time is exact.
-  Splitting mid-sentence can add a short join, as emphasis does. Marks work
-  in `<speak>` paragraphs; use names made of letters, digits, `-` and `_`,
-  starting with a letter.
+- **Marks:** a mark splits the speech at that point, without a pause, so its
+  time is exact.
+  - **Where:** marks work in plain narration and in `<speak>` paragraphs. In
+    plain narration, a mark is narrate's own: the paragraph keeps its other
+    markup.
+  - **Names:** letters, digits, `-` and `_`, starting with a letter.
+  - **In the studio:** **Add mark** (Alt-M) puts one before the word at the
+    cursor, named after the word.
 - **Timing:** times count from the page's start, which matters when it follows
   another picture in the scene.
 - **Not here:** pages in merged scenes (`narration-mode: merge`) get no cues.

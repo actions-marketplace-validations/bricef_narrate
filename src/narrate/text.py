@@ -14,6 +14,11 @@ _LANG_RE = re.compile(r"^[a-z]{2,3}(?:-[a-z0-9]{2,8})?$")
 # OPEN lang SEP text CLOSE
 _OPEN, _SEP, _CLOSE = "\ue000", "\ue001", "\ue002"
 _SEGMENT_RE = re.compile(f"{_OPEN}([^{_SEP}]*){_SEP}([^{_CLOSE}]*){_CLOSE}")
+# A timing mark in plain narration (#75) travels the same way, by its number: MARK n MARK_END
+_MARK, _MARK_END = "\ue003", "\ue004"
+_MARK_AT_RE = re.compile(f"{_MARK}(\\d+){_MARK_END}")
+MARK_RE = re.compile(r"""<mark\s+name\s*=\s*(["'])(?P<name>[^"']*)\1\s*/?>""", re.I)
+MARK_NAME = re.compile(r"[A-Za-z_][\w-]*")  # "1", "2", … are the narration blocks' own cues
 
 from .phonetics import PHONETIC_STYLES  # noqa: E402
 
@@ -113,22 +118,43 @@ def speech_runs(text: str, lang: str, notes: set[str]) -> list[Run]:
 
     Emphasis markup (`*x*`/`_x_` moderate, `**x**`/`__x__` strong, `~~x~~`
     reduced) and inline pauses (an ellipsis) split the paragraph; each run is
-    synthesised separately. `notes` collects markup that was approximated.
+    synthesised separately. A `<mark name="x"/>` splits it too, without a pause,
+    and times the words after it, as in SSML (#75). `notes` collects markup that
+    was approximated.
     """
+    names: list[str] = []
+
+    def mark(m: re.Match[str]) -> str:
+        name = m["name"].strip()
+        if not MARK_NAME.fullmatch(name):
+            notes.add(f"<mark name={name!r}> (ignored: use a name such as \"fleet\")")
+            return " "
+        names.append(name)
+        return f"{_MARK}{len(names) - 1}{_MARK_END}"
+
+    def ahead(inner: str) -> tuple[str, str]:
+        """Marks inside a span or code, moved ahead of it, which they can't split; and what's left."""
+        return "".join(m.group(0) for m in _MARK_AT_RE.finditer(inner)), _MARK_AT_RE.sub("", inner)
 
     def span(m: re.Match[str]) -> str:
-        inner, opts = m.group(1), m.group(2).strip().lower()
+        before, inner = ahead(m.group(1))
+        opts = m.group(2).strip().lower()
         if opts == "literal":
-            return spell(inner, lang)
+            return before + spell(inner, lang)
         if opts in PHONETIC_STYLES or (opts not in STYLES and _LANG_RE.match(opts)):
-            return f"{_OPEN}{opts}{_SEP}{inner}{_CLOSE}"
+            return f"{before}{_OPEN}{opts}{_SEP}{inner}{_CLOSE}"
         if opts != "normal":
             notes.add(f"narration span {{{opts}}} (read as plain text)")
-        return inner
+        return before + inner
 
+    def code(m: re.Match[str]) -> str:
+        before, inner = ahead(m.group(1))
+        return before + spell(inner, lang)
+
+    text = MARK_RE.sub(mark, text)
     text = _SPAN_RE.sub(span, text)
     text = _LINK_RE.sub(r"\1", text)
-    text = _CODE_RE.sub(lambda m: spell(m.group(1), lang), text)
+    text = _CODE_RE.sub(code, text)
 
     pieces: list[tuple[str, str]] = []
     at = 0
@@ -140,19 +166,50 @@ def speech_runs(text: str, lang: str, notes: set[str]) -> list[Run]:
     pieces.append((text[at:], "none"))
 
     runs: list[Run] = []
+    pending: list[str] = []  # marks waiting for the words after them
     for chunk, emphasis in pieces:
         for i, part in enumerate(_ELLIPSIS_RE.split(stress_marks(_TAG_RE.sub(" ", chunk)))):
-            part = " ".join(part.split())
-            if not any(ch.isalnum() for ch in part):
-                continue
-            if i:
-                pause = ELLIPSIS_PAUSE
-            elif runs:
-                pause = SENTENCE_PAUSE if runs[-1].text.rstrip()[-1:] in ".!?:;" else JOIN_PAUSE
-            else:
-                pause = 0.0
-            runs.append(Run(_segments(part), emphasis, pause))
+            split = _MARK_AT_RE.split(part)  # words, a mark's number, words, …
+            stretches = [([], split[0])] + [([names[int(split[k])]], split[k + 1]) for k in range(1, len(split), 2)]
+            # Between marks, what has no words (a bracket, a dash) stays with the words next to it, as unsplit
+            joined: list[tuple[list[str], str]] = []
+            for marks, words in stretches:
+                if joined and not _has_words(joined[-1][1]):
+                    marks, words = joined[-1][0] + marks, f"{joined.pop()[1]} {words}"
+                joined.append((marks, words))
+            after: list[str] = []  # marks after the part's last words
+            if len(joined) > 1 and not _has_words(joined[-1][1]):
+                after, words = joined.pop()
+                joined[-1] = (joined[-1][0], f"{joined[-1][1]} {words}")
+            first = True  # the part's first run takes the pause before it; a mark adds none
+            for marks, words in joined:
+                pending += marks
+                words = " ".join(words.split())
+                if not _has_words(words):
+                    continue
+                if not first:
+                    pause = 0.0
+                elif i:
+                    pause = ELLIPSIS_PAUSE
+                elif runs:
+                    pause = SENTENCE_PAUSE if _ends(runs[-1].text)[-1:] in ".!?:;" else JOIN_PAUSE
+                else:
+                    pause = 0.0
+                runs.append(Run(_segments(words), emphasis, pause, marks=tuple(pending)))
+                pending, first = [], False
+            pending += after
+    if pending:  # marks after the last words: a silent run that only carries them
+        runs.append(Run("", marks=tuple(pending)))
     return runs
+
+
+def _has_words(text: str) -> bool:
+    return any(ch.isalnum() for ch in text)
+
+
+def _ends(speech: Speech) -> str:
+    """A run's text, without trailing space, for what it ends with."""
+    return (speech if isinstance(speech, str) else "".join(part for part, _ in speech)).rstrip()
 
 
 def _segments(text: str) -> Speech:
@@ -198,7 +255,8 @@ def ssml_text(ssml: str) -> str:
 
 
 def subtitle_text(text: str) -> str:
-    text = _SPAN_RE.sub(r"\1", text)
-    text = _LINK_RE.sub(r"\1", text)
-    text = _CODE_RE.sub(r"\1", text)
+    unmarked = lambda m: MARK_RE.sub("", m.group(1))  # noqa: E731 - a mark inside goes before it when spoken
+    text = _SPAN_RE.sub(unmarked, text)
+    text = _LINK_RE.sub(unmarked, text)
+    text = _CODE_RE.sub(unmarked, text)
     return _drop_tags(_strip_emphasis(text).replace("^", ""))
