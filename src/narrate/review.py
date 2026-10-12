@@ -75,6 +75,8 @@ import difflib  # noqa: E402
 import re  # noqa: E402
 from dataclasses import dataclass  # noqa: E402
 
+import numpy as np  # noqa: E402
+
 _ONES = "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen " \
         "seventeen eighteen nineteen".split()
 _TENS = "_ _ twenty thirty forty fifty sixty seventy eighty ninety".split()
@@ -157,6 +159,52 @@ def _same(written: list[Word], heard: list[Word]) -> bool:
     return a == b or (min(len(a), len(b)) >= 5 and difflib.SequenceMatcher(None, a, b).ratio() >= 0.85)
 
 
+# Alignment costs, in whole numbers so ties are exact: a match is free, a substitution between
+# words that start alike ("quietube"/"quietoob") is cheaper than one between unrelated words, and
+# a word missing on either side costs as much as an unrelated substitution
+_MATCH, _NEAR, _SUBSTITUTE, _GAP = 0, 3, 5, 5
+
+
+def _align(a: list[str], b: list[str]) -> list[tuple[int | None, int | None]]:
+    """A global, in-order alignment of two token lists (Needleman-Wunsch): pairs of positions, with
+    None for a token on one side only. Unlike difflib, which anchors on the longest exact matches
+    first, it keeps its place when the same words come round again (a script that repeats a
+    sentence). On ties, matches go as early as they can, as a listener would pair them."""
+    n, m = len(a), len(b)
+    if not n or not m:
+        return [(i, None) for i in range(n)] + [(None, j) for j in range(m)]
+    ids: dict[str, int] = {}
+    stems: dict[str, int] = {}
+    a_id = np.array([ids.setdefault(t, len(ids)) for t in a])
+    b_id = np.array([ids.setdefault(t, len(ids)) for t in b])
+    a_stem = np.array([stems.setdefault(t[:4], len(stems)) for t in a])
+    b_stem = np.array([stems.setdefault(t[:4], len(stems)) for t in b])
+    cost = np.empty((n + 1, m + 1), dtype=np.int32)
+    steps = np.arange(m + 1, dtype=np.int32) * _GAP
+    cost[0] = steps
+    for i in range(1, n + 1):
+        substitute = np.where(b_id == a_id[i - 1], _MATCH, np.where(b_stem == a_stem[i - 1], _NEAR, _SUBSTITUTE))
+        row = np.empty(m + 1, dtype=np.int32)
+        row[0] = i * _GAP
+        row[1:] = np.minimum(cost[i - 1, :-1] + substitute, cost[i - 1, 1:] + _GAP)
+        # Words heard but not written, left to right: row[j] = min(row[j], row[j-1] + gap)
+        cost[i] = np.minimum.accumulate(row - steps) + steps
+    pairs: list[tuple[int | None, int | None]] = []
+    i, j = n, m
+    while i or j:
+        # Walking back from the end, a gap wins a tie, so matches land as early as they can
+        if i and cost[i, j] == cost[i - 1, j] + _GAP:
+            pairs.append((i - 1, None))
+            i -= 1
+        elif j and cost[i, j] == cost[i, j - 1] + _GAP:
+            pairs.append((None, j - 1))
+            j -= 1
+        else:
+            pairs.append((i - 1, j - 1))
+            i, j = i - 1, j - 1
+    return pairs[::-1]
+
+
 def compare(written: list[Word], heard: list[Word]) -> dict:
     """Where the heard words differ from the written ones: a list of differences, and a summary.
 
@@ -164,21 +212,40 @@ def compare(written: list[Word], heard: list[Word]) -> dict:
     if all its tokens lined up. Neighbouring differences are reported together."""
     a = [(i, t) for i, w in enumerate(written) for t in w.tokens]
     b = [(i, t) for i, w in enumerate(heard) for t in w.tokens]
-    matcher = difflib.SequenceMatcher(None, [t for _, t in a], [t for _, t in b], autojunk=False)
     exact: set[int] = set()  # a-token positions that lined up exactly
     heard_for: dict[int, set[int]] = {}  # written word -> heard words aligned with its tokens
     used: set[int] = set()  # heard words aligned with some written word
-    for op, a0, a1, b0, b1 in matcher.get_opcodes():
-        if op == "equal":
-            for k in range(a1 - a0):
-                exact.add(a0 + k)
-                heard_for.setdefault(a[a0 + k][0], set()).add(b[b0 + k][0])
-                used.add(b[b0 + k][0])
-        elif op == "replace":
-            words = {b[k][0] for k in range(b0, b1)}
-            for k in range(a0, a1):
-                heard_for.setdefault(a[k][0], set()).update(words)
-            used.update(words)
+
+    def attach(ai: int, bj: int) -> None:
+        heard_for.setdefault(a[ai][0], set()).add(b[bj][0])
+        used.add(b[bj][0])
+
+    def settle(run: list[tuple[int | None, int | None]]) -> None:
+        """Between two exact matches: each heard token goes with the written token it's paired with,
+        or, heard on its own, with the written token before it ("to day" for "today"), else after it.
+        A stretch with no written token at all is heard but not in the script."""
+        last, waiting = None, []
+        for ai, bj in run:
+            if ai is not None:
+                last = ai
+                for k in waiting + ([bj] if bj is not None else []):
+                    attach(ai, k)
+                waiting = []
+            elif last is not None:
+                attach(last, bj)
+            else:
+                waiting.append(bj)
+
+    run: list[tuple[int | None, int | None]] = []
+    for ai, bj in _align([t for _, t in a], [t for _, t in b]):
+        if ai is not None and bj is not None and a[ai][1] == b[bj][1]:
+            settle(run)
+            run = []
+            exact.add(ai)
+            attach(ai, bj)
+        else:
+            run.append((ai, bj))
+    settle(run)
     wrong = {i for i, w in enumerate(written)
              if not all(k in exact for k, (j, _) in enumerate(a) if j == i)}
     # Each word on its own first ("today" heard as "to day"), so a fine word doesn't dilute a wrong one

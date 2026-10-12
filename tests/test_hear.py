@@ -92,3 +92,30 @@ def test_spoken_numbers():
 def test_a_missing_file_is_an_error(tmp_path, capsys):
     assert cli.main(["hear", str(tmp_path / "nothing.mp4")]) == 2
     assert "not found" in capsys.readouterr().err
+
+
+def test_repeated_sentences_keep_their_place(heard, capsys):
+    """#71: the alignment stays in order when a script says the same thing again."""
+    media, script = heard("x")
+    script.write_text("One: say quietube.\n\nTwo: say quietube.\n\nThree: say quietube.\n")
+
+    def report(said):
+        heard(said)
+        return json.loads(run(capsys, media, "--script", script, "--json")[1])
+
+    every = report("One: say quietube. Two: say quietube. Three: say quietube.")
+    assert every["differences"] == [] and every["heard_as_written"] == 9
+    [missing] = report("One: say quietube. Three: say quietube.")["differences"]
+    assert (missing["kind"], missing["line"], missing["wrote"]) == ("not heard", 3, "Two: say quietube.")
+    [extra] = report("One: say quietube. Two: say quietube. Two: say quietube. Three: say quietube.")["differences"]
+    assert (extra["kind"], extra["heard"]) == ("not in the script", "Two: say quietube.")
+
+
+def test_trying_one_word_several_ways(heard, capsys):
+    """A pronunciation test script: the same word three times, each fixed a different way."""
+    media, script = heard("Quietoob. Quiet tube. QuietTube.")
+    script.write_text("quietube.\n\nquietube.\n\nquietube.\n")
+    report = json.loads(run(capsys, media, "--script", script, "--json")[1])
+    assert report["heard_as_written"] == 2
+    [wrong] = report["differences"]
+    assert (wrong["kind"], wrong["line"], wrong["wrote"], wrong["heard"]) == ("different", 1, "quietube.", "Quietoob.")

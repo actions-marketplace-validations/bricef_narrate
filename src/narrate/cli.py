@@ -160,9 +160,13 @@ def timing(path: Path, engine: str = "auto", model: str | None = None) -> dict:
     and nothing is synthesised."""
     from .studio.analysis import analyse
 
-    synth = make_synth(engine, model)
+    synth = make_synth(engine, model, planning=True)  # ElevenLabs is priced without a key (#71)
     text = path.read_bytes().decode("utf-8-sig").replace("\r\n", "\n")
-    return {**analyse(text, path, synth), "engine": synth.name}
+    report = {**analyse(text, path, synth), "engine": synth.name}
+    if synth.name == "elevenlabs" and not getattr(synth, "key", None):
+        report["notes"] = [*report.get("notes", []), "no ELEVENLABS_API_KEY: timed and priced from the cache and "
+                           "estimates; building with ElevenLabs needs the key"]
+    return report
 
 
 def _clock(seconds: float) -> str:

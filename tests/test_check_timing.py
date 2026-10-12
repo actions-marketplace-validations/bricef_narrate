@@ -24,7 +24,7 @@ class PartlyCached(SilentSynth):
 
 @pytest.fixture
 def script(tmp_path, monkeypatch):
-    monkeypatch.setattr(cli, "make_synth", lambda engine, model=None: PartlyCached())
+    monkeypatch.setattr(cli, "make_synth", lambda engine, model=None, planning=False: PartlyCached())
     path = tmp_path / "s.md"
     path.write_text(SCRIPT)
     return path
@@ -57,14 +57,68 @@ def test_json_is_the_studio_report(script, capsys):
     assert [s["index"] for s in report["scenes"]] == [1, 2] and report["duration"] > 0
 
 
-def test_an_engine_that_cannot_start_says_so(tmp_path, monkeypatch, capsys):
-    monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
-    monkeypatch.chdir(tmp_path)  # no .env here
-    (tmp_path / "s.md").write_text(SCRIPT)
-    assert cli.main(["check", str(tmp_path / "s.md"), "--timing", "--tts", "elevenlabs"]) == 2
-    assert "ELEVENLABS_API_KEY" in capsys.readouterr().err
-
-
 def test_plain_check_is_unchanged(script, capsys):
     assert cli.main(["check", str(script)]) == 0
     assert capsys.readouterr().out.strip() == f"{script}: 2 scenes, 2 blocks, 0 warnings, 0 missing files"
+
+
+# -- ElevenLabs priced without a key (#71) ----------------------------------------------------
+
+@pytest.fixture
+def keyless(tmp_path, monkeypatch):
+    """No ElevenLabs key anywhere, and any network call fails the test."""
+    import urllib.request
+
+    monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+    monkeypatch.chdir(tmp_path)  # no .env here
+    monkeypatch.setenv("NARRATE_CACHE", str(tmp_path / "cache"))
+
+    def no_network(*args, **kwargs):
+        raise AssertionError("no network call without a key")
+
+    monkeypatch.setattr(urllib.request, "urlopen", no_network)
+    path = tmp_path / "s.md"
+    path.write_text("---\nvoice: Lily\n---\n\nAlready spoken.\n\n---\n\n(voice: Somebody Unknown)\n\nNot spoken yet.\n")
+    return path
+
+
+def test_elevenlabs_is_priced_without_a_key(keyless, capsys):
+    import numpy as np
+
+    from narrate.tts import ElevenLabsSynth, make_synth
+
+    # One paragraph is in ElevenLabs' cache already: it's exact, and costs nothing more
+    engine = make_synth("elevenlabs", planning=True)
+    voice = engine.resolve("Lily", None, set())
+    cached = engine._cache.path(engine.model, "Already spoken.", voice.id, voice.lang, 1.0)
+    np.save(cached, np.zeros(24000, dtype=np.float32))
+
+    assert cli.main(["check", str(keyless), "--timing", "--tts", "elevenlabs"]) == 0
+    out = capsys.readouterr()
+    assert f"to synthesise: 1 paragraphs, {len('Not spoken yet.')} characters (ElevenLabs: spends ElevenLabs credits)" \
+        in out.out
+    assert "note: no ELEVENLABS_API_KEY: timed and priced from the cache and estimates" in out.err
+    assert cli.main(["check", str(keyless), "--json", "--tts", "elevenlabs"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["engine"] == "elevenlabs" and report["missing"]["characters"] == len("Not spoken yet.")
+    with pytest.raises(RuntimeError, match="ELEVENLABS_API_KEY is not set"):  # planning never synthesises
+        engine.synth("Not spoken yet.", voice, 1.0, set())
+    with pytest.raises(RuntimeError, match="ELEVENLABS_API_KEY is not set"):  # and building needs the key
+        ElevenLabsSynth()
+
+
+@pytest.mark.parametrize("command", ["build", "audio"])
+def test_building_with_elevenlabs_still_needs_the_key(keyless, capsys, command):
+    assert cli.main([command, str(keyless), "--tts", "elevenlabs"]) == 2
+    assert "ELEVENLABS_API_KEY is not set" in capsys.readouterr().err
+
+
+def test_frames_time_scenes_with_elevenlabs_without_a_key(keyless, tmp_path, capsys):
+    from narrate import media
+
+    clip = tmp_path / "clip.mp4"
+    media.run(["-f", "lavfi", "-i", "color=c=teal:s=160x90:d=2:r=30", "-pix_fmt", "yuv420p", str(clip)])
+    script = tmp_path / "two.md"
+    script.write_text("```\nOne\n```\n\n(duration: 1)\n\n---\n\n```\nTwo\n```\n\n(duration: 1)\n")
+    assert cli.main(["frames", str(clip), "--script", str(script), "--tts", "elevenlabs", "--width", "160"]) == 0
+    assert "scene 2 · Two" in capsys.readouterr().out

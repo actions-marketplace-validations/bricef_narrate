@@ -194,7 +194,10 @@ narrate build project.zip                 # a ZIP of the script and its files
 
   Lengths are exact for speech already synthesised with that engine (by a
   build, or the studio) and estimated from the text elsewhere, marked `≈`.
-  `--json` prints the same report for programs.
+  `--json` prints the same report for programs. `--tts elevenlabs` works
+  without an ElevenLabs key, so you can see what a build would spend before
+  setting one up: it reads the speech cache and estimates the rest, without
+  calling ElevenLabs.
 - **Intermediate files** are deleted afterwards; `--keep-work DIR` keeps them
   for inspection.
 - **First build:** the Kokoro voice model downloads (about 350 MB), and from
@@ -330,6 +333,10 @@ skipped. When subtitles are on, `.srt` and `.vtt` files come with it.
    Keep `.env` out of version control.
 3. Build. With a key set, `--tts auto` uses ElevenLabs; `--tts kokoro` still
    picks Kokoro.
+
+**What it will cost:** `narrate check script.md --timing --tts elevenlabs`
+says how many characters a build would send, with or without a key. Speech
+already in the cache costs nothing.
 
 - **Model:** `eleven_multilingual_v2` by default. Choose another with
   `--tts-model eleven_v4`, or `NARRATE_ELEVENLABS_MODEL`.

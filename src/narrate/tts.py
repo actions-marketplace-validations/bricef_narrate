@@ -146,6 +146,7 @@ ELEVENLABS_SPEED = (0.7, 1.2)
 # (#47; the factor-q intro sped eleven_v4 up with atempo for the same reason)
 ELEVENLABS_FIXED_SPEED = ("eleven_v3", "eleven_v4")
 _ELEVENLABS_ID_RE = re.compile(r"^[A-Za-z0-9]{20}$")
+NO_KEY = "ELEVENLABS_API_KEY is not set (put it in .env or the environment)"
 
 
 # When an engine has no voice for an accent, try these next (same gender)
@@ -412,10 +413,12 @@ class ElevenLabsSynth:
     # Simultaneous requests: the free plan allows 2; raise it for larger plans
     concurrency = int(os.environ.get("NARRATE_ELEVENLABS_CONCURRENCY", 2))
 
-    def __init__(self, model: str | None = None) -> None:
+    def __init__(self, model: str | None = None, planning: bool = False) -> None:
+        """`planning`: for timing and pricing only (narrate check --timing), which needs no key: it reads
+        the speech cache and estimates the rest, and never calls the API (#71)."""
         self.key = os.environ.get("ELEVENLABS_API_KEY")
-        if not self.key:
-            raise RuntimeError("ELEVENLABS_API_KEY is not set (put it in .env or the environment)")
+        if not self.key and not planning:
+            raise RuntimeError(NO_KEY)
         self.model = model or os.environ.get("NARRATE_ELEVENLABS_MODEL") or ELEVENLABS_MODEL
         if self.model.startswith(ELEVENLABS_FIXED_SPEED):
             self.speed_range = (1.0, 1.0)
@@ -424,12 +427,16 @@ class ElevenLabsSynth:
         self._library_names: dict[str, str] | None = None
 
     def _get(self, url: str) -> bytes:
+        if not self.key:
+            raise RuntimeError(NO_KEY)
         request = urllib.request.Request(url, headers={"xi-api-key": self.key})
         with urllib.request.urlopen(request, timeout=30) as resp:
             return resp.read()
 
     def _library(self) -> dict[str, str]:
         """Voices in the account's library by lowercase name; empty if the key can't list voices."""
+        if self._library_names is None and not self.key:
+            self._library_names = {}  # no key, no account to look in: the default voices only
         if self._library_names is None:
             try:
                 voices = json.loads(self._get("https://api.elevenlabs.io/v1/voices")).get("voices", [])
@@ -519,6 +526,8 @@ class ElevenLabsSynth:
         return audio
 
     def _post(self, voice_id: str, body: dict) -> bytes:
+        if not self.key:
+            raise RuntimeError(NO_KEY)
         request = urllib.request.Request(
             self.url.format(voice=voice_id), data=json.dumps(body).encode(), method="POST",
             headers={"xi-api-key": self.key, "Content-Type": "application/json"},
@@ -572,13 +581,15 @@ class Prefetching:
         self._pool.shutdown(cancel_futures=True)
 
 
-def make_synth(name: str, model: str | None = None) -> Synth:
+def make_synth(name: str, model: str | None = None, planning: bool = False) -> Synth:
+    """The engine called `name`. With `planning`, one used only to time and price a script, from the
+    cache and estimates: ElevenLabs then works without a key, and refuses to synthesise (#71)."""
     if name == "auto":
         name = "elevenlabs" if os.environ.get("ELEVENLABS_API_KEY") else "kokoro"
     if name == "kokoro":
         return KokoroSynth()
     if name == "elevenlabs":
-        return ElevenLabsSynth(model)
+        return ElevenLabsSynth(model, planning=planning)
     if name == "silent":
         return SilentSynth()
     raise ValueError(f"unknown TTS backend {name!r}")
