@@ -15,6 +15,7 @@ on:
       - src/**
       - tests/**
       - examples/**
+      - skills/**
       - action.yml
       - .github/workflows/image.yml
   workflow_dispatch:
