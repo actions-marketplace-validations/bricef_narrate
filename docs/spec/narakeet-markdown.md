@@ -1198,3 +1198,40 @@ to:   X% Y% [ZOOM]
   - Not `<name>.txt`: a `.txt` script built in its own folder would be
     overwritten.
 
+### 18.8 Overlays (narrate #59)
+
+```
+(overlay: FILE.html)
+(overlay: {file: FILE.html, viewport: WxH, KEY: VALUE, …})
+(overlay: none)
+
+overlay: FILE.html                                  ; header: over the whole video
+overlay: [FILE.html, {file: FILE.html, scenes: 2-5, viewport: WxH, KEY: VALUE}]
+```
+
+- **A scene overlay** is a local web page laid over the scene's picture,
+  callouts and slides for the whole scene. It is captured as an HTML scene is
+  (§18.2): on the video's clock, frame by frame, from the scene's start, with
+  the scene's cues. Several stack in script order. In a transition it
+  cross-fades with its scene.
+- **A video overlay** (header) is captured on the video's own clock over the
+  scenes it covers (all, or `scenes: A-B` inclusive), and laid over the
+  joined, transitioned video, below burned-in subtitles and the header's
+  fades. `(overlay: none)` in a scene hides every video overlay there; the
+  page's clock runs on underneath. In a build of some scenes (`--scenes`) the
+  clock starts where the first of them falls in the whole video.
+- **Transparency:** the page's default background is dropped; what it leaves
+  transparent shows the picture. The page is laid out at the video's size, or
+  at `viewport` and drawn at the video's size, centred.
+- **What the page gets** (before its own scripts): `window.narrate.params`,
+  the overlay's other keys, as strings; `--narrate-duration` and, for a scene
+  overlay, `--cue-N` and `--cue-NAME` as in §18.2; for a video overlay,
+  `--scene-N` (each scene's start in the video) and `window.narrate.scenes`
+  (index, start, duration).
+- **Capture:** a page that has settled by its first frame (no scripts, no
+  running animations) is captured once, as a still. Others are captured every
+  frame into a lossless stream with alpha.
+- **Checks:** a missing page is an error with its line, in `narrate check` and
+  at build time. A file that isn't `.html` or `.htm`, or `none` in the
+  header, is an error.
+- Audio builds ignore overlays.

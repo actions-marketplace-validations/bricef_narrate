@@ -137,6 +137,17 @@ start:
 - **Highlighting part of a screenshot:** `<img>` of a project file, with absolutely positioned boxes
   fading in. Or keep it a picture and use `(callout: …)`.
 
+## Overlays: the same pages, over the picture
+
+An overlay is a page like these, laid over a scene's picture instead of replacing it: `(overlay:
+lower-third.html)` in a scene, or `overlay: ticker.html` in the header for the whole video. Write it the
+same way, with two differences:
+- **Leave `html` and `body` without a background:** the picture shows through wherever the page is
+  transparent.
+- **Timing:** a scene's overlay gets the scene's cues. The header's runs on the video's clock and gets
+  `--scene-N`, each scene's start in the video, so it can change with the scene. Extra keys in the
+  direction (`{file: lower-third.html, name: "Ada"}`) arrive as `window.narrate.params`.
+
 ## Rules and limits
 
 - **Local files only:**

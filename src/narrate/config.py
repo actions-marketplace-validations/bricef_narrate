@@ -176,6 +176,56 @@ class Background:
 
 
 @dataclass
+class OverlaySpec:
+    """A web page laid over the picture (#59): over one scene, or over the whole video from the header."""
+
+    file: str
+    params: dict[str, str] = field(default_factory=dict)  # reach the page as window.narrate.params
+    viewport: tuple[int, int] | None = None  # the size the page was designed at, if not the video's
+    scenes: tuple[int, int] | None = None  # a header overlay's first and last scene (inclusive)
+    line: int = 0  # where a scene's overlay is written, for errors
+
+
+def parse_overlay(value: Any, header: bool = False) -> OverlaySpec | None:
+    """`file.html`, or a map with `file` (and `viewport`, `scenes` for the header, any other keys as
+    parameters); None for `none`, which hides the video's overlays for a scene."""
+    if isinstance(value, str):
+        text = value.strip()
+        if text.lower() == "none":
+            return None
+        props: dict[str, Any] = {"file": text}
+    elif isinstance(value, dict):
+        props = {str(k).strip(): v for k, v in value.items()}
+    else:
+        raise ConfigError("overlay takes a page, as in overlay: ticker.html, or a map with file:")
+    file = str(props.pop("file", "")).strip()
+    if not file:
+        raise ConfigError("overlay needs a file: the page to lay over the picture")
+    if not file.lower().endswith((".html", ".htm")):
+        raise ConfigError(f"an overlay is a web page (.html), not {file!r}")
+    spec = OverlaySpec(file)
+    if "viewport" in props:
+        spec.viewport = parse_size(str(props.pop("viewport")))
+    if header and "scenes" in props:
+        text = str(props.pop("scenes")).replace(" ", "")
+        m = re.fullmatch(r"(\d+)(?:-(\d+))?", text)
+        if not m or int(m.group(1)) < 1 or (m.group(2) and int(m.group(2)) < int(m.group(1))):
+            raise ConfigError(f"overlay scenes are a scene or a range, as in 2-5, not {text!r}")
+        spec.scenes = (int(m.group(1)), int(m.group(2) or m.group(1)))
+    spec.params = {k: str(v) for k, v in props.items()}
+    return spec
+
+
+def parse_overlays(value: Any) -> list[OverlaySpec]:
+    """The header's overlay: one page, one map, or a list of them."""
+    items = value if isinstance(value, list) else [value]
+    specs = [parse_overlay(item, header=True) for item in items]
+    if any(spec is None for spec in specs):
+        raise ConfigError("overlay: none belongs in a scene, to hide the video's overlays there")
+    return specs
+
+
+@dataclass
 class Settings:
     width: int = 1280
     height: int = 720
@@ -197,6 +247,7 @@ class Settings:
     loudness: float | None = None  # integrated LUFS for the finished mix (narrate extension)
     image_zoom: float | None = None  # how far pan and zoom move by default (narrate extension)
     transcript: bool = False  # write <name>.transcript.txt beside the output (narrate extension, #58)
+    overlays: list[OverlaySpec] = field(default_factory=list)  # web pages over the whole video (#59)
 
 
 def parse_subtitles(value: Any) -> SubtitleConfig:
@@ -289,6 +340,7 @@ def _header_handlers(s: Settings) -> dict[str, Any]:
         "loudness": lambda v: setattr(s, "loudness", parse_loudness(v)),
         "image-zoom": lambda v: setattr(s, "image_zoom", parse_zoom(v)),
         "transcript": lambda v: setattr(s, "transcript", parse_switch(v, "transcript")),
+        "overlay": lambda v: setattr(s, "overlays", parse_overlays(v)),
     }
 
 

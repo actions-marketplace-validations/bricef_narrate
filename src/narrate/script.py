@@ -33,7 +33,7 @@ _WINDOW_RE = re.compile(r"^(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%(?:\s+(\d+(?:\.\d+
 
 DIRECTIVES = {
     "audio", "callout", "canvas", "duration", "font-size", "html", "image", "image-size",
-    "image-position", "narration-mode", "narration-language", "pause", "pause-until",
+    "image-position", "narration-mode", "narration-language", "overlay", "pause", "pause-until",
     "theme", "transition", "video", "voice", "voice-emphasis", "voice-pitch",
     "voice-speed", "voice-volume",
 }

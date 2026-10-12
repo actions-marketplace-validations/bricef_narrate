@@ -74,15 +74,22 @@ def natural_length(frames: FrameRenderer, path: Path, viewport: tuple[int, int])
     return _lengths[key]
 
 
-def cue_script(duration: float, cues: dict[str, float]) -> str:
+def cue_script(duration: float, cues: dict[str, float], params: dict[str, str] | None = None,
+               scenes: list[dict] | None = None) -> str:
     """What a page learns about the narration (#45), set before its own scripts run.
 
     CSS custom properties on the root element: --narrate-duration (how long
     the page is on screen) and --cue-N / --cue-NAME (when the scene's Nth
     narration block, or an SSML mark, starts, from the page's start); and the
-    same numbers, in seconds, as window.narrate for scripts."""
-    data = {"duration": round(duration, 4), "cues": {k: round(t, 4) for k, t in cues.items()}}
+    same numbers, in seconds, as window.narrate for scripts. An overlay (#59)
+    also gets its parameters (window.narrate.params) and, over the whole
+    video, each scene's start and length (window.narrate.scenes, --scene-N)."""
+    data: dict = {"duration": round(duration, 4), "cues": {k: round(t, 4) for k, t in cues.items()},
+                  "params": params or {}}
     props = {"--narrate-duration": f"{duration:.4f}s", **{f"--cue-{k}": f"{t:.4f}s" for k, t in cues.items()}}
+    if scenes is not None:
+        data["scenes"] = scenes
+        props.update({f"--scene-{sc['index']}": f"{sc['start']:.4f}s" for sc in scenes})
     return f"""window.narrate = Object.freeze({json.dumps(data)});
 (() => {{
   const props = {json.dumps(props)};
@@ -94,21 +101,28 @@ def cue_script(duration: float, cues: dict[str, float]) -> str:
 
 
 def capture(frames: FrameRenderer, path: Path, viewport: tuple[int, int], scale: float, count: int, fps: int,
-            stats: Callable[[int], None] | None = None, init_script: str | None = None) -> Iterator[bytes]:
+            stats: Callable[[int], None] | None = None, init_script: str | None = None,
+            transparent: bool = False, start: float = 0.0) -> Iterator[bytes]:
     """`count` PNG frames of the page at `fps`, starting from the moment it loaded.
 
     `stats` is told how many frames were actually captured (the rest reused);
-    `init_script` runs before the page's own (cue_script)."""
+    `init_script` runs before the page's own (cue_script). `transparent` keeps
+    the page's own transparency, for overlays (#59). `start` is the page's time
+    at the first frame: a video overlay in a build of some scenes picks up its
+    clock where those scenes fall in the whole video."""
     captured = 0
     with frames.page(path, viewport, scale, init_script) as page:
         last = b""
         settled = False
+        if start > 0:
+            page.evaluate(_SEEK_JS, 0.0)  # animations already running started with the page, not now
+            page.clock.run_for(round(start * 1000))
         for i in range(count):
             if not settled:
                 if i:
                     page.clock.run_for(_ms(i, fps) - _ms(i - 1, fps))
-                settled = page.evaluate(_SEEK_JS, i / fps)
-                last = page.screenshot(type="png")
+                settled = page.evaluate(_SEEK_JS, start + i / fps)
+                last = page.screenshot(type="png", omit_background=transparent)
                 captured += 1
             yield last
     if stats:

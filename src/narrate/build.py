@@ -27,7 +27,7 @@ import numpy as np
 from . import media, motion, music, pages, render, subtitles, voicemap
 from .config import (
     BUILTIN_MUSIC, FPS, XFADE, ConfigError, Settings, SubtitleConfig, parse_pitch, parse_transition, parse_color, parse_number, parse_size, parse_speed,
-    parse_time, parse_volume, settings_from_header, subtitles_with_mode,
+    OverlaySpec, parse_overlay, parse_time, parse_volume, settings_from_header, subtitles_with_mode,
 )
 from .doctor import find_font
 from .frames import FrameRenderer, FrameSpec, SlideSpec
@@ -136,6 +136,20 @@ class ScenePlan:
     marks: dict[str, float] = field(default_factory=dict)  # cue name -> seconds in, for HTML scenes
     paragraphs: list[ParagraphTiming] = field(default_factory=list)
     spoken: list[str] = field(default_factory=list)  # each paragraph as plain text, recordings transcribed (#58)
+    overlays: list[OverlaySpec] = field(default_factory=list)  # web pages over this scene (#59)
+    hide_overlays: bool = False  # (overlay: none): the video's overlays stay off this scene
+
+
+@dataclass
+class Layer:
+    """An overlay page captured and ready to lay over the picture (#59)."""
+
+    path: Path
+    still: bool  # one PNG (the page never changed), else an FFV1 stream with alpha
+    x: int = 0
+    y: int = 0
+    offset: float = 0.0  # seconds into the picture below when it starts
+    enable: str | None = None  # an ffmpeg expression for when it shows
 
 
 @dataclass
@@ -348,6 +362,8 @@ class Builder:
         spoken: list[tuple[float, str]] = []  # (start, plain text) of each narration block, for the transcript
         marks: dict[str, float] = {}  # "1", "2", … for each narration block, and SSML mark names
         paragraphs: list[ParagraphTiming] = []
+        overlays: list[OverlaySpec] = []
+        hide_overlays = False
 
         for block in scene.blocks:
             try:
@@ -386,6 +402,13 @@ class Builder:
                         image_size = _choice(value, SIZES | ANIMATED_SIZES, "image-size")
                     elif key == "image-position":
                         image_position = _choice(value, POSITIONS, "image-position")
+                    elif key == "overlay":
+                        overlay = parse_overlay(value)
+                        if overlay is None:
+                            hide_overlays = True
+                        else:  # its file is checked when it's captured: planning alone doesn't need it
+                            overlay.line = block.line
+                            overlays.append(overlay)
                     elif key == "callout":
                         if not isinstance(value, dict):
                             raise ConfigError("callout needs properties such as cx/cy")
@@ -484,9 +507,11 @@ class Builder:
         if heard:  # each recording is one paragraph of the transcript, where it plays
             spoken += [(start, " ".join(w for words in phrases for _, _, w in words))
                        for (start, _, _), phrases in zip(recordings, heard) if phrases]
-        return ScenePlan(scene.index, visuals, spec, audio, d, cues, layout,
+        plan = ScenePlan(scene.index, visuals, spec, audio, d, cues, layout,
                          [SlideSpec(lang=sl.lang, text=sl.text) for sl in slides], transition, marks, paragraphs,
                          [text for _, text in sorted(spoken, key=lambda p: p[0]) if text])
+        plan.overlays, plan.hide_overlays = overlays, hide_overlays
+        return plan
 
     def _recording_phrases(self, recordings: list[tuple[float, Path, str | None]],
                            captioned: bool) -> list[list] | None:
@@ -725,6 +750,7 @@ class Builder:
         kept: list[tuple[int, int]] = []  # where the rendered scenes' samples sit in the whole video
         frame = 0  # in the whole video
         out_frame = 0  # in what's rendered
+        placed: list[tuple[ScenePlan, int, int, int]] = []  # each scene: where in the output, how long, where in the whole
         # Scene k's segments encode in the pool while scene k+1 is narrated
         with ThreadPoolExecutor(self.jobs) as pool, FrameRenderer(s.width, s.height, work) as renderer:
             self._frames = renderer
@@ -750,7 +776,9 @@ class Builder:
                 cues += [Cue(c.start + offset, min(c.end, frames / FPS) + offset, c.text) for c in plan.cues]
                 pending.append(self._render_scene(plan, frames, renderer, work, pool.submit))
                 scene_frames.append(frames)
+                placed.append((plan, out_frame, frames, start_f))
                 out_frame += frames
+            video_layers = self._video_overlays(placed, renderer, work)
             scene_segments = [[f.result() for f in futures] for futures in pending]
             self._frames = None
 
@@ -773,11 +801,37 @@ class Builder:
         self.log("muxing")
         out.parent.mkdir(parents=True, exist_ok=True)
         transitions = [plan.transition for plan in plans]
-        subtitle_files = self._mux(out, scene_segments, scene_frames, transitions, wav, cues, work)
+        subtitle_files = self._mux(out, scene_segments, scene_frames, transitions, wav, cues, work, video_layers)
         poster = out.with_suffix(".jpg")
         media.extract_frame(out, _poster_time(s.poster_time, total), poster)
         transcript = self._write_transcript(out, [plan.spoken for plan in plans])
         return BuildResult(out, poster, subtitle_files, total, sorted(self.notes), transcript)
+
+    def _video_overlays(self, placed: list[tuple[ScenePlan, int, int, int]], renderer: FrameRenderer,
+                        work: Path) -> list[Layer]:
+        """The header's overlays (#59), captured on the video's own clock over the scenes they cover, so a
+        ticker scrolls on through cuts and transitions. A scene with (overlay: none) hides them."""
+        layers: list[Layer] = []
+        if not self.settings.overlays or not placed:
+            return layers
+        end = placed[-1][3] + placed[-1][2]  # where what's rendered ends, in the whole video
+        scenes = [{"index": plan.index, "start": round(g / FPS, 4), "duration": round(n / FPS, 4)}
+                  for plan, _, n, g in placed]
+        for k, spec in enumerate(self.settings.overlays):
+            chosen = [p for p in placed if spec.scenes is None or spec.scenes[0] <= p[0].index <= spec.scenes[1]]
+            if not chosen:
+                continue
+            lo, hi = chosen[0][1], chosen[-1][1] + chosen[-1][2]  # in the output
+            # The page's clock is the whole video's: a build of some scenes picks it up where they fall
+            layer = self._capture_overlay(spec, hi - lo, chosen[0][3] / FPS, renderer, work / f"video-overlay{k}",
+                                          pages.cue_script(end / FPS, {}, spec.params, scenes))
+            layer.offset = lo / FPS
+            hidden = [f"gte(t,{o / FPS:.4f})*lt(t,{(o + n) / FPS:.4f})" for plan, o, n, _ in chosen if plan.hide_overlays]
+            conditions = ([f"gte(t,{lo / FPS:.4f})*lt(t,{hi / FPS:.4f})"] if layer.still else []) + \
+                         ([f"not({'+'.join(hidden)})"] if hidden else [])
+            layer.enable = "*".join(conditions) or None
+            layers.append(layer)
+        return layers
 
     def _write_transcript(self, out: Path, scenes: list[list[str]]) -> Path | None:
         """What's spoken, as plain text beside the output (#58): a line per paragraph, a blank line
@@ -823,7 +877,66 @@ class Builder:
 
     def _render_scene(self, plan: ScenePlan, frames: int, renderer: FrameRenderer | None, work: Path,
                       submit: Callable[..., Future] | None = None) -> list[Future]:
-        """Encode a scene as segments totalling exactly `frames` frames.
+        """Encode a scene as segments totalling exactly `frames` frames, its overlays (#59) laid on top.
+
+        A scene's overlay pages are captured here (Chromium stays on this thread), then laid over the
+        scene's joined picture in one more pass, so they run unbroken across its pictures and slides."""
+        submit = submit or _run_now
+        segments = self._render_picture(plan, frames, renderer, work, submit)
+        if not plan.overlays:
+            return segments
+        base = work / f"scene-{plan.index:03d}"
+        layers = [self._capture_overlay(spec, frames, 0.0, renderer, base.with_name(f"{base.name}-overlay{k}"),
+                                        pages.cue_script(frames / FPS, plan.marks, spec.params))
+                  for k, spec in enumerate(plan.overlays)]
+
+        def lay_over() -> Path:
+            # Queued after its pieces, so waiting here can't starve the pool
+            wait(segments)
+            under = _join([f.result() for f in segments], base.with_name(f"{base.name}-under.mp4"))
+            inputs, graph, label = _layer_graph("0:v", layers, 1)
+            over = base.with_name(f"{base.name}-over.mp4")
+            media.run(["-i", str(under), *inputs, "-filter_complex", graph.lstrip(";"), "-map", f"[{label}]",
+                       "-frames:v", str(frames), "-an", *_SEGMENT_CODEC, str(over)])
+            return over
+
+        return [submit(lay_over)]
+
+    def _capture_overlay(self, spec: OverlaySpec, count: int, start: float, renderer: FrameRenderer, out: Path,
+                         init_script: str) -> Layer:
+        """Capture an overlay page, keeping its transparency: one PNG if it never changes, else a stream.
+
+        The page is laid out at the video's size, or at its `viewport`, drawn sharply at the video's size
+        and centred. `start` is the page's time at the first frame."""
+        w, h = self.settings.width, self.settings.height
+        path = self._path(spec.file, spec.line)
+        vw, vh = spec.viewport or (w, h)
+        scale = min(w / vw, h / vh)
+        x, y = (w - round(vw * scale)) // 2, (h - round(vh * scale)) // 2
+        first: list[bytes] = []
+        captured: list[int] = []
+
+        def images():
+            with closing(pages.capture(renderer, path, (vw, vh), scale, count, FPS, captured.append, init_script,
+                                       transparent=True, start=start)) as frames:
+                for k, png in enumerate(frames):
+                    if not k:
+                        first.append(png)
+                    yield png
+
+        stream = out.with_suffix(".mkv")
+        media.encode_images(images(), FPS, ["-frames:v", str(count), "-c:v", "ffv1", "-pix_fmt", "bgra"], stream)
+        if captured and captured[0] <= 1:  # it never changed: one picture does
+            still = out.with_suffix(".png")
+            still.write_bytes(first[0])
+            stream.unlink(missing_ok=True)
+            return Layer(still, True, x, y)
+        self.log(f"  {path.name}: overlay captured over {count} frames")
+        return Layer(stream, False, x, y)
+
+    def _render_picture(self, plan: ScenePlan, frames: int, renderer: FrameRenderer | None, work: Path,
+                        submit: Callable[..., Future] | None = None) -> list[Future]:
+        """Encode a scene's pictures, clips, pages and slides as segments totalling exactly `frames` frames.
 
         Slides share the scene's time equally, independently of the visuals.
         Over images they are composed into the frame (so theme backdrops
@@ -1028,7 +1141,8 @@ class Builder:
         return loop
 
     def _mux(self, out: Path, scene_segments: list[list[Path]], scene_frames: list[int],
-             transitions: list[tuple[str, float] | None], wav: Path, cues: list[Cue], work: Path) -> list[Path]:
+             transitions: list[tuple[str, float] | None], wav: Path, cues: list[Cue], work: Path,
+             layers: list[Layer] | None = None) -> list[Path]:
         s = self.settings
         if any(transitions):
             files = [_join(segs, work / f"scene-{i:03d}-all.mp4") for i, segs in enumerate(scene_segments, 1)]
@@ -1040,6 +1154,10 @@ class Builder:
             files = [listing]
             args = ["-f", "concat", "-safe", "0", "-i", str(listing)]
             graph = "[0:v]null[vx]"
+        if layers:  # the video's overlays (#59): above the transitions, below the subtitles and fades
+            inputs, over, label = _layer_graph("under", layers, len(files))
+            args += inputs
+            graph = graph.replace("[vx]", "[under]") + over.replace(f"[{label}]", "[vx]")
         # Block-quote captions are explicit content: burn them in unless the
         # mode writes them to files instead
         burn = cues and (s.subtitles.burned or s.subtitles.mode == "none")
@@ -1050,7 +1168,7 @@ class Builder:
                 ([f"fade=t=out:st={max(0.0, total - s.fade_out):.4f}:d={min(s.fade_out, total):.4f}"]
                  if s.fade_out else [])
         graph += f";[vs]{','.join(fades) or 'null'}[v]"
-        audio_index = len(files)
+        audio_index = len(files) + len(layers or [])
         args += ["-i", str(wav)]
         maps = ["-map", "[v]", "-map", f"{audio_index}:a"]
         preset, crf, faststart = TARGETS[s.target]
@@ -1197,6 +1315,24 @@ def _windows(overlays: list[tuple[Path, float, float]], lo: int, hi: int) -> lis
     """The overlays showing during scene frames [lo, hi), in that piece's own time."""
     start, end = lo / FPS, hi / FPS
     return [(png, max(a, start) - start, min(b, end) - start) for png, a, b in overlays if min(b, end) > max(a, start)]
+
+
+def _layer_graph(base: str, layers: list[Layer], first_input: int) -> tuple[list[str], str, str]:
+    """ffmpeg inputs, and a filter graph fragment (starting with ";") laying `layers` over the stream
+    labelled `base`, in order; returns them with the label of the result (#59)."""
+    inputs: list[str] = []
+    graph, label = "", base
+    for k, layer in enumerate(layers):
+        if layer.still:
+            inputs += ["-loop", "1", "-framerate", str(FPS)]
+        if layer.offset:
+            inputs += ["-itsoffset", f"{layer.offset:.6f}"]
+        inputs += ["-i", str(layer.path)]
+        enable = f":enable='{layer.enable}'" if layer.enable else ""
+        # A stream that ends early leaves the picture as it is from then on
+        graph += f";[{label}][{first_input + k}:v]overlay={layer.x}:{layer.y}:format=auto:eof_action=pass{enable}[layer{k}]"
+        label = f"layer{k}"
+    return inputs, graph, label
 
 
 def _overlay_graph(base: str, overlays: list[tuple[Path, float, float]]) -> tuple[list[str], str]:

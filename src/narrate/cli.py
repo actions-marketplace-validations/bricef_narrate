@@ -204,11 +204,27 @@ def _check_timing(path: Path, engine: str, model: str | None, as_json: bool) -> 
 
 
 def _check(path: Path) -> int:
+    from .config import parse_overlay
+    from .script import Directive
+
     script = parse_file(path)
-    settings_from_header(script.header, script.warnings)
+    settings = settings_from_header(script.header, script.warnings)
     media_blocks = [b for scene in script.scenes for b in scene.blocks if isinstance(b, Media)]
     missing = [f"line {b.line}: file not found: {b.path}"
                for b in media_blocks if not b.render and not (script.base_dir / b.path).is_file()]
+    # Overlay pages (#59): the header's, and each scene's
+    overlays = [(1, spec) for spec in settings.overlays]
+    for b in (b for scene in script.scenes for b in scene.blocks):
+        if isinstance(b, Directive) and b.key == "overlay":
+            try:
+                spec = parse_overlay(b.value)
+            except ConfigError as e:
+                missing.append(f"line {b.line}: {e}")
+                continue
+            if spec is not None:
+                overlays.append((b.line, spec))
+    missing += [f"line {line}: file not found: {spec.file}" for line, spec in overlays
+                if not (script.base_dir / spec.file).is_file()]
     rendered = [b for b in media_blocks if b.render]
     problems = [f"line {b.line}: {p}" for b, found in zip(rendered, render.check(rendered)) for p in found]
     _report(script, [])

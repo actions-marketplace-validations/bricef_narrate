@@ -23,6 +23,7 @@ speech. [Building videos](building.md) covers the commands.
 - [Draw diagrams](#draw-diagrams)
 - [Capture web pages](#capture-web-pages)
 - [Show animated HTML scenes](#show-animated-html-scenes)
+- [Lay a web page over the picture](#lay-a-web-page-over-the-picture)
 - [Show text slides](#show-text-slides)
 - [Style slides with a theme](#style-slides-with-a-theme)
 - [Add subtitles](#add-subtitles)
@@ -568,6 +569,92 @@ scene's timing as CSS custom properties:
   another picture in the scene.
 - **Not here:** pages in merged scenes (`narration-mode: merge`) get no cues.
 
+## Lay a web page over the picture
+
+````markdown
+---
+overlay: ticker.html
+---
+
+![](photo.jpg)
+
+(overlay: {file: lower-third.html, name: "Ada Lovelace", role: "Lead researcher"})
+
+The lower third names the speaker, and the ticker runs along the bottom of the whole video.
+
+---
+
+(overlay: none)
+
+![](forest.jpg)
+
+This scene has no ticker.
+````
+
+`ticker.html`, next to the script:
+
+```html
+<!doctype html>
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+  .bar { position: absolute; left: 0; right: 0; bottom: 0; height: 48px; background: #b00020;
+         color: white; font: 28px sans-serif; white-space: nowrap; }
+  .text { position: absolute; top: 8px; left: 100%; animation: scroll 12s linear infinite; }
+  @keyframes scroll { to { transform: translateX(-250%); } }
+</style>
+<div class="bar"><span class="text">BREAKING · Overlays arrive in narrate · More at eleven</span></div>
+```
+
+`lower-third.html`, next to the script:
+
+```html
+<!doctype html>
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; }
+  .card { position: absolute; left: 60px; bottom: 120px; padding: 12px 20px; color: white;
+          background: rgba(0, 0, 0, .75); font: 26px sans-serif; opacity: 0;
+          animation: in .4s ease-out forwards; animation-delay: var(--cue-1, .5s); }
+  .card small { display: block; font-size: 18px; opacity: .8; }
+  @keyframes in { to { opacity: 1; } }
+</style>
+<div class="card"><span id="name"></span><small id="role"></small></div>
+<script>
+  document.getElementById("name").textContent = window.narrate?.params.name ?? "Name";
+  document.getElementById("role").textContent = window.narrate?.params.role ?? "Role";
+</script>
+```
+
+An overlay is a web page laid over the picture: a ticker over footage, a
+speaker's name, a legend over a simulation, labels on a diagram. Anything a
+page can draw works, with its fonts, SVG and animation, and the picture shows
+through wherever the page is transparent.
+
+- **Over one scene:** `(overlay: page.html)` in the scene. It lasts the scene,
+  its clock starts with the scene, and it gets the scene's cues, as an
+  [HTML scene](#time-a-page-to-the-narration) does, so it can slide in on the
+  second paragraph with `var(--cue-2)`. Several overlays stack in order.
+- **Over the whole video:** `overlay:` in the header, one page or a list. It
+  runs on the video's own clock, so a ticker keeps scrolling through cuts and
+  transitions instead of restarting each scene.
+  - `scenes: 2-5` in a list entry limits it to those scenes.
+  - `(overlay: none)` in a scene hides it there, for example on a title card.
+  - The page gets each scene's start as `--scene-1`, `--scene-2`, …, and in
+    `window.narrate.scenes`.
+- **Parameters:** any other keys, such as `name` and `role` above, reach the
+  page as `window.narrate.params`, so one template serves every speaker.
+- **Transparency:** leave the page's own background unset, and the picture
+  shows through. The page is laid out at the video's size; `viewport` lays it
+  out at another size and draws it sharply, centred.
+- **Layers, bottom to top:** the picture, callouts and slides, the scene's
+  overlays (which cross-fade with their scene), the video's overlays (which
+  stay still through a transition), then burned-in subtitles. The header's
+  fades fade everything.
+- **Speed:** a page that never changes is captured once. A moving one, like a
+  ticker, is captured frame by frame, at about twice real time, as HTML scenes
+  are. Keep its files local; anything fetched from the network slows capture.
+- Audio builds ignore overlays. Overlays are narrate's own; Narakeet would
+  read the line as narration.
+
 ## Show text slides
 
 ````markdown
@@ -974,6 +1061,8 @@ name it with `--source`.
     from code blocks, which Narakeet would show as code;
   - [HTML scenes](#show-animated-html-scenes) animate web pages, which
     Narakeet would read out as narration;
+  - [overlays](#lay-a-web-page-over-the-picture) lay web pages over a scene
+    or the whole video;
   - [free framing](#show-pictures) (`position: 70% 25%`, `from` and `to`)
     frames a picture on any point and pans or zooms between any two windows.
 - **Open questions:** where Narakeet's documentation is silent or
