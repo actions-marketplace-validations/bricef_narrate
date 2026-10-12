@@ -212,8 +212,10 @@ Some choices worth knowing when changing behaviour:
     - `edits.py`, the script edits behind the inspector, callouts and voices;
       `voices.py`, the voice picker's catalogue, auditions and pins;
     - `static/`, the browser app: plain ES modules, no build step;
-    - `static/vendor/`, the vendored Preact (htm) and CodeMirror files, with
-      their sources and hashes in its README.
+      `page.js` and `page-clock.js` scrub HTML scenes in the preview, on the
+      app's side and the page's;
+    - `static/vendor/`, the vendored Preact (htm), CodeMirror and fake clock
+      files, with their sources and hashes in its README.
   - `doctor.py`: the `doctor` command.
 - `tests/`: pytest. The `test_conformance.py` and `test_docs.py` suites are
   described above.
@@ -224,8 +226,9 @@ Some choices worth knowing when changing behaviour:
 - `scripts/`:
   - the reference download (`fetch-narakeet-reference.sh`) and its
     HTML-to-Markdown converter;
-  - `vendor-codemirror.sh`, which rebuilds the studio's CodeMirror bundle
-    from the versions pinned in `scripts/codemirror/`. It needs Node, through
-    `mise exec node@24 --` for example, and is only for updating CodeMirror.
+  - `vendor.sh`, which rebuilds the studio's CodeMirror and fake clock bundles
+    from the versions pinned in `scripts/codemirror/` and
+    `scripts/fake-timers/`. It needs Node, through `mise exec node@24 --` for
+    example, and is only for updating them.
 - `Dockerfile`, `action.yml` and `.github/workflows/image.yml`: the image, the
   GitHub Action and CI.

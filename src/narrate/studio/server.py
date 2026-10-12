@@ -20,7 +20,7 @@ from pathlib import Path
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
-from starlette.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from starlette.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
@@ -379,6 +379,23 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
             return Response("not found", status_code=404)
         return FileResponse(path, headers={"Cache-Control": "no-cache"})
 
+    async def scene_page(request: Request) -> Response:
+        """A project file for an HTML scene (#73): the page itself, set up to be scrubbed
+        (preview.page_html, with the narration from its address), and its files as they are."""
+        from .preview import page_html
+
+        path = session.project_file(request.path_params["path"])
+        if path is None:
+            return Response("not found", status_code=404)
+        if path.suffix.lower() not in (".html", ".htm"):
+            return FileResponse(path, headers={"Cache-Control": "no-cache"})
+        try:
+            narrate = json.loads(request.query_params.get("narrate") or "{}")
+            text = page_html(path.read_bytes().decode("utf-8", errors="replace"), narrate)
+        except (ValueError, TypeError, AttributeError) as e:
+            return Response(f"bad narration for the page: {e}", status_code=400)
+        return HTMLResponse(text, headers={"Cache-Control": "no-cache"})
+
     @contextlib.asynccontextmanager
     async def lifespan(app: Starlette):
         app.state.loop = asyncio.get_running_loop()
@@ -414,6 +431,7 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
         Route("/scratch/{name}", scratch_file),
         Route("/api/events", events),
         Route("/files/{path:path}", project_file),
+        Route("/pages/{path:path}", scene_page),
         Mount("/static", StaticFiles(directory=STATIC), name="static"),
     ], lifespan=lifespan)
     app.state.session = session

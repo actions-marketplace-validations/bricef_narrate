@@ -123,9 +123,9 @@ Decided with the author.
   of JSX. htm publishes a single-file module with Preact built in, which narrate
   vendors.
 - **Editor:** CodeMirror 6, which has no single-file release. narrate vendors
-  one bundle made by `scripts/vendor-codemirror.sh`, which pins every package
-  version and esbuild. Node is needed only to run that script, when updating
-  CodeMirror.
+  one bundle made by `scripts/vendor.sh codemirror`, which pins every package
+  version and esbuild. The fake clock for HTML scenes (D12) is bundled the same
+  way. Node is needed only to run that script, when updating a bundle.
 - **Why:** narrate is a Python project. Without a JavaScript toolchain in the
   everyday loop, a change is an edit and a browser refresh. The studio's tests
   drive it with the Playwright and Chromium narrate already depends on, so
@@ -180,6 +180,65 @@ Decided with the author.
 - **Unchanged:** the speech, render and capture caches work exactly as for the
   command line.
 
+### D12. HTML scenes are scrubbed in the browser
+
+- **How:** the preview runs the page in the studio's own browser, on a fake
+  clock. `/pages/` serves it with three scripts ahead of its own:
+  - the fake clock (`@sinonjs/fake-timers`, vendored);
+  - the renderer's own seeking, `pages._SEEK_JS`, served from the same string
+    so the two never drift;
+  - the cue script a build gives the page.
+
+  The studio posts the page its time. `page-clock.js`, in the page, then
+  moves the clock on a frame at a time, as a build does, and seeks every
+  animation after each step. While the scene plays, the studio posts the
+  narration's time on every animation frame.
+- **Going back:** timers can't run backwards.
+  - A page with scripts of its own reloads and runs forward to the moment.
+  - A page without scripts seeks straight there.
+- **Its address:** the page's path in the project, plus its version and cues.
+  - Its relative files load naturally.
+  - Moving the moment never reloads it; a new cue or an edited file does.
+- **Exactness:** the clock steps and seeking are the build's own, but the
+  browser is the user's, which may differ from narrate's Chromium in fonts or
+  features. **Render scene** stays the exact check.
+- **Alternatives:**
+  - *Frames rendered by the server's headless Chromium:* exact, but a round
+    trip and a screenshot for every moment, so scrubbing and playing would
+    stutter.
+  - *Playwright's own clock in the browser:* the build's clock is Playwright's,
+    but it's compiled into Playwright's driver and not published on its own.
+    fake-timers is the library it was forked from.
+
+### D13. Overlays are previewed as stacked pages
+
+Each overlay (#59) is a transparent page over the frame, in the build's order
+(the scene's, then the video's). Each runs on its own clock (the scene's or
+the video's) with D12's runtime, so the preview shows what a build lays on
+top.
+
+### D14. Marks are placed by an edit
+
+Selecting a word and adding a mark is a direct manipulation like the others
+(D11):
+- the server writes `<mark name="…"/>` before the word;
+- a plain paragraph is wrapped in `<speak>`, with narrate's inline markup
+  carried over to SSML;
+- the editor applies it as one undoable change.
+
+### D15. Mermaid is drawn live with narrate's own copy
+
+The preview draws a diagram in the browser from the text being typed. It uses
+the page a build draws it with and the mermaid.js narrate already pins and
+checks for builds, so the preview and the video agree and there's no second
+copy to vendor.
+
+### D16. A web capture is retaken by a scene render
+
+**Retake capture** renders the scene with `--regenerate`. That reuses the
+scene render's child process, progress and **Cancel** (D6), and stores the
+capture where a build would. No new command or code path is needed.
+
 ## API
 
 | Request | Does |
@@ -204,6 +263,7 @@ Decided with the author.
 | `POST /api/scenes/render/cancel` | stop the scene render |
 | `GET /api/events` | the event stream (SSE) |
 | `GET /files/{path}` | the project's own files, nothing outside its folder and no hidden files |
+| `GET /pages/{path}` | the same files, an HTML scene set up to be scrubbed (D12) with the narration its `narrate` query gives |
 | `GET /scratch/{name}` | the session's scratch files: clip stills, scene audio, copies of renders |
 
 ## Milestones
@@ -218,6 +278,9 @@ Decided with the author.
 2. **M2, directing (#56):** the timeline with real durations and waveforms; an
    inspector for pictures (crop, focal point, zoom path), callouts drawn on the
    preview, voice audition; exact single-scene renders.
-3. **M3, HTML scenes and render blocks (#57):** a scrubbable page preview
-   using the renderer's own seeking, marks placed by clicking words, and live
-   previews of Mermaid and other render blocks.
+3. **M3, HTML scenes and render blocks (#57):**
+   - HTML scenes scrubbed in the preview with the renderer's own seeking (#73);
+   - overlays in the preview (#74);
+   - marks placed by selecting a word (#75);
+   - Mermaid drawn live (#76);
+   - retaking web captures (#77).

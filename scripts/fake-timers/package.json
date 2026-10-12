@@ -1,0 +1,9 @@
+{
+  "name": "narrate-fake-timers-vendor",
+  "private": true,
+  "description": "Pins the fake clock bundled into src/narrate/studio/static/vendor/fake-timers.js (scripts/vendor.sh)",
+  "dependencies": {
+    "@sinonjs/fake-timers": "15.4.0",
+    "esbuild": "0.28.2"
+  }
+}
