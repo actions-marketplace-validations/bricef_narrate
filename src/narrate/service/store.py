@@ -103,6 +103,12 @@ class Store:
                                [*args, limit]).fetchall()
         return [self._job(r) for r in rows]
 
+    def between(self, start: float, end: float) -> list[dict]:
+        """Jobs made from `start` up to `end` (seconds since the epoch), oldest first."""
+        rows = self.db.execute(f"SELECT {', '.join(_COLUMNS)} FROM jobs WHERE created >= ? AND created < ? "
+                               "ORDER BY created", [start, min(end, 1e18)]).fetchall()
+        return [self._job(r) for r in rows]
+
     def waiting(self) -> list[str]:
         """Queued jobs, oldest first: they run when the service starts again."""
         return [r[0] for r in self.db.execute("SELECT id FROM jobs WHERE state = 'queued' ORDER BY created")]

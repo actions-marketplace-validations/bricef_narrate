@@ -10,6 +10,7 @@ whoever follows its events.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
 import shutil
@@ -21,6 +22,7 @@ from urllib.parse import quote, unquote
 from .. import project as zips
 from ..child import Child
 from . import options as job_options
+from .costs import Prices, price
 from .projects import ProjectError, lay_out
 from .projects import parse as parse_project
 from .store import FINAL, Store, is_sha256
@@ -44,9 +46,10 @@ def view(job: dict) -> dict:
 class Runner:
     """Runs jobs `workers` at a time, with `engine` unless a job asks for another."""
 
-    def __init__(self, store: Store, engine: str = "kokoro", workers: int = 1):
+    def __init__(self, store: Store, engine: str = "kokoro", workers: int = 1, prices: Prices | None = None):
         self.store = store
         self.engine = engine
+        self.prices = prices
         self.workers = max(1, workers)
         self.queue: asyncio.Queue[str] = asyncio.Queue()
         self.children: dict[str, Child] = {}
@@ -159,8 +162,10 @@ class Runner:
                   progress={"scene": 0, "of": None, "message": "starting"})
         out = folder / "out"
         out.mkdir(parents=True, exist_ok=True)
+        spent = folder / "usage.json"
         try:
             args, output, printed = self._plan(job, folder, out)
+            args += ["--usage", str(spent)]
         except ProjectError as e:
             self._set(job_id, state="failed", finished=time.time(), errors=[{"line": None, "message": str(e)}])
             return
@@ -183,7 +188,17 @@ class Runner:
         else:
             state = "failed"
         self._set(job_id, state=state, finished=time.time(), outputs=outputs, notes=outcome.notes,
-                  errors=[] if state == "done" else outcome.errors, summary=outcome.summary)
+                  errors=[] if state == "done" else outcome.errors, summary=outcome.summary,
+                  usage=self._usage(spent))
+
+    def _usage(self, spent: Path) -> dict | None:
+        """What the job spent, as its command reported it, priced at the service's prices (#81)."""
+        try:
+            usage = json.loads(spent.read_text())
+        except (OSError, ValueError):
+            return None  # it stopped before it could say
+        usage["cost"] = price(usage, self.prices)
+        return usage
 
     def _plan(self, job: dict, folder: Path, out: Path) -> tuple[list[str], Path, bool]:
         """A job's command line, the output that says it worked, and whether that output is what the command

@@ -295,6 +295,65 @@ def espeak_code(lang: str) -> str:
     return ESPEAK.get(lang) or ESPEAK.get(lang.split("-")[0]) or lang.split("-")[0]
 
 
+# ElevenLabs credits per character, by model, where it reports none itself: the flash and turbo models cost half
+CREDITS_PER_CHARACTER = {"eleven_flash_v2": 0.5, "eleven_flash_v2_5": 0.5, "eleven_turbo_v2": 0.5,
+                         "eleven_turbo_v2_5": 0.5}
+
+
+class Usage:
+    """What a run asked of its speech engine (#81), for cost reports. Per model:
+    - `characters`, `requests`: what was actually sent, in requests that succeeded (retries of refused ones
+      aren't billed, so aren't counted);
+    - `credits`, for a paid engine: as the engine billed them (its `character-cost` header), else estimated
+      from the model's rate per character (`estimated_requests` says how many were);
+    - `cached_characters`: what distinct requests the cache answered instead. A request asked again later in
+      the same run (the speech is planned twice) counts once.
+
+    Engines synthesise from several threads, hence the lock."""
+
+    def __init__(self, engine: str, billed: bool = False):
+        self.engine = engine
+        self.billed = billed
+        self._lock = threading.Lock()
+        self._models: dict[str, dict] = {}
+        self._made: set = set()
+        self._cached: dict = {}
+
+    def _empty(self) -> dict:
+        return {"characters": 0, "requests": 0, "cached_characters": 0,
+                **({"credits": 0.0, "estimated_requests": 0} if self.billed else {})}
+
+    def _model(self, model: str) -> dict:
+        return self._models.setdefault(model, self._empty())
+
+    def sent(self, model: str, characters: int, credits: float | None = None) -> None:
+        with self._lock:
+            entry = self._model(model)
+            entry["characters"] += characters
+            entry["requests"] += 1
+            if self.billed:
+                if credits is None:
+                    credits = characters * CREDITS_PER_CHARACTER.get(model, 1.0)
+                    entry["estimated_requests"] += 1
+                entry["credits"] += credits
+
+    def looked_up(self, model: str, key, characters: int, hit: bool) -> None:
+        """A request the cache was asked about: answered (`hit`), or about to be synthesised."""
+        with self._lock:
+            if not hit:
+                self._made.add(key)
+                self._cached.pop(key, None)
+            elif key not in self._made:
+                self._cached[key] = (model, characters)
+
+    def report(self) -> dict:
+        with self._lock:
+            models = {name: dict(entry) for name, entry in self._models.items()}
+            for model, characters in self._cached.values():
+                models.setdefault(model, self._empty())["cached_characters"] += characters
+        return {"engine": self.engine, "models": models}
+
+
 class SilentSynth:
     """Timing-only backend: silence as long as the speech would roughly be."""
 
@@ -356,6 +415,7 @@ class KokoroSynth:
         self._local = threading.local()
         self._phonemize = threading.Lock()
         self._cache = SynthCache(self.name)
+        self.usage = Usage(self.name)
 
     def _engine(self):
         if not hasattr(self._local, "kokoro"):
@@ -386,7 +446,10 @@ class KokoroSynth:
             notes.add(f"voice-speed {speed} (Kokoro accepts 0.5–2; clamped)")
         cached = self._cache.path(MODEL_FILES[0], text, voice.id, voice.lang, round(clamped, 3))
         if (hit := self._cache.load(cached)) is not None or only_cached:
+            if not only_cached:
+                self.usage.looked_up(MODEL_FILES[0], cached, len(speech_text(text)), True)
             return hit
+        self.usage.looked_up(MODEL_FILES[0], cached, len(speech_text(text)), False)
         kokoro = self._engine()
         segments = [(text, None)] if isinstance(text, str) else text
         # Each segment in its own language, or as given phonetically, spliced
@@ -396,6 +459,7 @@ class KokoroSynth:
         assert sr == SAMPLE_RATE
         audio = np.asarray(audio, dtype=np.float32)
         np.save(cached, audio)
+        self.usage.sent(MODEL_FILES[0], len(speech_text(text)))
         return audio
 
 
@@ -423,6 +487,7 @@ class ElevenLabsSynth:
         if self.model.startswith(ELEVENLABS_FIXED_SPEED):
             self.speed_range = (1.0, 1.0)
         self._cache = SynthCache(self.name)
+        self.usage = Usage(self.name, billed=True)
         self._ignores_language: set[str] = set()
         self._library_names: dict[str, str] | None = None
 
@@ -488,7 +553,10 @@ class ElevenLabsSynth:
             notes.add(f"voice-speed {speed} ({self.model} accepts {lo}–{hi}; clamped)")
         cached = self._cache.path(self.model, text, voice.id, voice.lang, round(clamped, 3))
         if (hit := self._cache.load(cached)) is not None or only_cached:
+            if not only_cached:
+                self.usage.looked_up(self.model, cached, len(text), True)
             return hit
+        self.usage.looked_up(self.model, cached, len(text), False)
         body: dict = {"text": text, "model_id": self.model}
         if clamped != 1.0:
             body["voice_settings"] = {"speed": clamped}
@@ -513,7 +581,10 @@ class ElevenLabsSynth:
         clamped = min(hi, max(lo, speed))
         cached = self._cache.path(ELEVENLABS_PHONEME_MODEL, "ipa", ipa, voice.id, round(clamped, 3))
         if (hit := self._cache.load(cached)) is not None or only_cached:
+            if not only_cached:
+                self.usage.looked_up(ELEVENLABS_PHONEME_MODEL, cached, len(ipa), True)
             return hit
+        self.usage.looked_up(ELEVENLABS_PHONEME_MODEL, cached, len(ipa), False)
         notes.add(f"phonetic spans on ElevenLabs are voiced by {ELEVENLABS_PHONEME_MODEL}, "
                   "the model family that reads IPA")
         safe = html.escape(ipa, quote=True)
@@ -535,7 +606,14 @@ class ElevenLabsSynth:
         for attempt in range(5):
             try:
                 with urllib.request.urlopen(request, timeout=120) as resp:
-                    return resp.read()
+                    data = resp.read()
+                    cost = resp.headers.get("character-cost")
+                try:
+                    credits = float(cost) if cost else None
+                except ValueError:
+                    credits = None
+                self.usage.sent(body["model_id"], len(body["text"]), credits)
+                return data
             except urllib.error.HTTPError as e:
                 detail = e.read().decode(errors="replace")
                 if e.code in (429, 500, 502, 503, 504) and attempt < 4:

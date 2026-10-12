@@ -383,6 +383,13 @@ already in the cache costs nothing.
   with voice-reading permission.
 - **Credits:** every new paragraph spends credits; cached ones don't. Preview
   with `--tts silent` until the script settles.
+- **What it spent:** `--usage spent.json` (on `build` and `audio`) records
+  what the build sent, by model:
+  - characters and requests;
+  - credits, as ElevenLabs billed them or, where it doesn't say, at the
+    model's rate (half a credit a character for flash and turbo);
+  - the characters the cache saved;
+  - CPU time.
 - **Rate limits:** narrate sends two requests at a time, the free plan's limit,
   and retries when ElevenLabs is busy. Raise it with
   `NARRATE_ELEVENLABS_CONCURRENCY` on a paid plan.
@@ -595,6 +602,7 @@ curl -sO $api/jobs/j_19a…/outputs/intro.mp4
 | `GET /v1/jobs/{id}/events` | the job as it changes (server-sent events), ending with it |
 | `POST /v1/jobs/{id}/cancel` | stop it |
 | `GET /v1/jobs/{id}/outputs/{name}` | an output file |
+| `GET /v1/usage` | usage and cost by day or by job (`?since=2026-10-01&until=…&by=job&format=csv`) |
 | `GET /v1/openapi.json` | all of it, as OpenAPI |
 
 - **Kinds:**
@@ -624,6 +632,36 @@ curl -sO $api/jobs/j_19a…/outputs/intro.mp4
   `transcript`, or a review's `sheet` (PNG) or `report` (JSON). Any `render:web` capture taken is also an output, under
   `captures`, by its path in the project, so you can keep it there for later
   builds.
+
+**What each job cost:**
+- **Usage:** every job records what it spent, as `--usage` reports it:
+  - speech characters, requests and credits by model;
+  - what the cache saved;
+  - renders drawn;
+  - the video's length;
+  - wall and CPU time.
+- **Prices:** start the service with `--prices prices.yaml`, and each job's
+  `usage.cost` prices that usage:
+
+  ```yaml
+  currency: USD
+  elevenlabs_per_1000_credits: 0.30   # what your ElevenLabs plan charges
+  cpu_per_hour: 0.05                  # what the machine's time is worth, if anything
+  ```
+
+  The prices are kept with each job, so changing them later doesn't change
+  what earlier jobs cost. Without a prices file, jobs report usage but no
+  cost.
+- **Reports:** `GET /v1/usage` totals usage and cost for any period, a row per
+  day or per job, as JSON or CSV:
+
+  ```sh
+  curl -s "$api/usage?since=2026-10-01&by=day"
+  curl -s "$api/usage?since=2026-10-01&by=job&format=csv" > october.csv
+  ```
+
+  Usage is kept with the job records, indefinitely. A check costs nothing,
+  but it says what a build would send, so you can see the price first.
 
 ## Manage downloads and caches
 
@@ -725,11 +763,11 @@ models and the ElevenLabs key, and prints a fix for each problem.
 | Command | Does |
 | --- | --- |
 | `narrate studio SCRIPT [--open]` | edit the script in a web app (`--tts` for its engine; `--host`, `--port` to serve elsewhere) |
-| `narrate serve` | serve builds over HTTP for your own programs (`--host`, `--port`, `--data`, `--workers`, `--tts`) |
-| `narrate build SCRIPT [-o OUT.mp4]` | render a video (`SCRIPT` may be a `.zip`; `--source` picks the script inside; `--scenes 3-5` builds just those; `--subtitles MODE` and `--transcript` choose the extra outputs; `--regenerate` retakes web captures) |
-| `narrate audio SCRIPT [-o OUT]` | render the narration only (also takes `--subtitles` and `--transcript`) |
-| `narrate hear VIDEO [--script SCRIPT]` | what speech-to-text hears, and where it differs from the script (`--json`) |
-| `narrate frames VIDEO [--script SCRIPT]` | a contact sheet of the video's frames (`--at`, `--every`, `--count`, `-o`) |
+| `narrate serve` | serve narrate over HTTP for your own programs (`--host`, `--port`, `--data`, `--workers`, `--tts`, `--prices`) |
+| `narrate build SCRIPT [-o OUT.mp4]` | render a video (`SCRIPT` may be a `.zip`; `--source` picks the script inside; `--scenes 3-5` builds just those; `--subtitles MODE` and `--transcript` choose the extra outputs; `--regenerate` retakes web captures; `--usage FILE` records what it spent) |
+| `narrate audio SCRIPT [-o OUT]` | render the narration only (also takes `--subtitles`, `--transcript` and `--usage`) |
+| `narrate hear VIDEO [--script SCRIPT]` | what speech-to-text hears, and where it differs from the script (`--json`, `--usage`) |
+| `narrate frames VIDEO [--script SCRIPT]` | a contact sheet of the video's frames (`--at`, `--every`, `--count`, `-o`, `--usage`) |
 | `narrate check SCRIPT [--timing]` | report missing files and problems, without rendering; `--timing` adds scene lengths, the total and what synthesis would cost (`--json` for programs) |
 | `narrate callouts FILE` | write a page for placing callouts on an image or a clip's frame |
 | `narrate voices [SCRIPT]` | list voices, and a script's `voices.yaml` pins |
