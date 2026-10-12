@@ -8,6 +8,7 @@ from dataclasses import dataclass
 ELLIPSIS_PAUSE = 0.5
 SENTENCE_PAUSE = 0.25  # between runs split by emphasis, after a sentence ends
 JOIN_PAUSE = 0.06  # between runs split mid-sentence
+EMPHASIS_LEVELS = ("none", "moderate", "strong", "reduced")  # SSML's own; build.EMPHASIS says how each sounds
 STYLES = {"normal", "ipa", "x-sampa", "literal", "pinyin", "jyutping"}
 _LANG_RE = re.compile(r"^[a-z]{2,3}(?:-[a-z0-9]{2,8})?$")
 # Private-use markers carry language spans through the run splitting:
@@ -105,7 +106,7 @@ class Run:
     """A stretch of narration synthesised in one call."""
 
     text: Speech
-    emphasis: str = "none"  # none | moderate | strong | reduced
+    emphasis: str = "none"  # one of EMPHASIS_LEVELS
     pause: float = 0.0  # silence before it
     rate: float = 1.0  # SSML prosody on top of the paragraph's voice settings
     pitch: float = 1.0  # frequency ratio
