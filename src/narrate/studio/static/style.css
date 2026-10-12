@@ -110,6 +110,8 @@ button.quiet { border-color: transparent; color: var(--muted); }
                    box-shadow: 0 1px 4px rgba(0, 0, 0, .25); }
 .preview iframe { position: absolute; top: 0; left: 0; border: 0; transform-origin: 0 0; pointer-events: none;
                   background: #000; }
+.preview .page-frame { position: absolute; top: 0; left: 0; overflow: hidden; transform-origin: 0 0; pointer-events: none; }
+.preview .page-frame iframe { background: #fff; }  /* a page's own default, as a build captures it */
 .preview .caption { display: flex; justify-content: space-between; gap: 8px; margin: 8px 2px; color: var(--muted);
                     font-size: 12px; font-variant-numeric: tabular-nums; }
 .preview-error { color: var(--error); font-size: 12px; }

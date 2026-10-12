@@ -67,7 +67,8 @@ def test_a_zoom_shows_the_crop_it_has_reached(project):
 
 
 def test_html_scenes_show_the_page_itself(project):
-    assert shown(project, "![](scene.html)\n\n(duration: 1)\n", 1, 0.5) == {"kind": "page", "url": "/files/scene.html"}
+    page = shown(project, "---\nsize: 320x180\n---\n\n![](scene.html)\n\n(duration: 1)\n", 1, 0.5)
+    assert page["kind"] == "page" and page["url"].startswith("/pages/scene.html?")  # scrubbed: test_studio_scrub.py
 
 
 def test_render_blocks_show_what_a_build_made(project, monkeypatch, tmp_path_factory):

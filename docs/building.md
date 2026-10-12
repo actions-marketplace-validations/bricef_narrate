@@ -55,7 +55,15 @@ The studio is a web app for writing a script, served from your computer.
     the moment picked on the timeline.
   - **Clips** show a still from that point, and pan and zoom the crop
     reached by then.
-  - **HTML scenes** show the page itself, playing.
+  - **HTML scenes** show the page at that moment, as a build captures it.
+    - **Clock:** the page runs on a clock the studio moves, with its cues
+      and at its `viewport`.
+    - **Scrubbing:** drag the timeline, step it with the arrow keys, or play
+      the scene, and the page follows frame by frame.
+    - **Going back:** a page with scripts of its own reloads to go back in
+      time.
+    - **The exact check:** your browser draws the page, so fonts can differ
+      from narrate's Chromium; **Render scene** is exact.
   - **Render blocks** show what the last build drew, or a card until a build
     has drawn them.
   - **Overlays** aren't shown in the preview yet (narrate #57): **Render
@@ -66,7 +74,8 @@ The studio is a web app for writing a script, served from your computer.
     narration a build uses, clip sound included, and it's cached, so the
     timing turns exact and building later costs nothing more.
   - **Controls:** **Play scene** and **Stop** sit under the preview, which
-    follows the narration paragraph by paragraph.
+    follows the narration paragraph by paragraph, and an HTML scene frame by
+    frame.
 - **Engine:** chosen in the header, or with `--tts` when starting. Kokoro
   is the default, and free.
   - **Cost:** the header shows how many paragraphs it still has to
@@ -139,8 +148,9 @@ The studio is a web app for writing a script, served from your computer.
   part of the video, with music, subtitles and theme. It goes in a temporary
   folder, never over the video, and a scene whose text, engine and files
   haven't changed isn't rendered again.
-- **What's next:** HTML scene tools are planned (narrate #28; the design is in
-  [design/studio.md](design/studio.md)).
+- **What's next:** overlays in the preview, marks placed by selecting a word,
+  live Mermaid diagrams and retaking web captures (narrate #57; the design is
+  in [design/studio.md](design/studio.md)).
 
 **On another machine,** such as a server you reach over a VPN:
 `narrate studio script.md --host 0.0.0.0`, then open port 8787 on that

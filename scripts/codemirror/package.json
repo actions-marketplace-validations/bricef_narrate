@@ -1,7 +1,7 @@
 {
   "name": "narrate-codemirror-vendor",
   "private": true,
-  "description": "Pins the CodeMirror packages bundled into src/narrate/studio/static/vendor/codemirror.js (scripts/vendor-codemirror.sh)",
+  "description": "Pins the CodeMirror packages bundled into src/narrate/studio/static/vendor/codemirror.js (scripts/vendor.sh)",
   "dependencies": {
     "@codemirror/autocomplete": "6.20.3",
     "@codemirror/commands": "6.11.1",

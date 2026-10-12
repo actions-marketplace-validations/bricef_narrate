@@ -5,6 +5,7 @@ import { VoicePicker } from "./voices.js";
 import { CalloutInspector, CalloutLayer } from "./callouts.js";
 import { Timeline } from "./timeline.js";
 import { Inspector, draggedPosition, positionFor, slack } from "./inspector.js";
+import { PageFrame } from "./page.js";
 
 const ANALYSE_AFTER_MS = 300;
 const PREVIEW_AFTER_MS = 150;
@@ -154,7 +155,7 @@ function SceneRender({ render, onCancel }) {
 
 /** The frame at the cursor's moment, at the video's size, scaled to fit the pane. `drag`, when the
     picture at the cursor has room to move, lets the frame be dragged to change its position (#62). */
-function Preview({ analysis, shown, moment, error, playback, onPlay, onStop, tab, onTab, build, sceneRender,
+function Preview({ analysis, shown, moment, error, playback, audio, onPlay, onStop, tab, onTab, build, sceneRender,
                    onRender, onCancelRender, drag, overlay, tools, voices, children }) {
   const box = useRef(null);
   const [scale, setScale] = useState(0.4);
@@ -204,7 +205,9 @@ function Preview({ analysis, shown, moment, error, playback, onPlay, onStop, tab
       : html`<div class="frame-tab">
     <div class="screen" ref=${box} style=${`height:${h * scale}px`}>
       ${shown && shown.kind === "frame" && html`<iframe title="frame" srcdoc=${shown.html} style=${frameStyle} tabindex="-1"></iframe>`}
-      ${shown && shown.kind === "page" && html`<iframe title="frame" src=${shown.url} style=${frameStyle} tabindex="-1"></iframe>`}
+      ${shown && shown.kind === "page" && html`<${PageFrame} page=${shown} style=${frameStyle}
+        time=${moment && moment.scene === shown.scene ? moment.time : shown.start + shown.time}
+        follow=${playback.state === "playing" && playback.scene === shown.scene ? audio : null} />`}
       ${drag && html`<div class="drag-surface" data-testid="drag-surface" title="drag to move the picture"
         onPointerDown=${onPointerDown} onPointerMove=${onPointerMove} onPointerUp=${onPointerUp} onPointerCancel=${onPointerUp}></div>`}
       ${dragged && html`<span class="drag-hint">${dragged.label}</span>`}
@@ -470,7 +473,7 @@ function App() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: analysis.id, scene: moment.scene, time: moment.time }),
       }).catch(() => ({ status: 0, body: {} }));
-      if (status === 200) { setShown(body); setPreviewError(null); }
+      if (status === 200) { setShown({ ...body, scene: moment.scene }); setPreviewError(null); }
       else if (status === 409) scheduleAnalysis();
       else if (status) setPreviewError(body.error || `no preview (${status})`);
     }, PREVIEW_AFTER_MS);
@@ -632,6 +635,7 @@ function App() {
         onPick=${(line) => goToLine(editor.current.view, line)} />
       <section class="editor" ref=${host} aria-label="script"></section>
       <${Preview} analysis=${analysis} shown=${shown} moment=${moment} error=${previewError} playback=${playback}
+        audio=${audio.current}
         onPlay=${() => (seek ? play(seek.scene, seek.line, seek.time) : cursorMoment && play(cursorMoment.scene, cursorLine))}
         onStop=${stop} tab=${tab} onTab=${setTab} build=${build}
         sceneRender=${sceneRender} onRender=${() => moment && renderScene(moment.scene)} onCancelRender=${cancelSceneRender}
