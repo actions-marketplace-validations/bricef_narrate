@@ -263,9 +263,10 @@ Always pass `--tts`. The default, `auto`, picks ElevenLabs whenever a key is
 set, which would spend credits without asking.
 
 Use ElevenLabs only when the user asks for it. First run
-`narrate check script.md --timing --tts elevenlabs`. Then tell the user how
-many characters the build will send, and build only after they agree. Speech
-is cached by its text and voice:
+`narrate check script.md --timing --tts elevenlabs`. It works without a key,
+so you can quote the cost before the user sets one up. Then tell the user how
+many characters the build will send, and build only after they agree; a build
+needs `ELEVENLABS_API_KEY`. Speech is cached by its text and voice:
 - rebuilding an unchanged script costs nothing;
 - editing one paragraph re-synthesises only that paragraph;
 - a draft that's still changing is the wrong time to use ElevenLabs.
