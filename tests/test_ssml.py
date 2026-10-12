@@ -40,6 +40,25 @@ def test_unknown_tags_keep_their_text_and_are_noted():
     assert run.text == "quietly said" and any("amazon:effect" in n for n in notes)
 
 
+def test_an_emphasis_level_ssml_doesnt_have_is_read_as_moderate(tmp_path):
+    """#78: it stopped the build with a KeyError."""
+    notes: set[str] = set()
+    runs = ssml_runs('<speak>A <emphasis level="X-Strong">big</emphasis> one.</speak>', "en", notes)
+    assert [r.emphasis for r in runs] == ["none", "moderate", "none"]
+    assert notes == {'SSML <emphasis level="x-strong"> (read as moderate)'}
+    text = '<speak>A <emphasis level="x-strong">big</emphasis> one.</speak>\n'
+    builder = Builder(parse(text, tmp_path / "s.md"), SilentSynth(), log=lambda _: None)
+    [plan] = builder.plans(builder.script.scenes, tmp_path)  # spoken, with the moderate bundle
+    assert plan.duration > 0 and 'SSML <emphasis level="x-strong"> (read as moderate)' in builder.notes
+
+
+def test_every_emphasis_level_has_a_sound():
+    from narrate.build import EMPHASIS
+    from narrate.text import EMPHASIS_LEVELS
+
+    assert set(EMPHASIS) == set(EMPHASIS_LEVELS)
+
+
 def test_malformed_ssml_falls_back_to_plain_text_with_a_warning():
     script = parse("<speak>broken <prosody rate='slow'>tag</speak>\n")
     builder = Builder(script, SilentSynth(), log=lambda _: None)

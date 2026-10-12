@@ -204,7 +204,7 @@ The word [Schadenfreude]{de} keeps its German pronunciation.
   these tags itself, so they work the same with every engine:
   - `<break>` (`time` or `strength`)
   - `<prosody>` (`rate`, `pitch`, `volume`)
-  - `<emphasis>`
+  - `<emphasis>` (`level`: `reduced`, `moderate`, the default, `strong` or `none`)
   - `<say-as interpret-as="characters">`
   - `<phoneme>`, `<lang>` and `<sub alias>`
   - `<p>` and `<s>`

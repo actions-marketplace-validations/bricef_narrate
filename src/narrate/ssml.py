@@ -22,7 +22,7 @@ import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, replace
 
-from .text import MARK_NAME, SENTENCE_PAUSE, Run, spell
+from .text import EMPHASIS_LEVELS, MARK_NAME, SENTENCE_PAUSE, Run, spell
 
 RATES = {"x-slow": 0.6, "slow": 0.8, "medium": 1.0, "default": 1.0, "fast": 1.2, "x-fast": 1.4}
 PITCHES = {"x-low": -4.0, "low": -2.0, "medium": 0.0, "default": 0.0, "high": 2.0, "x-high": 4.0}
@@ -130,7 +130,11 @@ class _Builder:
                                     pitch=prosody.pitch * _pitch(element.get("pitch", "medium")),
                                     gain=prosody.gain + _volume(element.get("volume", "medium")))
         elif name == "emphasis":
-            child_prosody = replace(prosody, emphasis=(element.get("level") or "moderate").lower())
+            level = (element.get("level") or "moderate").strip().lower()
+            if level not in EMPHASIS_LEVELS:  # x-strong, say: not SSML's, so its default (#78)
+                self.notes.add(f'SSML <emphasis level="{level}"> (read as moderate)')
+                level = "moderate"
+            child_prosody = replace(prosody, emphasis=level)
         elif name == "lang":
             child_tag = element.get("{http://www.w3.org/XML/1998/namespace}lang", tag)
         elif name in ("p", "s"):
