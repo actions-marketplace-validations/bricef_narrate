@@ -20,7 +20,7 @@ import numpy as np
 
 from .. import media, motion, render
 from ..build import SR, Builder, BuildError, ScenePlan, merge_groups
-from ..config import ConfigError, Settings
+from ..config import ConfigError, Settings, parse_overlay
 from ..script import ANIMATED_SIZES, SIZES, Directive, Media, Narration, Render, Scene, ScriptError, Slide, parse
 from ..tts import EstimatingSynth
 
@@ -231,6 +231,15 @@ def run(text: str, script: Path, synth: Any) -> Analysis:
     problems: list[dict] = []
     missing: set[int] = set()
     for block in (b for scene in parsed.scenes for b in scene.blocks):
+        if isinstance(block, Directive) and block.key == "overlay":  # a scene's overlay page (#59)
+            try:
+                overlay = parse_overlay(block.value)
+            except ConfigError as e:
+                problems.append(_problem(block.line, str(e)))
+            else:
+                if overlay is not None and not (parsed.base_dir / overlay.file).is_file():
+                    problems.append(_problem(block.line, f"file not found: {overlay.file}"))
+            continue
         if isinstance(block, Media) and block.render:
             # The quick checks only: deeper validation (Mermaid's parser) starts Chromium, too slow per keystroke
             try:
@@ -246,6 +255,8 @@ def run(text: str, script: Path, synth: Any) -> Analysis:
     estimator = EstimatingSynth(synth)
     try:
         builder = Builder(parsed, estimator, log=lambda _: None, measure_pages=False)
+        problems += [_problem(1, f"file not found: {spec.file}") for spec in builder.settings.overlays
+                     if not (parsed.base_dir / spec.file).is_file()]  # the header's overlay pages (#59)
     except BuildError as e:
         problems.append(_problem(e.line, str(e)))
         return Analysis({"id": text_id(text), "problems": problems + [_warning(w) for w in parsed.warnings],

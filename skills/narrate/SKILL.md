@@ -228,7 +228,10 @@ Use the user's own pictures and clips when they exist. When they don't:
   a timeline, a comparison);
 - `render:web` for a live page;
 - an **animated HTML scene** for titles, data that builds up, or anything
-  that should move in step with the words.
+  that should move in step with the words;
+- an **overlay** (`(overlay: page.html)`, or `overlay:` in the header for the
+  whole video) to lay a transparent web page over the picture: a ticker, a
+  speaker's name, a legend, labels.
 
 HTML scenes are the most powerful option and the most work. Read
 `references/html-scenes.md` before writing one. They're local web pages that

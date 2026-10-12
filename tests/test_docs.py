@@ -3,7 +3,8 @@
 Examples are the ````markdown blocks in README.md and docs/*.md (````md
 blocks, which need the network, are left out). They name
 placeholder files (photo.jpg, clip.mp4, …), which the fixture makes; theme.css
-and scene.html are the CSS and HTML examples from docs/writing-scripts.md itself.
+and the pages (scene.html, ticker.html, …) are the CSS and HTML examples from
+docs/writing-scripts.md itself.
 """
 
 import re
@@ -45,7 +46,9 @@ def assets(tmp_path_factory):
         media.run(["-f", "lavfi", "-i", f"sine=frequency=220:duration={seconds}", "-c:a", "libmp3lame", str(d / name)])
     guide = (ROOT / "docs/writing-scripts.md").read_text()
     (d / "theme.css").write_text(re.search(r"```css\n(.*?)```", guide, re.S).group(1))
-    (d / "scene.html").write_text(re.search(r"```html\n(.*?)```", guide, re.S).group(1))
+    # Each page the guide shows ("`scene.html`, next to the script:"), under its own name
+    for name, page in re.findall(r"`([\w-]+\.html)`, next to the script:\n\n```html\n(.*?)```", guide, re.S):
+        (d / name).write_text(page)
     shutil.copy(find_font("DejaVuSans.ttf"), d / "font.ttf")
     return d
 

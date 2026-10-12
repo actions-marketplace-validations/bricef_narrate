@@ -76,6 +76,7 @@ Second scene.
 | `asset-resize` | default fit for pictures and clips: `cover` `contain` `fit` | `cover` |
 | `image-zoom` | how far pan/zoom moves, above 1 (narrate only) | 1.25 zoom, 1.15 pan |
 | `transition` | `TYPE [SECONDS]` between every scene (§15) | none |
+| `overlay` | web pages over the whole video: a page, a map, or a list (§10, narrate only) | none |
 | `fade-in`, `fade-out` | seconds from/to black at the video's start/end (narrate only) | 0 |
 | `subtitles` | a mode, or a style map (§13) | `none` |
 | `transcript` | `true`: also write `<name>.transcript.txt` (narrate only) | `false` |
@@ -220,6 +221,17 @@ flowchart LR
   narration block starts; `--cue-NAME` when the voice reaches `<mark name="NAME"/>`;
   `--narrate-duration`. Scripts get `window.narrate.duration` and `window.narrate.cues`.
 - No network, and no `<video>`/`<audio>` inside. See `html-scenes.md` for how to write them.
+
+**Overlays** (narrate only): a transparent web page laid over the picture, such as a ticker, a lower third,
+a legend or labels.
+- `(overlay: legend.html)` or `(overlay: {file: lower-third.html, name: "Ada", role: "Lead"})` in a scene:
+  over that scene, on the scene's clock, with its cues; other keys reach the page as `window.narrate.params`.
+- Header `overlay: ticker.html` (or a list; an entry may take `scenes: 2-5`): over the whole video, on the
+  video's clock, so it runs on through cuts. `(overlay: none)` hides it for a scene. Pages get `--scene-N`
+  and `window.narrate.scenes`.
+- Leave the page's background unset so the picture shows through. Layers: picture, callouts and slides,
+  scene overlays, video overlays, burned-in subtitles. A still page is captured once; a moving one frame
+  by frame.
 
 ## 11. Slides and themes
 
