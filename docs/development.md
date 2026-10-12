@@ -212,8 +212,8 @@ Some choices worth knowing when changing behaviour:
     - `edits.py`, the script edits behind the inspector, callouts and voices;
       `voices.py`, the voice picker's catalogue, auditions and pins;
     - `static/`, the browser app: plain ES modules, no build step;
-      `page.js` and `page-clock.js` scrub HTML scenes in the preview, on the
-      app's side and the page's;
+      `page.js` and `page-clock.js` scrub HTML scenes and overlays in the
+      preview, on the app's side and the page's;
     - `static/vendor/`, the vendored Preact (htm), CodeMirror and fake clock
       files, with their sources and hashes in its README.
   - `doctor.py`: the `doctor` command.

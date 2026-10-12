@@ -205,9 +205,10 @@ function Preview({ analysis, shown, moment, error, playback, audio, onPlay, onSt
       : html`<div class="frame-tab">
     <div class="screen" ref=${box} style=${`height:${h * scale}px`}>
       ${shown && shown.kind === "frame" && html`<iframe title="frame" srcdoc=${shown.html} style=${frameStyle} tabindex="-1"></iframe>`}
-      ${shown && shown.kind === "page" && html`<${PageFrame} page=${shown} style=${frameStyle}
-        time=${moment && moment.scene === shown.scene ? moment.time : shown.start + shown.time}
-        follow=${playback.state === "playing" && playback.scene === shown.scene ? audio : null} />`}
+      ${shown && [...(shown.kind === "page" ? [shown] : []), ...(shown.overlays || [])].map((page) => html`<${PageFrame}
+        key=${page.url} page=${page} style=${frameStyle} overlay=${page !== shown}
+        time=${moment && moment.scene === shown.scene ? moment.time : page.start + page.time}
+        follow=${playback.state === "playing" && playback.scene === shown.scene ? audio : null} />`)}
       ${drag && html`<div class="drag-surface" data-testid="drag-surface" title="drag to move the picture"
         onPointerDown=${onPointerDown} onPointerMove=${onPointerMove} onPointerUp=${onPointerUp} onPointerCancel=${onPointerUp}></div>`}
       ${dragged && html`<span class="drag-hint">${dragged.label}</span>`}

@@ -66,8 +66,12 @@ The studio is a web app for writing a script, served from your computer.
       from narrate's Chromium; **Render scene** is exact.
   - **Render blocks** show what the last build drew, or a card until a build
     has drawn them.
-  - **Overlays** aren't shown in the preview yet (narrate #57): **Render
-    scene** shows them, exactly.
+  - **Overlays** lie over the frame as they will in the video, and scrub and
+    play like HTML scenes.
+    - A scene's overlay runs on the scene's clock, with its cues.
+    - The header's overlays run on the whole video's clock, so a ticker
+      carries on across scenes.
+    - `(overlay: none)` hides the header's overlays.
 - **Listening:** each paragraph's length is also its ▶ button, and plays
   the scene from there.
   - **Synthesis:** the scene is synthesised on first play. It's the same
@@ -148,9 +152,9 @@ The studio is a web app for writing a script, served from your computer.
   part of the video, with music, subtitles and theme. It goes in a temporary
   folder, never over the video, and a scene whose text, engine and files
   haven't changed isn't rendered again.
-- **What's next:** overlays in the preview, marks placed by selecting a word,
-  live Mermaid diagrams and retaking web captures (narrate #57; the design is
-  in [design/studio.md](design/studio.md)).
+- **What's next:** marks placed by selecting a word, live Mermaid diagrams and
+  retaking web captures (narrate #57; the design is in
+  [design/studio.md](design/studio.md)).
 
 **On another machine,** such as a server you reach over a VPN:
 `narrate studio script.md --host 0.0.0.0`, then open port 8787 on that

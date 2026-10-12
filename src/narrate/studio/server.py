@@ -184,7 +184,7 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
             return JSONResponse({"error": "that scene can't be shown"}, status_code=404)
         try:
             shown = await run_in_threadpool(frame, plan, float(body.get("time", 0)), analysis.settings,
-                                            Files(session.project, session.scratch))
+                                            Files(session.project, session.scratch), analysis.plans)
         except Exception as e:  # noqa: BLE001 - a preview never takes the studio down
             return JSONResponse({"error": f"couldn't preview this moment: {e}"}, status_code=500)
         return JSONResponse(shown)
