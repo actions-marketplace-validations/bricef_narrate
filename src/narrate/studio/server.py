@@ -400,6 +400,19 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
             return Response(f"bad narration for the page: {e}", status_code=400)
         return HTMLResponse(text, headers={"Cache-Control": "no-cache"})
 
+    async def mermaid_js(request: Request) -> Response:
+        """narrate's own pinned mermaid.js (#76), downloaded and checked on first use as for a build."""
+        from .. import mermaid
+        from ..render import RenderError
+
+        if request.path_params["version"] != mermaid.MERMAID_VERSION:
+            return Response("not found", status_code=404)
+        try:
+            path = await run_in_threadpool(mermaid.ensure, lambda _: None)
+        except (RenderError, OSError) as e:
+            return Response(f"mermaid.js isn't available: {e}", status_code=503)
+        return FileResponse(path, media_type="text/javascript", headers={"Cache-Control": "max-age=86400"})
+
     @contextlib.asynccontextmanager
     async def lifespan(app: Starlette):
         app.state.loop = asyncio.get_running_loop()
@@ -436,6 +449,7 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
         Route("/api/events", events),
         Route("/files/{path:path}", project_file),
         Route("/pages/{path:path}", scene_page),
+        Route("/mermaid/{version}/mermaid.min.js", mermaid_js),
         Mount("/static", StaticFiles(directory=STATIC), name="static"),
     ], lifespan=lifespan)
     app.state.session = session

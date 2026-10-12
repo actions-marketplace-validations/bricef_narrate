@@ -5,7 +5,8 @@ Composed from the analysis's own scene plan, by the HTML a build uses
 file:// (design D9). A clip shows a still from that moment, a pan or zoom
 the crop it has reached, and an HTML scene the page itself, on a clock the
 studio moves (#73, D12). A render block shows the output a build already
-made, or a card until then. Overlays go over the frame as pages of their
+made; until then, a Mermaid diagram is drawn live (#76, D15) and other render
+blocks show a card. Overlays go over the frame as pages of their
 own (#74, D13).
 """
 
@@ -22,10 +23,14 @@ from urllib.parse import quote
 
 from PIL import Image
 
-from .. import media, motion, pages, render
+from .. import media, mermaid, motion, pages, render
 from ..build import FPS, ScenePlan, Visual, allocate_frames
 from ..config import OverlaySpec, Settings
 from ..frames import frame_html
+
+
+# Where the studio serves narrate's own pinned mermaid.js (server.mermaid_js)
+MERMAID_JS = f"/mermaid/{mermaid.MERMAID_VERSION}/mermaid.min.js"
 
 
 class Files:
@@ -215,6 +220,8 @@ def _picture(plan: ScenePlan, t: float, settings: Settings, files: Files) -> dic
         if image is None:
             if visual.render.name == "placeholder":
                 return {"kind": "frame", "html": render.renderer("placeholder").page(visual.render, w, h)}
+            if visual.render.name == "mermaid":  # drawn live by the user's browser, as a build draws it (#76)
+                return {"kind": "frame", "html": mermaid.live_page(visual.render, ctx, MERMAID_JS)}
             return {"kind": "frame", "html": _card(f"render:{visual.render.name}", "drawn when the video is built", w, h)}
     if image is None:
         return {"kind": "frame", "html": frame_html(spec, w, h, files.url)}

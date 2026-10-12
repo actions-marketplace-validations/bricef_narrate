@@ -76,7 +76,10 @@ def test_render_blocks_show_what_a_build_made(project, monkeypatch, tmp_path_fac
     placeholder = shown(project, "```render:placeholder\nProduct shot\n```\n", 1, 0.5)
     assert "Product shot" in placeholder["html"]  # the card itself, drawn without a build
     text = "---\nsize: 320x180\n---\n\n```render:mermaid\nflowchart LR\n  A --> B\n```\n"
-    assert "drawn when the video is built" in shown(project, text, 1, 0.5)["html"]
+    live = shown(project, text, 1, 0.5)["html"]  # drawn live (test_studio_mermaid.py)
+    assert "/mermaid/" in live and "flowchart LR" in live
+    web = "---\nsize: 320x180\n---\n\n```render:web\nhttps://example.com\n```\n"
+    assert "drawn when the video is built" in shown(project, web, 1, 0.5)["html"]
     # Once a build has drawn it, the preview shows the drawing
     from narrate.script import Render
     made = render.location(Render("mermaid", "flowchart LR\n  A --> B", {}),

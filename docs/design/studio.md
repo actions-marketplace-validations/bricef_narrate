@@ -282,6 +282,7 @@ capture where a build would. No new command or code path is needed.
 | `POST /api/scenes/render/cancel` | stop the scene render |
 | `GET /api/events` | the event stream (SSE) |
 | `GET /files/{path}` | the project's own files, nothing outside its folder and no hidden files |
+| `GET /mermaid/{version}/mermaid.min.js` | narrate's own pinned mermaid.js, for live diagrams (D15) |
 | `GET /pages/{path}` | the same files, an HTML scene set up to be scrubbed (D12) with the narration its `narrate` query gives |
 | `GET /scratch/{name}` | the session's scratch files: clip stills, scene audio, copies of renders |
 
