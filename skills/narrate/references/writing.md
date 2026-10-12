@@ -75,7 +75,10 @@ Every scene needs something to look at that supports its words. In order of pref
 4. **A web capture** (`render:web`) of a live page: a product site, a GitHub issue, a doc.
 5. **An animated HTML scene** (see `html-scenes.md`) when things should appear in step with the
    words: a title sequence, numbers counting up, a diagram that builds, a before/after.
-6. **A stand-in for a picture that doesn't exist yet** (a screenshot of an app, a photo):
+6. **An overlay** over the picture you already have: a speaker's name (a lower third), a legend over
+   footage, labels on a screenshot, or a ticker across the whole video (`overlay:` in the header).
+   It's a transparent page written like an HTML scene (`html-scenes.md`, "Overlays").
+7. **A stand-in for a picture that doesn't exist yet** (a screenshot of an app, a photo):
    - a `render:placeholder` card, labelled precisely ("Screenshot: the billing page with the new
      tax field"), when the user will supply the picture before the video is used; list each one
      when you deliver;

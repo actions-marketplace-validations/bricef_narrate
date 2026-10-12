@@ -17,6 +17,9 @@ Narakeet projects build unchanged, without uploading anything.
   extension).
 - **Animated HTML scenes:** web pages animated with CSS or JavaScript, captured
   frame by frame so every build is identical (a narrate extension).
+- **Overlays:** transparent web pages laid over a scene or the whole video,
+  such as a ticker, a lower third or a legend, on the video's own clock (a
+  narrate extension).
 - **Sound and text:** recorded audio, background music, and subtitles, burned
   in or as files.
 - **Ways to run it:** a command line, a web studio for writing scripts

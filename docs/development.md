@@ -158,10 +158,14 @@ Workflows can then pin both parts: `uses: bricef/narrate@v1.2.3`, with
    in script order). It then lays out the scene on a frame-exact timeline:
    30 frames a second, 800 audio samples per frame at 24 kHz.
 3. **Render:**
-   - Headless Chromium draws every still frame, slide and overlay as HTML and
-     CSS (`frames.py`), so CSS themes apply as written.
-   - ffmpeg encodes the segments in parallel and joins them with transitions,
-     music and subtitles.
+   - Headless Chromium draws every still frame, slide and callout as HTML and
+     CSS (`frames.py`), so CSS themes apply as written. HTML scenes and
+     overlay pages are captured frame by frame on the video's clock
+     (`pages.py`).
+   - ffmpeg encodes the segments in parallel, lays each scene's overlays over
+     the joined scene, and joins the scenes with transitions. The video's own
+     overlays go on next, then burned-in subtitles, music and the header's
+     fades.
 4. **Output:** the result is byte-identical to a one-at-a-time build.
 
 Some choices worth knowing when changing behaviour:
@@ -190,7 +194,9 @@ Some choices worth knowing when changing behaviour:
   - `render.py`: render blocks, their cache, and `render:placeholder`.
   - `mermaid.py`: `render:mermaid`, and the pinned mermaid.js.
   - `web.py`: `render:web`, web pages captured and stored in the project.
-  - `pages.py`: HTML scenes, captured frame by frame.
+  - `pages.py`: HTML scenes and overlay pages, captured frame by frame.
+  - `review.py`: reviewing a built video without watching it: contact sheets
+    (`narrate frames`) and what speech-to-text hears (`narrate hear`).
   - `subtitles.py` and `stt.py`: subtitle cues, and speech-to-text for
     recordings.
   - `media.py`: ffmpeg.
@@ -200,6 +206,11 @@ Some choices worth knowing when changing behaviour:
   - `cache.py`: the `cache` command.
   - `studio/`: `narrate studio` ([design](design/studio.md)):
     - `server.py`, the Starlette server;
+    - `analysis.py`, the live timing, problems and timeline data;
+    - `preview.py`, `audio.py` and `builds.py`: frames, narration playback,
+      and builds and scene renders in a child process;
+    - `edits.py`, the script edits behind the inspector, callouts and voices;
+      `voices.py`, the voice picker's catalogue, auditions and pins;
     - `static/`, the browser app: plain ES modules, no build step;
     - `static/vendor/`, the vendored Preact (htm) and CodeMirror files, with
       their sources and hashes in its README.

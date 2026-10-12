@@ -58,6 +58,8 @@ The studio is a web app for writing a script, served from your computer.
   - **HTML scenes** show the page itself, playing.
   - **Render blocks** show what the last build drew, or a card until a build
     has drawn them.
+  - **Overlays** aren't shown in the preview yet (narrate #57): **Render
+    scene** shows them, exactly.
 - **Listening:** each paragraph's length is also its ▶ button, and plays
   the scene from there.
   - **Synthesis:** the scene is synthesised on first play. It's the same
@@ -545,6 +547,10 @@ narrate fetches some files on first use and caches synthesised speech:
 - **Preview** with `--tts silent` while working on layout.
 - **Rebuilds** are faster than first builds: unchanged paragraphs come from
   the speech cache.
+- **Moving pages cost the most:** an HTML scene or overlay that animates is
+  captured frame by frame, at about twice real time, so a ticker over a
+  three-minute video adds about a minute and a half. A page that never changes
+  is captured once.
 - **Parallelism:** narrate synthesises speech in the background while earlier
   scenes render, and encodes several segments at once. The result is the same
   as a one-at-a-time build.
