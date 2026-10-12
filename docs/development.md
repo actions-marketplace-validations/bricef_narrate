@@ -192,7 +192,8 @@ Some choices worth knowing when changing behaviour:
   - `tts.py` and `voicemap.py`: speech engines, voices and `voices.yaml`.
   - `frames.py` and `motion.py`: Chromium frames, and pan and zoom.
   - `render.py`: render blocks, their cache, and `render:placeholder`.
-  - `mermaid.py`: `render:mermaid`, and the pinned mermaid.js.
+  - `mermaid.py`: `render:mermaid`, the pinned mermaid.js, and the page the
+    studio draws diagrams live with.
   - `web.py`: `render:web`, web pages captured and stored in the project.
   - `pages.py`: HTML scenes and overlay pages, captured frame by frame.
   - `review.py`: reviewing a built video without watching it: contact sheets
