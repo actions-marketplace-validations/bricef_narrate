@@ -217,6 +217,15 @@ Some choices worth knowing when changing behaviour:
       preview, on the app's side and the page's;
     - `static/vendor/`, the vendored Preact (htm), CodeMirror and fake clock
       files, with their sources and hashes in its README.
+  - `child.py`: runs one of narrate's commands in a child process and reads
+    its progress (the studio's builds, the service's jobs).
+  - `service/`: `narrate serve` ([design](design/service.md)):
+    - `server.py`, the Starlette app;
+    - `store.py`, files by hash, job folders and records (SQLite);
+    - `projects.py`, checking and laying out a request's project;
+    - `jobs.py`, running jobs and collecting their outputs;
+    - `options.py`, what a job takes, checked against the CLI's flags;
+      `openapi.py`, the API's description.
   - `doctor.py`: the `doctor` command.
 - `tests/`: pytest. The `test_conformance.py` and `test_docs.py` suites are
   described above.
