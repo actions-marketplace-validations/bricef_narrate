@@ -8,8 +8,6 @@ background: uplifting-1 0.12 fade-in fade-out
 overlay: overlays/progress.html
 subtitles: external
 poster-time: 3
-fade-in: 0.5
-fade-out: 1
 ---
 
 ![](scenes/title.html)
@@ -33,8 +31,6 @@ background: uplifting-1 0.12 fade-in fade-out
 overlay: overlays/progress.html
 subtitles: external
 poster-time: 3
-fade-in: 0.5
-fade-out: 1
 ---
 
 ![](scenes/title.html)
@@ -182,4 +178,4 @@ Videos you can version, review and rebuild, like code.
 
 That's narrate. Write it, build it, watch it.
 
-(pause: 2)
+(pause: 3.5)
