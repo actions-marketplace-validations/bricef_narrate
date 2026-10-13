@@ -230,7 +230,9 @@ Some choices worth knowing when changing behaviour:
 - `tests/`: pytest. The `test_conformance.py` and `test_docs.py` suites are
   described above.
 - `docs/`: these guides, `spec/narakeet-markdown.md` (the format
-  specification) and `design/` (design records, such as the studio's).
+  specification), `design/` (design records, such as the studio's) and
+  `research/` (dated research behind a design, such as the AI image and video
+  models report for #41 and #42).
 - `examples/demo/`: the demo script. `make_assets.py` generates its pictures
   and clip.
 - `scripts/`:
