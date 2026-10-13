@@ -1,0 +1,35 @@
+<!doctype html>
+<!-- narrate studio, as it really looks with this script open (make_assets.py takes the screenshot, and writes where
+     each part is to studio-boxes.css). Each part is outlined as it's named. -->
+<link rel="stylesheet" href="common.css">
+<link rel="stylesheet" href="studio-boxes.css">
+<style>
+  .shot { position: absolute; inset: 0; width: 1920px; height: 1080px; transform-origin: 50% 50%;
+          animation: drift var(--narrate-duration, 12s) linear forwards; }
+  .shot img { width: 100%; height: 100%; display: block; }
+  @keyframes drift { from { transform: scale(1); } to { transform: scale(1.04); } }
+  .dim { position: absolute; inset: 0; background: rgba(8, 10, 14, .35); }
+  .box { position: absolute; border: 6px solid var(--amber); border-radius: 14px; opacity: 0;
+         animation: on .4s ease-out forwards, off .4s ease-in forwards; }
+  .box span { position: absolute; left: 14px; top: -58px; background: var(--amber); color: #111; font-weight: 700;
+              font-size: 30px; padding: 6px 16px; border-radius: 10px; white-space: nowrap; }
+  @keyframes on { to { opacity: 1; } }
+  @keyframes off { to { opacity: 0; } }
+  .editor { left: var(--editor-x); top: var(--editor-y); width: var(--editor-w); height: var(--editor-h);
+            animation-delay: var(--cue-editor, 1s), var(--cue-preview, 3s); }
+  .preview { left: var(--preview-x); top: var(--preview-y); width: var(--preview-w); height: var(--preview-h);
+             animation-delay: var(--cue-preview, 3s), var(--cue-timeline, 5s); }
+  .timeline { left: var(--timeline-x); top: var(--timeline-y); width: var(--timeline-w); height: var(--timeline-h);
+              animation-delay: var(--cue-timeline, 5s), var(--cue-inspector, 7s); }
+  .inspector { left: var(--inspector-x); top: var(--inspector-y); width: var(--inspector-w); height: var(--inspector-h);
+               animation-delay: var(--cue-inspector, 7s), 999s; }
+  .timeline span { top: auto; bottom: calc(100% + 14px); }
+</style>
+<body>
+  <div class="shot"><img src="../media/studio.png" alt=""><div class="dim"></div>
+    <div class="box editor"><span>your script</span></div>
+    <div class="box preview"><span>a live preview</span></div>
+    <div class="box timeline"><span>every scene, timed</span></div>
+    <div class="box inspector"><span>framing and callouts</span></div>
+  </div>
+</body>

@@ -1,0 +1,27 @@
+<!doctype html>
+<!-- Who it's for: each use appears as it's named. -->
+<link rel="stylesheet" href="common.css">
+<style>
+  .list { position: absolute; left: 150px; right: 150px; top: 140px; display: grid; grid-template-columns: 1fr 1fr;
+          gap: 34px 40px; }
+  .card { flex-direction: row; align-items: center; padding: 34px 40px; }
+  .card h3 { font-size: 42px; }
+  .card p { font-size: 28px; }
+  .n { font-family: var(--mono); font-size: 40px; color: var(--amber); min-width: 70px; }
+</style>
+<body>
+  <div class="list">
+    <div class="card up" style="animation-delay: var(--cue-intros, .4s)"><span class="n">01</span>
+      <div><h3>Product intros</h3><p>Like this one</p></div></div>
+    <div class="card up" style="animation-delay: var(--cue-releases, 1.4s)"><span class="n">02</span>
+      <div><h3>Release notes</h3><p>Rebuilt with every release</p></div></div>
+    <div class="card up" style="animation-delay: var(--cue-tutorials, 2.4s)"><span class="n">03</span>
+      <div><h3>Tutorials</h3><p>Made from your docs</p></div></div>
+    <div class="card up" style="animation-delay: var(--cue-training, 3.4s)"><span class="n">04</span>
+      <div><h3>Training &amp; onboarding</h3><p>Kept current as things change</p></div></div>
+    <div class="card up" style="animation-delay: var(--cue-languages, 4.4s)"><span class="n">05</span>
+      <div><h3>Any language</h3><p>A script and a voice for each</p></div></div>
+    <div class="card up" style="animation-delay: var(--cue-agents, 5.4s)"><span class="n">06</span>
+      <div><h3>Made by agents</h3><p>Built, checked and reviewed without watching</p></div></div>
+  </div>
+</body>

@@ -1,0 +1,19 @@
+/* Where each part of narrate studio is in media/studio.png: written by make_assets.py */
+:root {
+  --editor-x: 333px;
+  --editor-y: 63px;
+  --editor-w: 934px;
+  --editor-h: 818px;
+  --preview-x: 1285px;
+  --preview-y: 134px;
+  --preview-w: 619px;
+  --preview-h: 348px;
+  --timeline-x: 0px;
+  --timeline-y: 881px;
+  --timeline-w: 1920px;
+  --timeline-h: 199px;
+  --inspector-x: 1285px;
+  --inspector-y: 586px;
+  --inspector-w: 619px;
+  --inspector-h: 214px;
+}

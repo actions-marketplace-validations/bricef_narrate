@@ -1,0 +1,7 @@
+# The voices of narrate's introduction, on each engine: the script names them, these pin them.
+Narrator:
+  kokoro: af_heart
+  elevenlabs: Lily
+Narratrice:
+  kokoro: ff_siwis
+  elevenlabs: Alice

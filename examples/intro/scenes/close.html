@@ -1,0 +1,22 @@
+<!doctype html>
+<!-- The close: what it comes to, the name again, and where to find it, held for the last few seconds. -->
+<link rel="stylesheet" href="common.css">
+<style>
+  .lines { font-size: 88px; font-weight: 700; line-height: 1.15; }
+  .lines div:nth-child(1) { animation-delay: var(--cue-1, .2s); }
+  .lines div:nth-child(2) { animation-delay: calc(var(--cue-1, .2s) + .5s); }
+  .lines div:nth-child(3) { animation-delay: calc(var(--cue-1, .2s) + 1s); color: var(--amber); }
+  .name { font-family: var(--mono); font-size: 150px; font-weight: 700; margin-top: 70px;
+          animation-delay: var(--cue-2, 3s); }
+  .caret { display: inline-block; width: 20px; height: 130px; margin-left: 12px; background: var(--amber);
+           vertical-align: -12px; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .url { font-family: var(--mono); font-size: 52px; color: var(--mute); margin-top: 30px;
+         animation-delay: calc(var(--cue-2, 3s) + .6s); }
+  .url b { color: var(--fg); font-weight: 400; }
+</style>
+<body><div class="wrap">
+  <div class="lines"><div class="up">Version it.</div><div class="up">Review it.</div><div class="up">Rebuild it.</div></div>
+  <div class="name fade">narrate<span class="caret"></span></div>
+  <div class="url fade">github.com/<b>bricef/narrate</b></div>
+</div></body>

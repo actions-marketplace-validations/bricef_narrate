@@ -1,0 +1,32 @@
+<!doctype html>
+<!-- What can be on screen: each tile appears as its word is said, by the marks in the narration (--cue-NAME). -->
+<link rel="stylesheet" href="common.css">
+<style>
+  .grid { position: absolute; left: 150px; right: 150px; top: 150px; bottom: 170px; display: grid;
+          grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr); gap: 40px; }
+  .card { justify-content: center; }
+  .card.now { border-color: var(--amber); }
+  svg { stroke: var(--teal); fill: none; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+</style>
+<body>
+  <div class="grid">
+    <div class="card pop" style="animation-delay: var(--cue-pictures, .5s)">
+      <svg viewBox="0 0 96 96"><rect x="8" y="16" width="80" height="64" rx="8"/><path d="M14 74 38 46l14 16 10-10 22 22"/><circle cx="66" cy="34" r="7"/></svg>
+      <h3>Pictures &amp; clips</h3><p>Your own, with pan and zoom, focal points and callouts</p></div>
+    <div class="card pop" style="animation-delay: var(--cue-slides, 2s)">
+      <svg viewBox="0 0 96 96"><path d="M32 22 12 48l20 26M64 22l20 26-20 26M54 16 42 80"/></svg>
+      <h3>Slides &amp; code</h3><p>Markdown, big text, or highlighted code</p></div>
+    <div class="card pop" style="animation-delay: var(--cue-diagrams, 3s)">
+      <svg viewBox="0 0 96 96"><rect x="8" y="12" width="30" height="22" rx="5"/><rect x="58" y="12" width="30" height="22" rx="5"/><rect x="33" y="62" width="30" height="22" rx="5"/><path d="M23 34v12h50V34M48 46v16"/></svg>
+      <h3>Diagrams</h3><p>Drawn from text with Mermaid</p></div>
+    <div class="card pop" style="animation-delay: var(--cue-web, 4s)">
+      <svg viewBox="0 0 96 96"><rect x="8" y="14" width="80" height="68" rx="8"/><path d="M8 32h80"/><circle cx="20" cy="23" r="2"/><circle cx="30" cy="23" r="2"/><path d="M22 50h52M22 64h34"/></svg>
+      <h3>Web pages</h3><p>Captured live, kept for later builds</p></div>
+    <div class="card pop" style="animation-delay: var(--cue-scenes, 5s)">
+      <svg viewBox="0 0 96 96"><rect x="8" y="14" width="80" height="68" rx="8"/><path d="M40 34v28l22-14z"/></svg>
+      <h3>HTML scenes</h3><p>Animated, captured frame by frame, timed to the word</p></div>
+    <div class="card pop" style="animation-delay: var(--cue-overlays, 6s)">
+      <svg viewBox="0 0 96 96"><path d="M48 12 86 32 48 52 10 32z"/><path d="M10 48l38 20 38-20M10 64l38 20 38-20"/></svg>
+      <h3>Overlays</h3><p>Pages laid over the picture: tickers, labels, this progress bar</p></div>
+  </div>
+</body>

@@ -1,0 +1,42 @@
+/* The look shared by every HTML scene of narrate's introduction (intro.md). */
+:root {
+  --bg: #0e1116;
+  --panel: #161b22;
+  --line: #2a313c;
+  --fg: #e6edf3;
+  --mute: #8b949e;
+  --amber: #f5a524;
+  --teal: #4fd1c5;
+  --rose: #f47c7c;
+  --sans: "Noto Sans", "DejaVu Sans", sans-serif;
+  --mono: "DejaVu Sans Mono", "Noto Mono", monospace;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; width: 1920px; height: 1080px; overflow: hidden;
+  background: var(--bg); color: var(--fg); font-family: var(--sans);
+}
+.wrap { position: absolute; inset: 0; padding: 110px 150px; display: flex; flex-direction: column; justify-content: center; }
+.mono { font-family: var(--mono); }
+.amber { color: var(--amber); }
+.teal { color: var(--teal); }
+.mute { color: var(--mute); }
+.kicker { font-size: 34px; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); margin-bottom: 28px; }
+.big { font-size: 96px; font-weight: 700; line-height: 1.05; letter-spacing: -.01em; }
+
+/* Entrances, each given its moment with animation-delay (a cue, or a fallback) */
+.up { opacity: 0; transform: translateY(24px); animation: up .6s cubic-bezier(.2, .7, .2, 1) forwards; }
+@keyframes up { to { opacity: 1; transform: none; } }
+.fade { opacity: 0; animation: fade .7s ease-out forwards; }
+@keyframes fade { to { opacity: 1; } }
+.pop { opacity: 0; transform: scale(.92); animation: pop .5s cubic-bezier(.2, .9, .3, 1.3) forwards; }
+@keyframes pop { to { opacity: 1; transform: none; } }
+
+/* A card, as the tiles and use cases are drawn */
+.card {
+  background: var(--panel); border: 2px solid var(--line); border-radius: 22px;
+  padding: 40px 44px; display: flex; flex-direction: column; gap: 22px;
+}
+.card h3 { margin: 0; font-size: 44px; font-weight: 700; }
+.card p { margin: 0; font-size: 30px; color: var(--mute); line-height: 1.35; }
+.card svg { width: 96px; height: 96px; }

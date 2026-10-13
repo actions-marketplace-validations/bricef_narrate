@@ -1,0 +1,39 @@
+<!doctype html>
+<!-- The idea: the words are the timeline. A paragraph of the script above, its scene below, as long as its words;
+     when the sentence changes, the scene grows with it. -->
+<link rel="stylesheet" href="common.css">
+<style>
+  .script { position: absolute; left: 150px; right: 150px; top: 160px; height: 300px; background: var(--panel);
+            border: 2px solid var(--line); border-radius: 22px; padding: 50px 60px; font-family: var(--mono);
+            font-size: 44px; line-height: 1.6; }
+  .script .dir { color: var(--mute); }
+  .line { position: relative; height: 70px; }
+  .line > span { position: absolute; left: 0; top: 0; white-space: nowrap; }  /* the two versions of the line, in one place */
+  .before { animation: out .3s forwards; animation-delay: var(--cue-change, 6s); }
+  .after { opacity: 0; animation: fade .4s forwards; animation-delay: calc(var(--cue-change, 6s) + .2s); }
+  .after .added { color: var(--amber); }
+  @keyframes out { to { opacity: 0; } }
+  .lane { position: absolute; left: 150px; right: 150px; top: 600px; height: 200px; }
+  .ruler { position: absolute; left: 0; right: 0; top: 0; height: 40px; font-size: 26px; color: var(--mute);
+           background: repeating-linear-gradient(90deg, var(--line) 0 2px, transparent 2px 162px); }
+  .scene { position: absolute; left: 0; top: 60px; height: 120px; border-radius: 18px; background: #24486e;
+           border: 3px solid var(--teal); width: 0; display: flex; align-items: center; padding-left: 30px;
+           font-size: 36px; font-weight: 700; overflow: hidden; white-space: nowrap;
+           animation: grow 2.6s linear forwards, longer 1.4s ease-out forwards;
+           animation-delay: var(--cue-words, 1s), var(--cue-change, 6s); }
+  @keyframes grow { to { width: 900px; } }
+  @keyframes longer { from { width: 900px; } to { width: 1460px; } }
+  .caption { position: absolute; left: 150px; top: 850px; font-size: 36px; color: var(--mute); }
+</style>
+<body>
+  <div class="script fade" style="animation-delay: .2s">
+    <div class="dir">![](sunrise.jpg)</div>
+    <div class="line"><span class="before">The words are the timeline.</span>
+      <span class="after">The words are the timeline<span class="added">, so it times itself.</span></span></div>
+  </div>
+  <div class="lane fade" style="animation-delay: .6s">
+    <div class="ruler"></div>
+    <div class="scene">Scene 1</div>
+  </div>
+  <div class="caption fade" style="animation-delay: var(--cue-words, 1s)">Each scene lasts as long as its narration.</div>
+</body>

@@ -1,0 +1,10 @@
+<!doctype html>
+<!-- An overlay on the whole video's clock (overlay: in intro.md's header): a bar along the bottom that fills
+     as the video plays. The page is transparent, so the picture shows through everywhere else. -->
+<style>
+  html, body { margin: 0; width: 1920px; height: 1080px; }
+  .bar { position: absolute; left: 0; bottom: 0; height: 8px; width: 0; background: #f5a524;
+         animation: fill var(--narrate-duration, 180s) linear forwards; }
+  @keyframes fill { to { width: 100%; } }
+</style>
+<div class="bar"></div>
