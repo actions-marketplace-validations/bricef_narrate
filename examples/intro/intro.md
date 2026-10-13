@@ -1,6 +1,6 @@
 ---
 size: 1080p
-voice: af_heart
+voice: Narrator
 canvas: "#0e1116"
 theme: light
 transition: crossfade 0.5
@@ -25,7 +25,7 @@ This video was written as a text file.
 ```narrate
 ---
 size: 1080p
-voice: af_heart
+voice: Narrator
 canvas: "#0e1116"
 theme: light
 transition: crossfade 0.5
@@ -107,7 +107,9 @@ Hello · Bonjour · Hola · Ciao · Olá
 
 There are dozens of voices, in several languages.
 
-(voice: ff_siwis)
+(voice: Narratrice)
+
+(narration-language: fr)
 
 Et pour la version française, il suffit de changer de voix.
 
