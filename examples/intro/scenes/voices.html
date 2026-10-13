@@ -1,0 +1,27 @@
+<!doctype html>
+<!-- Voices: the free draft, the final cut, and what the cache saves. Each appears on its word. -->
+<link rel="stylesheet" href="common.css">
+<style>
+  .row { position: absolute; left: 150px; right: 150px; top: 200px; display: grid;
+         grid-template-columns: repeat(3, 1fr); gap: 40px; }
+  .card { min-height: 520px; justify-content: flex-start; }
+  .card h3 { font-size: 52px; }
+  .card p { font-size: 32px; }
+  .tag { font-family: var(--mono); font-size: 28px; color: var(--amber); }
+  .bars { display: flex; gap: 10px; align-items: flex-end; height: 120px; margin-top: auto; }
+  .bars i { flex: 1; background: var(--line); border-radius: 6px; }
+  .bars i.new { background: var(--amber); }
+</style>
+<body>
+  <div class="kicker up" style="position: absolute; left: 150px; top: 110px; animation-delay: .2s">Speech</div>
+  <div class="row">
+    <div class="card up" style="animation-delay: var(--cue-kokoro, .5s)">
+      <span class="tag">--tts kokoro</span><h3>Kokoro</h3><p>A good voice that runs on your own computer, for free. For every draft.</p></div>
+    <div class="card up" style="animation-delay: var(--cue-elevenlabs, 3s)">
+      <span class="tag">--tts elevenlabs</span><h3>ElevenLabs</h3><p>The best voices, for the final cut, priced before you build.</p></div>
+    <div class="card up" style="animation-delay: var(--cue-cache, 6s)">
+      <span class="tag">cached</span><h3>Only what changed</h3><p>Edit one paragraph, and only that paragraph is spoken again.</p>
+      <div class="bars"><i style="height: 60%"></i><i style="height: 90%"></i><i class="new" style="height: 75%"></i>
+        <i style="height: 50%"></i><i style="height: 80%"></i></div></div>
+  </div>
+</body>
