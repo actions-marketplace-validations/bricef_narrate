@@ -8,7 +8,7 @@
             font-size: 44px; line-height: 1.6; }
   .script .dir { color: var(--mute); }
   .line { position: relative; height: 70px; }
-  .line span { position: absolute; left: 0; top: 0; white-space: nowrap; }
+  .line > span { position: absolute; left: 0; top: 0; white-space: nowrap; }  /* the two versions of the line, in one place */
   .before { animation: out .3s forwards; animation-delay: var(--cue-change, 6s); }
   .after { opacity: 0; animation: fade .4s forwards; animation-delay: calc(var(--cue-change, 6s) + .2s); }
   .after .added { color: var(--amber); }
