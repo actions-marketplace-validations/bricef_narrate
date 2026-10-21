@@ -752,11 +752,22 @@ models and the ElevenLabs key, and prints a fix for each problem.
   another user. Run with the same `--user` as before, or start a new volume.
 - **Text shows as boxes:** the font lacks those characters. Install a font that
   has them, or name one in a theme with `@font-face`.
-- **Another ffmpeg:** narrate uses its own build, because older versions crash
-  on some transitions. `NARRATE_FFMPEG=/path/to/ffmpeg` overrides it. It needs
-  libx264, libass, librubberband (for pitch and emphasis) and the `xfade`
-  filter, which `narrate doctor` checks. Audio exports also need libmp3lame
-  (MP3) and libopus (OGG and Opus).
+- **"no ffmpeg on PATH, and narrate has no ffmpeg of its own":** narrate
+  downloads its own ffmpeg on Linux only. Elsewhere it uses the one on `PATH`,
+  or `NARRATE_FFMPEG`. On macOS, Homebrew's `ffmpeg` lacks libass and
+  rubberband, so install `ffmpeg-full` and point narrate at it:
+
+  ```sh
+  brew install ffmpeg-full
+  export NARRATE_FFMPEG="$(brew --prefix ffmpeg-full)/bin/ffmpeg"
+  ```
+
+- **Another ffmpeg:** narrate uses its own build on Linux, because older
+  versions crash on some transitions. `NARRATE_FFMPEG=/path/to/ffmpeg`
+  overrides it. It needs ffmpeg 9.0 or later with libx264, libass,
+  librubberband (for pitch and emphasis) and the `xfade` filter, which
+  `narrate doctor` checks. Audio exports also need libmp3lame (MP3) and
+  libopus (OGG and Opus).
 
 ## Command reference
 

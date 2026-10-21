@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -53,24 +54,43 @@ class Check:
     fix: str = ""
 
 
+def ffmpeg_version(banner: str) -> tuple[int, int] | None:
+    """(major, minor) from `ffmpeg -version`; None for builds from git, which name a commit instead."""
+    m = re.match(r"ffmpeg version n?(\d+)\.(\d+)", banner)
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
 def check_ffmpeg() -> list[Check]:
-    if not os.environ.get("NARRATE_FFMPEG") and not media.managed_ffmpeg().exists():
+    """The ffmpeg a build will use, picked in the same order as media.ffmpeg()."""
+    source, exe = media.find_ffmpeg()
+    if source == "download":
         # Not a fault: like the models, it downloads on the first build
         return [Check("ffmpeg", True, f"ffmpeg {media.FFMPEG_SERIES} downloads on the first build "
                       "(about 150 MB), or now with `narrate models`")]
+    if source == "none":
+        return [Check("ffmpeg", False, f"none on PATH, and {media.no_managed_ffmpeg()}", media.ffmpeg_fix())]
+    if source == "NARRATE_FFMPEG" and media.ffmpeg_asset() is not None:
+        fix = "unset NARRATE_FFMPEG to use narrate's own, or point it at a full ffmpeg build"
+    else:
+        fix = media.ffmpeg_fix()
     try:
-        exe = media.ffmpeg()
         version = subprocess.run([exe, "-hide_banner", "-version"], capture_output=True, text=True).stdout
         filters = subprocess.run([exe, "-hide_banner", "-filters"], capture_output=True, text=True).stdout
         encoders = subprocess.run([exe, "-hide_banner", "-encoders"], capture_output=True, text=True).stdout
     except OSError as e:
-        return [Check("ffmpeg", False, str(e), "uv run narrate models, or set NARRATE_FFMPEG")]
-    checks = [Check("ffmpeg", True, f"{version.splitlines()[0]} ({exe})")]
+        return [Check("ffmpeg", False, f"{exe} ({source}): {e.strerror or e}", fix)]
+    banner = version.splitlines()[0] if version.strip() else "unknown version"
+    found = ffmpeg_version(banner)
+    # narrate is tested with the series it pins; 7.0 segfaults on transition graphs (#37)
+    if found is not None and found < tuple(int(n) for n in media.FFMPEG_SERIES.split(".")):
+        checks = [Check("ffmpeg", False, f"{banner} ({exe}) is older than {media.FFMPEG_SERIES}; "
+                        "ffmpeg 7.0 crashes on some transitions", fix)]
+    else:
+        checks = [Check("ffmpeg", True, f"{banner} ({exe})")]
     needs = {"libx264 encoder": " libx264 " in encoders, "subtitles filter (libass)": " subtitles " in filters,
              "xfade filter": " xfade " in filters, "rubberband filter (pitch)": " rubberband " in filters}
     for name, ok in needs.items():
-        checks.append(Check(f"ffmpeg {name}", ok, "present" if ok else "missing",
-                            "" if ok else "use a full ffmpeg build (unset NARRATE_FFMPEG to use narrate's own)"))
+        checks.append(Check(f"ffmpeg {name}", ok, "present" if ok else "missing", "" if ok else fix))
     return checks
 
 

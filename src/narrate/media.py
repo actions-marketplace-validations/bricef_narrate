@@ -51,6 +51,34 @@ def managed_ffmpeg() -> Path:
     return tools_dir() / "ffmpeg" / f"n{FFMPEG_SERIES}" / "ffmpeg"
 
 
+def no_managed_ffmpeg() -> str:
+    return f"narrate has no ffmpeg of its own for {sys.platform}/{platform.machine()}"
+
+
+def ffmpeg_fix() -> str:
+    """How to get an ffmpeg that has everything narrate uses."""
+    if sys.platform == "darwin":
+        # Homebrew's plain ffmpeg has no libass or rubberband; ffmpeg-full is keg-only, so not on PATH
+        return 'brew install ffmpeg-full, then set NARRATE_FFMPEG="$(brew --prefix ffmpeg-full)/bin/ffmpeg"'
+    return f"set NARRATE_FFMPEG to an ffmpeg {FFMPEG_SERIES} or later with libx264, libass and rubberband"
+
+
+def find_ffmpeg() -> tuple[str, str | None]:
+    """The ffmpeg a build will use, without fetching it: where it comes from and its path.
+
+    In the order ffmpeg() picks: "NARRATE_FFMPEG", "managed" (downloaded already),
+    "download" (still to download), "PATH", or "none" (no path)."""
+    if env := os.environ.get("NARRATE_FFMPEG"):
+        return "NARRATE_FFMPEG", env
+    if managed_ffmpeg().exists():
+        return "managed", str(managed_ffmpeg())
+    if ffmpeg_asset() is not None:
+        return "download", str(managed_ffmpeg())
+    if found := shutil.which("ffmpeg"):
+        return "PATH", found
+    return "none", None
+
+
 def ensure_ffmpeg(log=lambda msg: print(msg, file=sys.stderr), opener=urllib.request.urlopen) -> Path:
     exe = managed_ffmpeg()
     with _fetch_lock:
@@ -58,7 +86,7 @@ def ensure_ffmpeg(log=lambda msg: print(msg, file=sys.stderr), opener=urllib.req
             return exe
         asset = ffmpeg_asset()
         if asset is None:
-            raise MediaError(f"no managed ffmpeg for {sys.platform}/{platform.machine()}; set NARRATE_FFMPEG")
+            raise MediaError(f"{no_managed_ffmpeg()}. Fix: {ffmpeg_fix()}")
         log(f"downloading ffmpeg {FFMPEG_SERIES} (first use only, about 150 MB) …")
         with opener(FFMPEG_RELEASE + "checksums.sha256") as resp:
             sums = resp.read().decode()
@@ -89,15 +117,19 @@ def ensure_ffmpeg(log=lambda msg: print(msg, file=sys.stderr), opener=urllib.req
 
 @cache
 def ffmpeg() -> str:
-    """$NARRATE_FFMPEG, else narrate's managed ffmpeg (downloaded on first use)."""
-    if env := os.environ.get("NARRATE_FFMPEG"):
-        return env
+    """$NARRATE_FFMPEG, else narrate's managed ffmpeg (downloaded on first use) where this platform
+    has one, else the one on PATH."""
+    source, exe = find_ffmpeg()
+    if source == "none":
+        raise MediaError(f"no ffmpeg on PATH, and {no_managed_ffmpeg()}. Fix: {ffmpeg_fix()}")
+    if source != "download":
+        return exe
     try:
         return str(ensure_ffmpeg())
     except (OSError, MediaError) as e:
         found = shutil.which("ffmpeg")
         if found is None:
-            raise MediaError(f"ffmpeg {FFMPEG_SERIES} is unavailable ({e}); set NARRATE_FFMPEG") from None
+            raise MediaError(f"ffmpeg {FFMPEG_SERIES} is unavailable ({e}). Fix: {ffmpeg_fix()}") from None
         print(f"warning: couldn't fetch ffmpeg {FFMPEG_SERIES} ({e}); using {found}", file=sys.stderr)
         return found
 
