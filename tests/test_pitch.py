@@ -5,7 +5,7 @@ from narrate import media
 from narrate.build import Builder
 from narrate.config import ConfigError, parse_pitch
 from narrate.script import parse
-from narrate.tts import SAMPLE_RATE, SilentSynth, Voice
+from narrate.tts import SAMPLE_RATE, SilentSynth
 
 
 def peak_hz(samples: np.ndarray) -> float:

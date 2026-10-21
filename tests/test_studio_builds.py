@@ -1,7 +1,6 @@
 """Builds from the studio (#55): `narrate build` in a child process, with progress, cancel and errors."""
 
 import time
-from pathlib import Path
 
 import pytest
 from starlette.testclient import TestClient

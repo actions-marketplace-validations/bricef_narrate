@@ -1,7 +1,6 @@
 """narrate studio's server (#51): the script, saving, conflicts, project files, events."""
 
 import os
-from pathlib import Path
 
 import pytest
 from starlette.testclient import TestClient

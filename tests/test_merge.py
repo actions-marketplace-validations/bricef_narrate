@@ -5,7 +5,7 @@ from PIL import Image
 from narrate import media
 from narrate.build import Builder, merge_groups
 from narrate.config import FPS
-from narrate.script import parse, parse_file
+from narrate.script import parse_file
 from narrate.tts import SAMPLE_RATE, SilentSynth
 
 SCRIPT = """---

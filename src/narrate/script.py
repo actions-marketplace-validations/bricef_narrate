@@ -199,7 +199,7 @@ def _strip_comments(lines: list[str]) -> list[str | None]:
 
 
 def _parse_header(lines: list[str | None]) -> tuple[dict[str, Any], int]:
-    first = next((i for i, l in enumerate(lines) if l is not None and l.strip()), None)
+    first = next((i for i, line in enumerate(lines) if line is not None and line.strip()), None)
     if first is None or not _SEPARATOR_RE.match(lines[first] or ""):
         return {}, 0
     for end in range(first + 1, len(lines)):
@@ -208,7 +208,7 @@ def _parse_header(lines: list[str | None]) -> tuple[dict[str, Any], int]:
             break
     else:
         raise ScriptError("script header is not closed with ---", first + 1)
-    text = "\n".join(l for l in lines[first + 1:end] if l is not None)
+    text = "\n".join(line for line in lines[first + 1:end] if line is not None)
     try:
         # BaseLoader keeps every scalar a string: no YAML 1.1 surprises such as
         # `no` -> False or `1:20` -> 80; values are typed by their consumers.

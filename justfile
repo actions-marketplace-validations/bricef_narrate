@@ -10,6 +10,10 @@ default:
 test *args:
     uv run pytest -q {{args}}
 
+# Check the code with ruff (add --fix to apply its safe fixes)
+lint *args:
+    uv run ruff check {{args}}
+
 # Render a script: just build examples/demo/demo.md [--tts kokoro|elevenlabs|silent]
 build script *args:
     uv run narrate build {{script}} {{args}}
