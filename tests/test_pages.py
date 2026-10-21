@@ -2,6 +2,7 @@
 
 import hashlib
 from pathlib import Path
+from time import sleep
 
 import numpy as np
 import pytest
@@ -91,6 +92,23 @@ def test_every_build_captures_the_same_frames(tmp_path):
     for t in (0.4, 0.9, 1.5):
         assert hashlib.sha256(frame(a, t).tobytes()).digest() == hashlib.sha256(frame(b, t).tobytes()).digest()
     assert frame(a, 0.9)[:, :140].mean() > 200 > frame(a, 0.9)[:, 160:].mean()  # 45% across at 0.9 s
+
+
+def test_a_slow_machine_starts_the_page_at_the_same_moment(tmp_path, monkeypatch):
+    """Time spent before the clock paused reached the page, so a slow machine (a macOS runner)
+    moved its animation frames, and two builds captured different frames (#93)."""
+    path = page(tmp_path, "<script>t0 = performance.now(); requestAnimationFrame(now => first = now)</script>")
+    with FrameRenderer(320, 180, tmp_path) as frames:
+        pause_at = type(frames._page.clock).pause_at
+
+        def slowly(clock, at):
+            sleep(0.03)
+            return pause_at(clock, at)
+
+        monkeypatch.setattr(type(frames._page.clock), "pause_at", slowly)
+        with frames.page(path, (320, 180)) as tab:
+            tab.clock.run_for(40)
+            assert tab.evaluate("[t0, first]") == [0, 16]
 
 
 def test_a_page_with_nothing_else_lasts_as_long_as_its_animations(tmp_path):
