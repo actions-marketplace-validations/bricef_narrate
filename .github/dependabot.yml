@@ -1,0 +1,35 @@
+# Weekly updates, grouped so that each ecosystem opens about one pull request a
+# week. Labelled `engineering`, an existing label, so Dependabot adds none.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels: ["engineering"]
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Minor and patch updates together; a major update gets its own pull request
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    labels: ["engineering"]
+    groups:
+      python:
+        update-types: ["minor", "patch"]
+
+  # The npm lock files pin what scripts/vendor.sh bundles into
+  # src/narrate/studio/static/vendor/. A lock file bumped on its own would no
+  # longer describe the bundle that ships, so there are no version updates here
+  # (a limit of 0). Security updates still open pull requests when they're on in
+  # the repository's settings: before merging one, rebuild the bundle with
+  # scripts/vendor.sh NAME and record its new hash in the vendor README.
+  - package-ecosystem: npm
+    directories: ["/scripts/codemirror", "/scripts/fake-timers"]
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    labels: ["engineering"]

@@ -1,0 +1,22 @@
+name: Question
+description: How to do something, when the docs don't say
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The [documentation](https://github.com/bricef/narrate#documentation) may
+        already answer it. If it doesn't, ask here: the docs probably need a line too.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What you've tried
+      description: The docs you read, or the script you tried.

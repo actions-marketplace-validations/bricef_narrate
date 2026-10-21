@@ -1,0 +1,80 @@
+name: Bug report
+description: Something narrate does wrong, or a build that fails
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a bug. For a security problem, please
+        [report it privately](https://github.com/bricef/narrate/security/advisories/new) instead.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, and what narrate did. Paste any error in full.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: script
+    attributes:
+      label: The script
+      description: >-
+        The script, or the smallest part of it that shows the problem, between the
+        four-backtick lines. Leave out anything private, and say which pictures,
+        clips or pages it uses.
+      value: |
+        ````markdown
+
+        ````
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of narrate doctor
+      description: >-
+        Run `narrate doctor` (with Docker, `docker run --rm ghcr.io/bricef/narrate doctor`)
+        and paste what it prints. With the GitHub Action, paste the failing step's log.
+      render: text
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you run narrate
+      options:
+        - Docker
+        - From source
+        - The GitHub Action
+        - The dev container
+        - Something else (say above)
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: >-
+        Docker or the Action: the image tag (and the Action's ref). From source or the
+        dev container: the commit, from `git rev-parse --short HEAD`.
+      placeholder: "ghcr.io/bricef/narrate:latest, sha-1a2b3c4, or commit 1a2b3c4"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "Ubuntu 24.04, macOS 15 on Apple Silicon, Windows 11 with Docker Desktop"
+    validations:
+      required: true
