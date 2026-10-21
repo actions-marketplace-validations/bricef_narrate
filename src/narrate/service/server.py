@@ -1,7 +1,8 @@
 """`narrate serve`: narrate as an internal HTTP API (#79, docs/design/service.md).
 
 Starlette, as the studio is. There's no authentication: it's for your own
-programs, on localhost or a private network.
+programs, on localhost or a private network. It answers only to its own host
+names, and refuses changes from other sites' pages (hosts.py).
 """
 
 from __future__ import annotations
@@ -12,15 +13,18 @@ import hashlib
 import json
 import secrets
 import shutil
+from collections.abc import Iterable
 from pathlib import Path
 
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
+from starlette.middleware import Middleware
 from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
 from ..child import Child
+from ..hosts import LOCAL, OwnOrigin, allowed
 from . import costs, openapi
 from .costs import Prices
 from .jobs import Runner, view
@@ -56,7 +60,9 @@ async def _body(request: Request) -> dict:
     return body
 
 
-def create_app(root: Path, engine: str = "kokoro", workers: int = 1, prices: Prices | None = None) -> Starlette:
+def create_app(root: Path, engine: str = "kokoro", workers: int = 1, prices: Prices | None = None,
+               hosts: Iterable[str] = LOCAL) -> Starlette:
+    """The service, keeping its data in `root` and answering to the host names in `hosts` only (#93)."""
     store = Store(root)
     runner = Runner(store, engine, workers, prices)
 
@@ -248,7 +254,7 @@ def create_app(root: Path, engine: str = "kokoro", workers: int = 1, prices: Pri
         Route("/v1/jobs/{id}/cancel", cancel, methods=["POST"]),
         Route("/v1/jobs/{id}/outputs/{name:path}", output),
         Route("/v1/usage", usage),
-    ], lifespan=lifespan)
+    ], middleware=[Middleware(OwnOrigin, hosts=hosts)], lifespan=lifespan)
     app.state.runner = runner
     app.state.store = store
     return app
@@ -272,7 +278,7 @@ def server(app: Starlette, host: str, port: int):
 
 
 def serve(root: Path, host: str, port: int, engine: str = "kokoro", workers: int = 1,
-          prices: Prices | None = None) -> None:
+          prices: Prices | None = None, allow: Iterable[str] = ()) -> None:
     url = f"http://{'127.0.0.1' if host in ('0.0.0.0', '::') else host}:{port}/v1"
     print(f"narrate service at {url}, keeping its data in {root} (Ctrl-C to stop)", flush=True)
-    server(create_app(root, engine, workers, prices), host, port).run()
+    server(create_app(root, engine, workers, prices, allowed(host, allow)), host, port).run()

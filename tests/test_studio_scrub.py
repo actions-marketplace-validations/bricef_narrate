@@ -120,7 +120,7 @@ def test_the_page_runs_on_a_fake_clock_installed_before_its_own_scripts():
 def test_the_studio_serves_the_page_and_its_files(project):
     script = project / "s.md"
     script.write_text("![](scene.html)\n\nHello.\n")
-    client = TestClient(create_app(script, "silent"))
+    client = TestClient(create_app(script, "silent", hosts=["testserver"]))
     narrate = json.dumps({"duration": 2, "cues": {"1": 0}})
     served = client.get("/pages/scene.html", params={"narrate": narrate})
     assert served.status_code == 200 and "page-clock.js" in served.text and '"--cue-1": "0.0000s"' in served.text

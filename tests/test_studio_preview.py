@@ -92,7 +92,7 @@ def test_render_blocks_show_what_a_build_made(project, monkeypatch, tmp_path_fac
 
 def test_the_endpoint_needs_a_current_analysis(project):
     (project / "s.md").write_text("![](red.png)\n\n(duration: 1)\n")
-    with TestClient(create_app(project / "s.md", "silent")) as client:
+    with TestClient(create_app(project / "s.md", "silent", hosts=["testserver"])) as client:
         stale = client.post("/api/frame", json={"id": "nothing", "scene": 1, "time": 0})
         assert stale.status_code == 409
         analysis = client.post("/api/analyse", json={"text": "![](clip.mp4)\n"}).json()

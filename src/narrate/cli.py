@@ -366,7 +366,7 @@ def cmd_studio(args: argparse.Namespace) -> int:
     if not script.parent.resolve().is_dir():
         print(f"error: no folder {script.parent}", file=sys.stderr)
         return 2
-    serve(script, args.host, args.port, args.open, args.tts)
+    serve(script, args.host, args.port, args.open, args.tts, args.allow_host)
     return 0
 
 
@@ -380,7 +380,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
     except PricesError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
-    serve(Path(args.data) if args.data else default_root(), args.host, args.port, args.tts, args.workers, prices)
+    serve(Path(args.data) if args.data else default_root(), args.host, args.port, args.tts, args.workers, prices,
+          args.allow_host)
     return 0
 
 
@@ -512,8 +513,11 @@ def parser() -> argparse.ArgumentParser:
     studio.add_argument("script", help="the .md script to edit (created on first save if it doesn't exist)")
     studio.add_argument("--host", default="127.0.0.1",
                         help="address to listen on (default 127.0.0.1; 0.0.0.0 for other machines, "
-                             "with no access control)")
+                             "with no login: see --allow-host)")
     studio.add_argument("--port", type=int, default=8787, help="port to listen on (default 8787)")
+    studio.add_argument("--allow-host", action="append", default=[], metavar="NAME",
+                        help="also answer to this host name, as in the address you open (repeatable; "
+                             "localhost and the --host address always work)")
     studio.add_argument("--open", action="store_true", help="open the studio in a browser")
     studio.add_argument("--tts", choices=["auto", "kokoro", "elevenlabs", "silent"], default="kokoro",
                         help="speech engine for previews and builds (default kokoro, which is free)")
@@ -522,8 +526,11 @@ def parser() -> argparse.ArgumentParser:
     serve = sub.add_parser("serve", help="serve narrate's capabilities over HTTP, for your own programs")
     serve.add_argument("--host", default="127.0.0.1",
                        help="address to listen on (default 127.0.0.1; 0.0.0.0 for other machines, "
-                            "with no access control)")
+                            "with no login: see --allow-host)")
     serve.add_argument("--port", type=int, default=8788, help="port to listen on (default 8788)")
+    serve.add_argument("--allow-host", action="append", default=[], metavar="NAME",
+                       help="also answer to this host name, as in the address clients call (repeatable; "
+                            "localhost and the --host address always work)")
     serve.add_argument("--data", metavar="DIR",
                        help="where to keep uploaded files, jobs and their records "
                             "(default $XDG_DATA_HOME/narrate/service, else ~/.local/share/narrate/service)")

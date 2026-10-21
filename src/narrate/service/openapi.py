@@ -37,6 +37,8 @@ def document() -> dict:
         "openapi": "3.1.0",
         "info": {"title": "narrate", "version": _version(),
                  "description": "narrate's capabilities over HTTP, for your own programs: no authentication. "
+                                "A request to a host name it doesn't answer to (see --allow-host), or one "
+                                "that changes something from another site's page, gets 403. "
                                 "See docs/design/service.md."},
         "paths": {
             "/v1/files/missing": {"post": {

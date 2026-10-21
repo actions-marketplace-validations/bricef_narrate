@@ -85,7 +85,7 @@ def test_the_estimator_counts_what_isnt_cached():
 
 def test_the_endpoint_analyses_unsaved_text(tmp_path):
     (tmp_path / "s.md").write_text("Saved text.\n")
-    with TestClient(create_app(tmp_path / "s.md", "silent")) as client:
+    with TestClient(create_app(tmp_path / "s.md", "silent", hosts=["testserver"])) as client:
         body = client.post("/api/analyse", json={"text": "Unsaved.\n\n---\n\nTwo scenes now.\n"}).json()
     assert body["engine"] == "silent" and len(body["scenes"]) == 2
     assert (tmp_path / "s.md").read_text() == "Saved text.\n"
@@ -94,6 +94,6 @@ def test_the_endpoint_analyses_unsaved_text(tmp_path):
 def test_an_engine_that_cant_start_is_reported(tmp_path, monkeypatch):
     monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
     (tmp_path / "s.md").write_text("Hi.\n")
-    with TestClient(create_app(tmp_path / "s.md", "elevenlabs")) as client:
+    with TestClient(create_app(tmp_path / "s.md", "elevenlabs", hosts=["testserver"])) as client:
         response = client.post("/api/analyse", json={"text": "Hi.\n"})
     assert response.status_code == 503 and "ELEVENLABS_API_KEY" in response.json()["error"]

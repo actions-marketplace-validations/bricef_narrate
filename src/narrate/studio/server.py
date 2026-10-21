@@ -15,14 +15,18 @@ import os
 import shutil
 import tempfile
 from collections import OrderedDict
+from collections.abc import Iterable
 from pathlib import Path
 
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
+from starlette.middleware import Middleware
 from starlette.requests import Request
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
+
+from ..hosts import LOCAL, OwnOrigin, allowed
 
 STATIC = Path(__file__).parent / "static"
 ENGINES = ("auto", "kokoro", "elevenlabs", "silent")
@@ -142,7 +146,8 @@ class Session:
         return path
 
 
-def create_app(script: Path, engine: str = "kokoro") -> Starlette:
+def create_app(script: Path, engine: str = "kokoro", hosts: Iterable[str] = LOCAL) -> Starlette:
+    """The studio for `script`, answering to the host names in `hosts` only (#93)."""
     session = Session(script, engine)
 
     async def index(request: Request) -> Response:
@@ -460,7 +465,7 @@ def create_app(script: Path, engine: str = "kokoro") -> Starlette:
         Route("/pages/{path:path}", scene_page),
         Route("/mermaid/{version}/mermaid.min.js", mermaid_js),
         Mount("/static", StaticFiles(directory=STATIC), name="static"),
-    ], lifespan=lifespan)
+    ], middleware=[Middleware(OwnOrigin, hosts=hosts)], lifespan=lifespan)
     app.state.session = session
     return app
 
@@ -486,11 +491,12 @@ def server(app: Starlette, host: str, port: int):
                                        timeout_graceful_shutdown=2))
 
 
-def serve(script: Path, host: str, port: int, open_browser: bool = False, engine: str = "kokoro") -> None:
+def serve(script: Path, host: str, port: int, open_browser: bool = False, engine: str = "kokoro",
+          allow: Iterable[str] = ()) -> None:
     url = f"http://{'127.0.0.1' if host in ('0.0.0.0', '::') else host}:{port}/"
     print(f"narrate studio: {script} at {url} (Ctrl-C to stop)", flush=True)
     if open_browser:
         import webbrowser
 
         webbrowser.open(url)
-    server(create_app(script, engine), host, port).run()
+    server(create_app(script, engine, allowed(host, allow)), host, port).run()

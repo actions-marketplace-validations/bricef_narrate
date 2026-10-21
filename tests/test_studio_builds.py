@@ -13,7 +13,7 @@ def studio(tmp_path, monkeypatch):
     monkeypatch.setenv("NARRATE_CACHE", str(tmp_path / "cache"))
     script = tmp_path / "s.md"
     script.write_text("---\nsize: 320x180\n---\n\nThe first scene.\n\n---\n\nThe second scene.\n")
-    with TestClient(create_app(script, "silent")) as client:
+    with TestClient(create_app(script, "silent", hosts=["testserver"])) as client:
         yield script, client
 
 

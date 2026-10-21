@@ -20,7 +20,7 @@ def project(tmp_path):
 
 @pytest.fixture
 def client(project):
-    with TestClient(create_app(project / "s.md")) as c:
+    with TestClient(create_app(project / "s.md", hosts=["testserver"])) as c:
         yield c
 
 
@@ -52,7 +52,7 @@ def test_saving_keeps_windows_line_endings_and_the_files_mode(client, project):
 
 
 def test_a_new_script_is_created_on_first_save(tmp_path):
-    with TestClient(create_app(tmp_path / "new.md")) as c:
+    with TestClient(create_app(tmp_path / "new.md", hosts=["testserver"])) as c:
         script = c.get("/api/script").json()
         assert (script["text"], script["version"]) == ("", "missing")
         assert c.put("/api/script", json={"text": "Hi.\n", "version": "missing"}).status_code == 200

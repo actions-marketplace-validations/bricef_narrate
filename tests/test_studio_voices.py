@@ -53,7 +53,7 @@ def test_an_audition_says_what_it_would_spend(project):
 
 def test_the_endpoints(project):
     script_text = (project / "s.md").read_text()
-    with TestClient(create_app(project / "s.md", "silent")) as client:
+    with TestClient(create_app(project / "s.md", "silent", hosts=["testserver"])) as client:
         listed = client.get("/api/voices").json()
         assert listed["engine"] == "silent" and "narrator" in listed["pins"]
 
@@ -94,7 +94,7 @@ def test_a_paid_audition_is_priced_first(project):
         def synth(self, text, voice, speed, notes, only_cached=False):
             return None if only_cached else super().synth(text, voice, speed, notes)
 
-    with TestClient(create_app(project / "s.md", "silent")) as client:
+    with TestClient(create_app(project / "s.md", "silent", hosts=["testserver"])) as client:
         session = client.app.state.session
         session.engine, session._synth = "elevenlabs", Uncached()  # as if ElevenLabs, with nothing cached
         dry = client.post("/api/voices/audition", json={"text": "", "voice": "Lily", "sample": "Ten chars!", "dry": True})
