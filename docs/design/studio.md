@@ -79,10 +79,24 @@ files beside it. A workspace over many projects can come later.
 
 Decided with the author.
 - **Address:** the server binds to `127.0.0.1:8787` by default; `--host` and
-  `--port` change it. On the nest guest, use `--host 0.0.0.0` to reach it over
-  WireGuard, or an SSH tunnel.
+  `--port` change it. On the nest guest, use `--host 0.0.0.0` with
+  `--allow-host` for the name it's opened by, to reach it over WireGuard, or
+  an SSH tunnel.
 - **Exposure:** it can read every file in the project folder and run builds,
   so expose it only to networks you trust until access control is added.
+- **Pages in your browser (#93):** any page you have open can send requests to
+  localhost, so the studio checks where each request comes from:
+  - **Host names:** it answers only to `localhost`, `127.0.0.1`, `[::1]`, its
+    `--host` address and each `--allow-host`; anything else gets 403. A page
+    that points its own name at 127.0.0.1 can't read its answers.
+  - **Origin:** a request that changes something gets 403 when its `Origin`
+    isn't one of those names on the port it was sent to. Browsers send an
+    `Origin` with every such request; programs and curl don't.
+  - **No CORS:** it sends no CORS headers, so other sites' pages can't read
+    its answers.
+  - **Docker:** in the container it binds `0.0.0.0`, and the browser opens it
+    as `localhost` or `127.0.0.1`, so publishing the port on `127.0.0.1` needs
+    no other option.
 
 ### D4. Python and Starlette for the server
 

@@ -57,6 +57,8 @@ docker run -p 8788:8788 -v narrate-data:/data -v narrate-cache:/cache \
 
 - **No authentication:** keep it on localhost or a private network. Anything
   that can reach the port can spend the service's ElevenLabs credits.
+- **Host names:** with `--host 0.0.0.0`, allow the names clients call it by
+  with `--allow-host` ([Isolation](#isolation)).
 - **Workers:** how many jobs run at once (default 1). A build uses all its
   machine's cores, so more than one helps only on a big machine. As a guide,
   the factor-q intro (83 s, Kokoro, HTML scenes) built in 57 s.
@@ -173,6 +175,20 @@ The callers are your own programs, so jobs run as child processes of the
 service, as the studio's builds do. To contain the service as a whole, run it
 from the Docker image. A public service would need much more: each job in its
 own container, behind an egress proxy ([Later](#later-a-public-service)).
+
+With no login, the service relies on being reachable only by those programs.
+A web page open in a browser on the same machine, or on the private network,
+can send requests to it too, so it checks where each request comes from (#93):
+- **Host names:** it answers only to `localhost`, `127.0.0.1`, `[::1]`, its
+  `--host` address (unless that's `0.0.0.0` or `::`) and each `--allow-host`.
+  Anything else gets 403, so a page that points its own name at the service's
+  address can't read its answers. Clients on other machines need the name
+  they call it by allowed.
+- **Origin:** a request that changes something gets 403 when its `Origin`
+  isn't one of those names on the port it was sent to. Browsers send an
+  `Origin` with every such request; programs don't, so they're unaffected.
+- **No CORS:** it sends no CORS headers, so other sites' pages can't read its
+  answers.
 
 ## Narakeet compatibility
 

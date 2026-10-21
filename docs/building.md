@@ -172,12 +172,19 @@ The studio is a web app for writing a script, served from your computer.
 - **The design:** the studio's decisions and their reasons are in
   [design/studio.md](design/studio.md).
 
+**Other sites:** the studio answers only to `localhost`, `127.0.0.1`,
+`[::1]` and its `--host` address, and refuses changes sent from another
+site's page. So a web page open in your browser can't read your project or
+start builds through it.
+
 **On another machine,** such as a server you reach over a VPN:
-`narrate studio script.md --host 0.0.0.0`, then open port 8787 on that
-machine. The studio has no access control yet. Anyone who can reach the port
-can read the files in the script's folder (not hidden ones such as `.env`)
-and change the script, so only expose it on a network you trust, or use an
-SSH tunnel: `ssh -L 8787:127.0.0.1:8787 server`.
+`narrate studio script.md --host 0.0.0.0 --allow-host server`, then open
+`http://server:8787/`. `--allow-host` names the host name or address you open
+it by; repeat it for more than one. The studio has no login yet. Anyone who
+can reach the port can read the files in the script's folder (not hidden ones
+such as `.env`) and change the script, so only expose it on a network you
+trust, or use an SSH tunnel, which needs neither option:
+`ssh -L 8787:127.0.0.1:8787 server`.
 
 **In Docker:**
 
@@ -541,13 +548,21 @@ jobs, other services) can check, build and review videos by calling it.
 
 ```sh
 narrate serve                                    # http://127.0.0.1:8788/v1
-narrate serve --host 0.0.0.0 --workers 2 --data /srv/narrate
+narrate serve --host 0.0.0.0 --allow-host buildbox --workers 2 --data /srv/narrate
 docker run -p 8788:8788 -v narrate-data:/data -v narrate-cache:/cache -e ELEVENLABS_API_KEY \
   ghcr.io/bricef/narrate serve --host 0.0.0.0 --data /data
 ```
 
-- **No access control:** keep it on localhost or a private network.
-  Anything that can reach the port can spend its ElevenLabs credits.
+- **No login:** keep it on localhost or a private network. Anything that can
+  reach the port can spend its ElevenLabs credits.
+- **Host names:** it answers to `localhost`, `127.0.0.1`, `[::1]` and its
+  `--host` address. Programs on other machines call it by its machine's name
+  or address: allow each with `--allow-host`, which you can repeat. A request
+  to any other name gets 403, so a web page can't reach it by pointing its own
+  name at your machine.
+- **Browsers:** a request that changes something, sent from another site's
+  page, gets 403. Programs send no `Origin` header, so this doesn't affect
+  them.
 - **Speech:** jobs use Kokoro unless they ask for another engine, or you
   start it with `--tts`. With `"tts": "elevenlabs"`, a job uses the service's
   own `ELEVENLABS_API_KEY`, from its environment or a `.env` where it starts.
@@ -762,8 +777,8 @@ models, the cache and the ElevenLabs key, and prints a fix for each problem.
 
 | Command | Does |
 | --- | --- |
-| `narrate studio SCRIPT [--open]` | edit the script in a web app (`--tts` for its engine; `--host`, `--port` to serve elsewhere) |
-| `narrate serve` | serve narrate over HTTP for your own programs (`--host`, `--port`, `--data`, `--workers`, `--tts`, `--prices`) |
+| `narrate studio SCRIPT [--open]` | edit the script in a web app (`--tts` for its engine; `--host`, `--port` to serve elsewhere; `--allow-host` for each other name it's opened by) |
+| `narrate serve` | serve narrate over HTTP for your own programs (`--host`, `--port`, `--allow-host`, `--data`, `--workers`, `--tts`, `--prices`) |
 | `narrate build SCRIPT [-o OUT.mp4]` | render a video (`SCRIPT` may be a `.zip`; `--source` picks the script inside; `--scenes 3-5` builds just those; `--subtitles MODE` and `--transcript` choose the extra outputs; `--regenerate` retakes web captures; `--usage FILE` records what it spent) |
 | `narrate audio SCRIPT [-o OUT]` | render the narration only (also takes `--subtitles`, `--transcript` and `--usage`) |
 | `narrate hear VIDEO [--script SCRIPT]` | what speech-to-text hears, and where it differs from the script (`--json`, `--usage`) |
