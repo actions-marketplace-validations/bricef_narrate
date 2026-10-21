@@ -26,7 +26,7 @@ demo:
 
 # Build the container image as narrate:local
 image:
-    docker build -t narrate:local .
+    docker build --target runtime -t narrate:local .
 
 # Run the test suite inside the container image
 image-test:

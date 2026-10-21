@@ -86,3 +86,12 @@ def test_published_image_is_checked_through_the_action():
     assert job["needs"] == "image" and job["permissions"]["packages"] == "read"
     step = next(s for s in job["steps"] if s.get("uses") == "./")
     assert step["with"]["image"].startswith("ghcr.io/") and "needs.image.outputs.digest" in step["with"]["image"]
+
+
+def test_image_built_and_published_is_the_runtime_stage():
+    """Not the Dockerfile's last stage, test, which starts in /src (#88)."""
+    workflow = yaml.safe_load((ROOT / ".github/workflows/image.yml").read_text())
+    steps = workflow["jobs"]["image"]["steps"]
+    built = next(s for s in steps if s.get("with", {}).get("load"))
+    published = next(s for s in steps if s.get("with", {}).get("push"))
+    assert built["with"]["target"] == published["with"]["target"] == "runtime"
