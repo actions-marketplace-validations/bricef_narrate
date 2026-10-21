@@ -18,16 +18,34 @@ from .script import Media, ScriptError, parse_file
 from .tts import ELEVENLABS_VOICES, KOKORO_VOICES, NARAKEET_PROFILES, ensure_models, make_synth
 
 
+DOTENV = "NARRATE_DOTENV"  # 0: read no .env (narrate serve's jobs)
+DOTENV_KEYS = ("ELEVENLABS_API_KEY",)
+
+
 def load_dotenv(*dirs: Path) -> None:
-    """Read KEY=VALUE lines from .env files; variables already set win."""
-    for d in dirs:
-        env = d / ".env"
+    """Read ELEVENLABS_API_KEY from .env files; variables already set win.
+
+    Nothing else, with a warning naming what's ignored: a .env comes with its
+    folder, which may not be yours, and other variables would choose the
+    programs narrate runs, or change how they run (#93)."""
+    if os.environ.get(DOTENV, "").strip().lower() in ("0", "false", "no"):
+        return
+    for env in dict.fromkeys(d.resolve() / ".env" for d in dirs):
         if not env.is_file():
             continue
+        ignored = []
         for line in env.read_text().splitlines():
             key, sep, value = line.strip().partition("=")
-            if sep and key and not key.startswith("#"):
-                os.environ.setdefault(key.strip(), value.strip().strip("'\""))
+            key = key.strip()
+            if not sep or not key or key.startswith("#"):
+                continue
+            if key in DOTENV_KEYS:
+                os.environ.setdefault(key, value.strip().strip("'\""))
+            else:
+                ignored.append(key)
+        if ignored:
+            print(f"warning: {env}: ignoring {', '.join(dict.fromkeys(ignored))} (.env only sets "
+                  f"{', '.join(DOTENV_KEYS)}; set the others in the environment)", file=sys.stderr)
 
 
 def _report(script, notes: list[str]) -> None:
