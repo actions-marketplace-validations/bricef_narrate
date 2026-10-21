@@ -165,6 +165,10 @@ assistant a checklist for setting narrate up.
 
 ## Relationship to [Narakeet](https://www.narakeet.com/)
 
+Narakeet is an online service that helps people make narrated videos easily.
+It's an excellent service and you should check it out if you need a reliable 
+hosted provider to generate narrated videos.
+
 Narrate tries to be compatible with Narakeet's Markdown format:
 header property, stage direction, media option, narration markup, subtitle style 
 and transition. We compare the video it generates against Narakeet's own example
