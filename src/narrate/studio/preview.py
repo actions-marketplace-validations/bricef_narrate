@@ -7,7 +7,7 @@ the crop it has reached, and an HTML scene the page itself, on a clock the
 studio moves (#73, D12). A render block shows the output a build already
 made; until then, a Mermaid diagram is drawn live (#76, D15) and other render
 blocks show a card. Overlays go over the frame as pages of their
-own (#74, D13).
+own (#74, D13). Each is shown in a sandboxed frame (D17).
 """
 
 from __future__ import annotations
@@ -34,15 +34,18 @@ MERMAID_JS = f"/mermaid/{mermaid.MERMAID_VERSION}/mermaid.min.js"
 
 
 class Files:
-    """Turns files into the addresses the preview loads them from."""
+    """Turns files into the addresses the preview loads them from. The preview's frames are sandboxed
+    (D17), so the project's files come from /pages/ with the session's `key`, which lets their fonts
+    and fetches read them."""
 
-    def __init__(self, project: Path, scratch: Path):
+    def __init__(self, project: Path, scratch: Path, key: str):
         self.project, self.scratch = project.resolve(), scratch.resolve()
+        self.root = f"/pages/{quote(key)}/"
 
     def url(self, path: Path) -> str:
         path = path.resolve()
         if path.is_relative_to(self.project) and not path.is_relative_to(self.scratch):
-            url = "/files/" + quote(path.relative_to(self.project).as_posix())
+            url = self.root + quote(path.relative_to(self.project).as_posix())
             if path.is_relative_to(self.project / ".narrate" / "generated"):
                 url += f"?v={path.stat().st_mtime_ns}"  # replaced in place when retaken (#77): show the new one
             return url
@@ -61,7 +64,8 @@ class Files:
         if not path.is_relative_to(self.project) or path.is_relative_to(self.scratch):
             return None
         query = quote(json.dumps(narrate, separators=(",", ":"), sort_keys=True))
-        return f"/pages/{quote(path.relative_to(self.project).as_posix())}?v={path.stat().st_mtime_ns}&narrate={query}"
+        where = quote(path.relative_to(self.project).as_posix())
+        return f"{self.root}{where}?v={path.stat().st_mtime_ns}&narrate={query}"
 
 
 def _card(title: str, note: str, w: int, h: int) -> str:

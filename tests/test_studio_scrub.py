@@ -62,7 +62,7 @@ def project(tmp_path, monkeypatch):
 def shown(project, text: str, scene: int, t: float) -> dict:
     analysis = run(text, project / "s.md", SilentSynth())
     (project / "scratch").mkdir(exist_ok=True)
-    return frame(analysis.plans[scene], t, analysis.settings, Files(project, project / "scratch")), analysis
+    return frame(analysis.plans[scene], t, analysis.settings, Files(project, project / "scratch", "k")), analysis
 
 
 def narration(url: str) -> dict:
@@ -75,7 +75,7 @@ def test_a_page_gets_the_cues_a_build_gives_it(project):
     text = "---\nsize: 320x180\n---\n\n![](red.png)\n\n![](scene.html)\n\nFirst words.\n\nSecond words, a few more.\n"
     page, analysis = shown(project, text, 1, 2.5)  # noqa: F811
     plan = analysis.plans[1]
-    assert page["kind"] == "page" and page["url"].startswith("/pages/scene.html?v=")
+    assert page["kind"] == "page" and page["url"].startswith("/pages/k/scene.html?v=")
     # The page starts half way through the scene, on a whole frame, and its cues count from there
     assert page["start"] == pytest.approx(plan.duration / 2, abs=1 / 30)
     assert round(page["start"] * 30) == pytest.approx(page["start"] * 30, abs=1e-3)
@@ -121,12 +121,13 @@ def test_the_studio_serves_the_page_and_its_files(project):
     script = project / "s.md"
     script.write_text("![](scene.html)\n\nHello.\n")
     client = TestClient(create_app(script, "silent", hosts=["testserver"]))
+    pages = f"/pages/{client.app.state.session.key}/"
     narrate = json.dumps({"duration": 2, "cues": {"1": 0}})
-    served = client.get("/pages/scene.html", params={"narrate": narrate})
+    served = client.get(pages + "scene.html", params={"narrate": narrate})
     assert served.status_code == 200 and "page-clock.js" in served.text and '"--cue-1": "0.0000s"' in served.text
-    assert client.get("/pages/look.css").text == "p { color: red }"  # its own files, as they are
-    assert client.get("/pages/scene.html", params={"narrate": "[1, 2"}).status_code == 400
-    assert client.get("/pages/..%2Fsecret.html").status_code == 404
+    assert client.get(pages + "look.css").text == "p { color: red }"  # its own files, as they are
+    assert client.get(pages + "scene.html", params={"narrate": "[1, 2"}).status_code == 400
+    assert client.get(pages + "..%2Fsecret.html").status_code == 404
     assert client.get("/static/vendor/fake-timers.js").status_code == 200
 
 
@@ -165,7 +166,7 @@ def test_scrubbing_shows_each_moment_as_a_build_captures_it(project, page):  # n
         page.locator(".tl-scene").first.click()  # the timeline has the keys: Home, ± a frame, ± a second
         page.keyboard.press("Home")
         expect(page.get_by_test_id("page-frame")).to_be_visible()
-        inner = next(f for f in page.frames if "/pages/anim.html" in f.url)
+        inner = next(f for f in page.frames if "/anim.html" in f.url)
 
         def at(frame_index: int):
             expect(page.locator(".preview iframe")).to_have_count(1)

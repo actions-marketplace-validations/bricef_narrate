@@ -7,7 +7,7 @@ so both refuse what such a page could send them:
   points its own name at 127.0.0.1 to read their answers;
 - a request that changes something, sent from another site's page.
 Programs, curl and narrate's own CLI send no Origin header, so only the first
-applies to them.
+applies to them. Nor can another site show their pages in a frame of its own.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from __future__ import annotations
 import ipaddress
 from collections.abc import Iterable
 
-from starlette.datastructures import Headers
+from starlette.datastructures import Headers, MutableHeaders
 from starlette.responses import JSONResponse
 
 LOCAL = ("localhost", "127.0.0.1", "[::1]")
@@ -80,3 +80,27 @@ class OwnOrigin:
         scheme, _, address = origin.strip().lower().partition("://")
         name, origin_port = split(address)
         return scheme in ("http", "https") and name in self.hosts and origin_port == port
+
+
+class OwnFrames:
+    """ASGI middleware: only the server's own pages may frame what it answers, so another site can't
+    show it under a page of its own and steer clicks into it. A response with a policy of its own
+    keeps it: a project's files, served sandboxed, which the studio's preview frames (studio.md D17)."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def framed(message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                if "content-security-policy" not in headers:
+                    headers["Content-Security-Policy"] = "frame-ancestors 'self'"
+                    headers["X-Frame-Options"] = "SAMEORIGIN"  # for browsers without frame-ancestors
+            await send(message)
+
+        await self.app(scope, receive, framed)

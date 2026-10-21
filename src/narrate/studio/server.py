@@ -12,6 +12,7 @@ import asyncio
 import contextlib
 import json
 import os
+import secrets
 import shutil
 import tempfile
 from collections import OrderedDict
@@ -26,12 +27,19 @@ from starlette.responses import FileResponse, HTMLResponse, JSONResponse, Respon
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
-from ..hosts import LOCAL, OwnOrigin, allowed
+from ..hosts import LOCAL, OwnFrames, OwnOrigin, allowed
 
 STATIC = Path(__file__).parent / "static"
 ENGINES = ("auto", "kokoro", "elevenlabs", "silent")
 POLL_SECONDS = 0.5
 KEEPALIVE_SECONDS = 15.0
+# The project's files are served sandboxed (D17): a page opened from them runs in an origin of its
+# own, never the studio's, so it can't use the API. The preview's pages keep their scripts.
+SANDBOX = {"Content-Security-Policy": "sandbox"}
+PAGE = {"Content-Security-Policy": "sandbox allow-scripts",
+        # A page's own fetches, fonts and modules come from its sandbox, as Origin: null. Only an
+        # address with the session's key is answered like this, so other sites can't read the project.
+        "Access-Control-Allow-Origin": "null"}
 
 
 def version_of(path: Path) -> str:
@@ -57,6 +65,7 @@ class Session:
         self.engine = engine
         self._synth = None
         self._listeners: set[asyncio.Queue] = set()
+        self.key = secrets.token_urlsafe(16)  # in the address of what the preview's frames load (D17)
         self.analyses: OrderedDict = OrderedDict()  # the last few analyses by text id, for previews
         self.peaks: OrderedDict = OrderedDict()  # waveforms by sound id (#60)
         self.build = None  # the latest BuildRun (#55)
@@ -189,7 +198,7 @@ def create_app(script: Path, engine: str = "kokoro", hosts: Iterable[str] = LOCA
             return JSONResponse({"error": "that scene can't be shown"}, status_code=404)
         try:
             shown = await run_in_threadpool(frame, plan, float(body.get("time", 0)), analysis.settings,
-                                            Files(session.project, session.scratch), analysis.plans)
+                                            Files(session.project, session.scratch, session.key), analysis.plans)
         except Exception as e:  # noqa: BLE001 - a preview never takes the studio down
             return JSONResponse({"error": f"couldn't preview this moment: {e}"}, status_code=500)
         return JSONResponse(shown)
@@ -368,7 +377,7 @@ def create_app(script: Path, engine: str = "kokoro", hosts: Iterable[str] = LOCA
         path = (session.scratch / request.path_params["name"]).resolve()
         if not path.is_relative_to(session.scratch) or not path.is_file():
             return Response("not found", status_code=404)
-        return FileResponse(path)
+        return FileResponse(path, headers=SANDBOX)
 
     async def events(request: Request) -> Response:
         queue = session.subscribe()
@@ -395,24 +404,26 @@ def create_app(script: Path, engine: str = "kokoro", hosts: Iterable[str] = LOCA
         path = session.project_file(request.path_params["path"])
         if path is None:
             return Response("not found", status_code=404)
-        return FileResponse(path, headers={"Cache-Control": "no-cache"})
+        return FileResponse(path, headers={"Cache-Control": "no-cache", **SANDBOX})
 
     async def scene_page(request: Request) -> Response:
-        """A project file for an HTML scene (#73): the page itself, set up to be scrubbed
+        """A project file for the preview's frames (#73, D17): an HTML scene set up to be scrubbed
         (preview.page_html, with the narration from its address), and its files as they are."""
         from .preview import page_html
 
+        if not secrets.compare_digest(request.path_params["key"].encode(), session.key.encode()):
+            return Response("not found", status_code=404)
         path = session.project_file(request.path_params["path"])
         if path is None:
             return Response("not found", status_code=404)
         if path.suffix.lower() not in (".html", ".htm"):
-            return FileResponse(path, headers={"Cache-Control": "no-cache"})
+            return FileResponse(path, headers={"Cache-Control": "no-cache", **PAGE})
         try:
             narrate = json.loads(request.query_params.get("narrate") or "{}")
             text = page_html(path.read_bytes().decode("utf-8", errors="replace"), narrate)
         except (ValueError, TypeError, AttributeError) as e:
             return Response(f"bad narration for the page: {e}", status_code=400)
-        return HTMLResponse(text, headers={"Cache-Control": "no-cache"})
+        return HTMLResponse(text, headers={"Cache-Control": "no-cache", **PAGE})
 
     async def mermaid_js(request: Request) -> Response:
         """narrate's own pinned mermaid.js (#76), downloaded and checked on first use as for a build."""
@@ -462,10 +473,10 @@ def create_app(script: Path, engine: str = "kokoro", hosts: Iterable[str] = LOCA
         Route("/scratch/{name}", scratch_file),
         Route("/api/events", events),
         Route("/files/{path:path}", project_file),
-        Route("/pages/{path:path}", scene_page),
+        Route("/pages/{key}/{path:path}", scene_page),
         Route("/mermaid/{version}/mermaid.min.js", mermaid_js),
         Mount("/static", StaticFiles(directory=STATIC), name="static"),
-    ], middleware=[Middleware(OwnOrigin, hosts=hosts)], lifespan=lifespan)
+    ], middleware=[Middleware(OwnFrames), Middleware(OwnOrigin, hosts=hosts)], lifespan=lifespan)
     app.state.session = session
     return app
 

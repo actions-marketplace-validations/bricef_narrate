@@ -154,7 +154,8 @@ function SceneRender({ render, onCancel }) {
 }
 
 /** The frame at the cursor's moment, at the video's size, scaled to fit the pane. `drag`, when the
-    picture at the cursor has room to move, lets the frame be dragged to change its position (#62). */
+    picture at the cursor has room to move, lets the frame be dragged to change its position (#62).
+    Its iframes are sandboxed (D17): what the project puts in them can't use the studio's API. */
 function Preview({ analysis, shown, moment, error, playback, audio, onPlay, onStop, tab, onTab, build, sceneRender,
                    onRender, onCancelRender, drag, overlay, tools, voices, children }) {
   const box = useRef(null);
@@ -204,7 +205,8 @@ function Preview({ analysis, shown, moment, error, playback, audio, onPlay, onSt
       : tab === "scene" ? html`<${SceneRender} render=${sceneRender} onCancel=${onCancelRender} />`
       : html`<div class="frame-tab">
     <div class="screen" ref=${box} style=${`height:${h * scale}px`}>
-      ${shown && shown.kind === "frame" && html`<iframe title="frame" srcdoc=${shown.html} style=${frameStyle} tabindex="-1"></iframe>`}
+      ${shown && shown.kind === "frame" && html`<iframe title="frame" srcdoc=${shown.html} sandbox="allow-scripts"
+        style=${frameStyle} tabindex="-1"></iframe>`}
       ${shown && [...(shown.kind === "page" ? [shown] : []), ...(shown.overlays || [])].map((page) => html`<${PageFrame}
         key=${page.url} page=${page} style=${frameStyle} overlay=${page !== shown}
         time=${moment && moment.scene === shown.scene ? moment.time : page.start + page.time}

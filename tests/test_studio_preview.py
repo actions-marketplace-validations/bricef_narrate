@@ -30,7 +30,7 @@ def shown(project: Path, text: str, scene: int, t: float, monkeypatch=None) -> d
     analysis = run(text, script, SilentSynth())
     scratch = project / "scratch"
     scratch.mkdir(exist_ok=True)
-    return frame(analysis.plans[scene], t, analysis.settings, Files(project, scratch))
+    return frame(analysis.plans[scene], t, analysis.settings, Files(project, scratch, "k"))
 
 
 def sources(page: dict) -> list[str]:
@@ -39,8 +39,8 @@ def sources(page: dict) -> list[str]:
 
 def test_pictures_take_their_turns(project):
     text = "---\nsize: 320x180\n---\n\n![](red.png)\n\n![](blue.png)\n\n(duration: 2)\n"
-    assert sources(shown(project, text, 1, 0.5)) == ["/files/red.png"]
-    assert sources(shown(project, text, 1, 1.5)) == ["/files/blue.png"]
+    assert sources(shown(project, text, 1, 0.5)) == ["/pages/k/red.png"]
+    assert sources(shown(project, text, 1, 1.5)) == ["/pages/k/blue.png"]
 
 
 def test_slides_share_the_scene(project):
@@ -68,7 +68,7 @@ def test_a_zoom_shows_the_crop_it_has_reached(project):
 
 def test_html_scenes_show_the_page_itself(project):
     page = shown(project, "---\nsize: 320x180\n---\n\n![](scene.html)\n\n(duration: 1)\n", 1, 0.5)
-    assert page["kind"] == "page" and page["url"].startswith("/pages/scene.html?")  # scrubbed: test_studio_scrub.py
+    assert page["kind"] == "page" and page["url"].startswith("/pages/k/scene.html?")  # scrubbed: test_studio_scrub.py
 
 
 def test_render_blocks_show_what_a_build_made(project, monkeypatch, tmp_path_factory):

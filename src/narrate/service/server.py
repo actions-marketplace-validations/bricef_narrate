@@ -2,7 +2,8 @@
 
 Starlette, as the studio is. There's no authentication: it's for your own
 programs, on localhost or a private network. It answers only to its own host
-names, and refuses changes from other sites' pages (hosts.py).
+names, refuses changes from other sites' pages, and can't be framed by them
+(hosts.py).
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ from starlette.responses import FileResponse, JSONResponse, Response, StreamingR
 from starlette.routing import Route
 
 from ..child import Child
-from ..hosts import LOCAL, OwnOrigin, allowed
+from ..hosts import LOCAL, OwnFrames, OwnOrigin, allowed
 from . import costs, openapi
 from .costs import Prices
 from .jobs import Runner, view
@@ -228,7 +229,10 @@ def create_app(root: Path, engine: str = "kokoro", workers: int = 1, prices: Pri
     async def output(request: Request) -> Response:
         job_id = request.path_params["id"]
         path = runner.output(job_id, request.path_params["name"]) if store.job(job_id) else None
-        return FileResponse(path) if path else _error("no such output", 404)
+        if path is None:
+            return _error("no such output", 404)
+        # Sandboxed: a file a project made, opened in a browser, runs in an origin of its own, not the service's
+        return FileResponse(path, headers={"Content-Security-Policy": "sandbox"})
 
     @contextlib.asynccontextmanager
     async def lifespan(app: Starlette):
@@ -255,7 +259,7 @@ def create_app(root: Path, engine: str = "kokoro", workers: int = 1, prices: Pri
         Route("/v1/jobs/{id}/cancel", cancel, methods=["POST"]),
         Route("/v1/jobs/{id}/outputs/{name:path}", output),
         Route("/v1/usage", usage),
-    ], middleware=[Middleware(OwnOrigin, hosts=hosts)], lifespan=lifespan)
+    ], middleware=[Middleware(OwnFrames), Middleware(OwnOrigin, hosts=hosts)], lifespan=lifespan)
     app.state.runner = runner
     app.state.store = store
     return app

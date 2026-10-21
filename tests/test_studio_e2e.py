@@ -176,9 +176,9 @@ def test_the_preview_follows_the_cursor(tmp_path, page):
     try:
         page.goto(f"http://127.0.0.1:{server.servers[0].sockets[0].getsockname()[1]}/")
         picture = page.frame_locator("iframe[title=frame]").locator("img.media")
-        expect(picture).to_have_attribute("src", "/files/red.png")
+        expect(picture).to_have_attribute("src", re.compile(r"^/pages/[\w-]+/red\.png$"))
         page.locator(".cm-line:not(.cm-narrate-scene)", has_text="The blue scene").click(position={"x": 4, "y": 4})
-        expect(picture).to_have_attribute("src", "/files/blue.png")
+        expect(picture).to_have_attribute("src", re.compile(r"^/pages/[\w-]+/blue\.png$"))
         expect(page.get_by_test_id("moment")).to_contain_text("scene 2")
     finally:
         server.end_streams()

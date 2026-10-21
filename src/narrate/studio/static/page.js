@@ -5,13 +5,15 @@ import { html, useEffect, useRef } from "./vendor/htm-preact.js";
     installed (page-clock.js moves the clock when told the time), laid out at its viewport and fitted
     into the frame as a build fits it (`page.box`). `time` is the moment in the scene; while `follow`
     (the scene's narration, an <audio>) plays, the page keeps up with it frame by frame instead.
-    An `overlay` (#74) is transparent: the frame shows through wherever the page draws nothing. */
+    An `overlay` (#74) is transparent: the frame shows through wherever the page draws nothing.
+    The page is sandboxed in an origin of its own (D17), so it can't use the studio's API. */
 export function PageFrame({ page, time, follow, style, overlay = false }) {
   const frame = useRef(null);
   const latest = useRef(0);  // the page's time to show, sent again whenever the page (re)loads
   const post = () => {
     const target = frame.current && frame.current.contentWindow;
-    if (target) target.postMessage({ narrate: "time", time: latest.current }, location.origin);
+    // A sandboxed page's origin is opaque, so "*" is the only way to reach it; the time is no secret
+    if (target) target.postMessage({ narrate: "time", time: latest.current }, "*");
   };
   const pageTime = (sceneTime) => Math.max(0, sceneTime - page.start);
   useEffect(() => {
@@ -34,7 +36,8 @@ export function PageFrame({ page, time, follow, style, overlay = false }) {
   const [vw, vh] = page.size;
   return html`<div class=${overlay ? "page-frame overlay" : "page-frame"} data-testid=${overlay ? "overlay" : "page-frame"}
     style=${overlay ? style : `${style};background:${page.canvas}`}>
-    <iframe ref=${frame} title=${overlay ? "overlay" : "frame"} src=${page.url} tabindex="-1" onLoad=${post}
+    <iframe ref=${frame} title=${overlay ? "overlay" : "frame"} src=${page.url} sandbox="allow-scripts"
+      tabindex="-1" onLoad=${post}
       style=${`width:${vw}px;height:${vh}px;transform:translate(${left}px, ${top}px) scale(${sx}, ${sy})`}></iframe>
   </div>`;
 }
