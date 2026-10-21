@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -69,10 +70,11 @@ def check_ffmpeg() -> list[Check]:
                       "(about 150 MB), or now with `narrate models`")]
     if source == "none":
         return [Check("ffmpeg", False, f"none on PATH, and {media.no_managed_ffmpeg()}", media.ffmpeg_fix())]
+    fix = media.ffmpeg_fix()
     if source == "NARRATE_FFMPEG" and media.ffmpeg_asset() is not None:
         fix = "unset NARRATE_FFMPEG to use narrate's own, or point it at a full ffmpeg build"
-    else:
-        fix = media.ffmpeg_fix()
+    elif source == "NARRATE_FFMPEG" and sys.platform == "darwin":  # it overrides Homebrew's too
+        fix = f"point NARRATE_FFMPEG at a full ffmpeg build, or unset it and {fix}"
     try:
         version = subprocess.run([exe, "-hide_banner", "-version"], capture_output=True, text=True).stdout
         filters = subprocess.run([exe, "-hide_banner", "-filters"], capture_output=True, text=True).stdout

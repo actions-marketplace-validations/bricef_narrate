@@ -52,6 +52,25 @@ def test_models_skips_ffmpeg_when_one_is_configured(monkeypatch, tmp_path):
     assert main(["models"]) == 0
 
 
+def test_models_skips_ffmpeg_where_narrate_has_none(monkeypatch, tmp_path, capsys):
+    """On macOS, `narrate models` stopped at ffmpeg and never fetched the rest."""
+    from narrate import cli, mermaid, stt
+
+    fetched = []
+    monkeypatch.delenv("NARRATE_FFMPEG", raising=False)
+    monkeypatch.setenv("NARRATE_TOOLS", str(tmp_path))
+    monkeypatch.setenv("PATH", str(tmp_path / "bin"))
+    monkeypatch.setattr(media, "HOMEBREW_FFMPEG", ())
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(cli, "ensure_models", lambda: fetched.append("kokoro"))
+    monkeypatch.setattr(stt, "ensure_model", lambda: fetched.append("stt"))
+    monkeypatch.setattr(mermaid, "ensure", lambda: fetched.append("mermaid"))
+    monkeypatch.setattr(media, "ensure_ffmpeg", lambda: pytest.fail("tried to download ffmpeg"))
+    assert main(["models"]) == 0
+    assert fetched == ["kokoro", "stt", "mermaid"]
+    assert "Fix: brew install ffmpeg-full" in capsys.readouterr().err
+
+
 def test_files_still_to_download_are_not_faults(monkeypatch, tmp_path):
     """A fresh install passes: ffmpeg and the Kokoro model download on the first build."""
     monkeypatch.delenv("NARRATE_FFMPEG", raising=False)
@@ -90,10 +109,12 @@ esac
 
 @pytest.fixture
 def mac(tmp_path, monkeypatch):
-    """A Mac, where narrate has no ffmpeg of its own; PATH is an empty folder to put one in."""
+    """A Mac, where narrate has no ffmpeg of its own; PATH is an empty folder to put one in.
+    Homebrew's ffmpeg-full would be in tmp_path / "homebrew"."""
     monkeypatch.delenv("NARRATE_FFMPEG", raising=False)
     monkeypatch.setenv("NARRATE_TOOLS", str(tmp_path / "tools"))
     monkeypatch.setenv("PATH", str(tmp_path / "bin"))
+    monkeypatch.setattr(media, "HOMEBREW_FFMPEG", (str(tmp_path / "homebrew" / "ffmpeg"),))
     monkeypatch.setattr(sys, "platform", "darwin")
     monkeypatch.setattr(media.platform, "machine", lambda: "arm64")
     return tmp_path / "bin"
@@ -102,8 +123,7 @@ def mac(tmp_path, monkeypatch):
 def test_no_ffmpeg_for_this_platform_is_a_fault(mac):
     """It used to say ffmpeg would download on the first build, which then failed."""
     ffmpeg, = doctor.check_ffmpeg()
-    assert not ffmpeg.ok and "darwin/arm64" in ffmpeg.detail
-    assert "brew install ffmpeg-full" in ffmpeg.fix and "NARRATE_FFMPEG" in ffmpeg.fix
+    assert not ffmpeg.ok and "darwin/arm64" in ffmpeg.detail and ffmpeg.fix == "brew install ffmpeg-full"
 
 
 def test_elsewhere_the_fix_is_narrate_ffmpeg(mac, monkeypatch):
@@ -124,6 +144,13 @@ def test_homebrews_plain_ffmpeg_lacks_libass_and_rubberband(mac):
     failed = {c.name: c.fix for c in doctor.check_ffmpeg() if not c.ok}
     assert set(failed) == {"ffmpeg subtitles filter (libass)", "ffmpeg rubberband filter (pitch)"}
     assert all("brew install ffmpeg-full" in fix for fix in failed.values())
+
+
+def test_homebrews_ffmpeg_full_is_found_off_path(mac, tmp_path):
+    fake_ffmpeg(mac, filters=("xfade",))
+    brewed = fake_ffmpeg(tmp_path / "homebrew")
+    checks = doctor.check_ffmpeg()
+    assert all(c.ok for c in checks) and str(brewed) in checks[0].detail
 
 
 def test_an_ffmpeg_older_than_narrates_fails(mac):

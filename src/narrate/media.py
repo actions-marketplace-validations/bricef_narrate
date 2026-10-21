@@ -55,11 +55,15 @@ def no_managed_ffmpeg() -> str:
     return f"narrate has no ffmpeg of its own for {sys.platform}/{platform.machine()}"
 
 
+# Homebrew's plain ffmpeg has no libass or rubberband. Its ffmpeg-full has both, but
+# isn't linked onto PATH, so narrate looks in Homebrew's prefixes (Apple Silicon, Intel).
+HOMEBREW_FFMPEG = ("/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg", "/usr/local/opt/ffmpeg-full/bin/ffmpeg")
+
+
 def ffmpeg_fix() -> str:
     """How to get an ffmpeg that has everything narrate uses."""
     if sys.platform == "darwin":
-        # Homebrew's plain ffmpeg has no libass or rubberband; ffmpeg-full is keg-only, so not on PATH
-        return 'brew install ffmpeg-full, then set NARRATE_FFMPEG="$(brew --prefix ffmpeg-full)/bin/ffmpeg"'
+        return "brew install ffmpeg-full"
     return f"set NARRATE_FFMPEG to an ffmpeg {FFMPEG_SERIES} or later with libx264, libass and rubberband"
 
 
@@ -67,13 +71,17 @@ def find_ffmpeg() -> tuple[str, str | None]:
     """The ffmpeg a build will use, without fetching it: where it comes from and its path.
 
     In the order ffmpeg() picks: "NARRATE_FFMPEG", "managed" (downloaded already),
-    "download" (still to download), "PATH", or "none" (no path)."""
+    "download" (still to download), "Homebrew" (ffmpeg-full, on macOS), "PATH",
+    or "none" (no path)."""
     if env := os.environ.get("NARRATE_FFMPEG"):
         return "NARRATE_FFMPEG", env
     if managed_ffmpeg().exists():
         return "managed", str(managed_ffmpeg())
     if ffmpeg_asset() is not None:
         return "download", str(managed_ffmpeg())
+    if sys.platform == "darwin":
+        if brewed := next((p for p in HOMEBREW_FFMPEG if os.access(p, os.X_OK)), None):
+            return "Homebrew", brewed
     if found := shutil.which("ffmpeg"):
         return "PATH", found
     return "none", None
@@ -118,7 +126,7 @@ def ensure_ffmpeg(log=lambda msg: print(msg, file=sys.stderr), opener=urllib.req
 @cache
 def ffmpeg() -> str:
     """$NARRATE_FFMPEG, else narrate's managed ffmpeg (downloaded on first use) where this platform
-    has one, else the one on PATH."""
+    has one, else Homebrew's ffmpeg-full on macOS, else the one on PATH."""
     source, exe = find_ffmpeg()
     if source == "none":
         raise MediaError(f"no ffmpeg on PATH, and {no_managed_ffmpeg()}. Fix: {ffmpeg_fix()}")

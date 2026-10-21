@@ -441,8 +441,12 @@ def cmd_cache(args: argparse.Namespace) -> int:
 
 def cmd_models(args: argparse.Namespace) -> int:
     print(ensure_models())
-    if not os.environ.get("NARRATE_FFMPEG"):  # the container image brings its own
+    # Only where narrate has its own: the container image and macOS bring theirs
+    source, _ = media.find_ffmpeg()
+    if source in ("managed", "download"):
         print(media.ensure_ffmpeg())
+    elif source == "none":
+        print(f"note: {media.no_managed_ffmpeg()}. Fix: {media.ffmpeg_fix()}", file=sys.stderr)
     from . import mermaid, stt
 
     print(stt.ensure_model())

@@ -670,7 +670,7 @@ narrate fetches some files on first use and caches synthesised speech:
 | What | Where | Size |
 | --- | --- | --- |
 | Kokoro voice model | `~/.cache/narrate/models/` | about 350 MB |
-| ffmpeg (from a source checkout) | `~/.cache/narrate/ffmpeg/` | 170 MB (a 150 MB download) |
+| ffmpeg (from a source checkout, on Linux only) | `~/.cache/narrate/ffmpeg/` | 170 MB (a 150 MB download) |
 | Speech-to-text model, for subtitles on recordings | `~/.cache/narrate/stt/` | about 460 MB |
 | Built-in music | `~/.cache/narrate/music/` | a few MB |
 | mermaid.js, for diagrams | `~/.cache/narrate/mermaid/` | about 5 MB |
@@ -761,15 +761,10 @@ models, the cache and the ElevenLabs key, and prints a fix for each problem.
 - **Text shows as boxes:** the font lacks those characters. Install a font that
   has them, or name one in a theme with `@font-face`.
 - **"no ffmpeg on PATH, and narrate has no ffmpeg of its own":** narrate
-  downloads its own ffmpeg on Linux only. Elsewhere it uses the one on `PATH`,
-  or `NARRATE_FFMPEG`. On macOS, Homebrew's `ffmpeg` lacks libass and
-  rubberband, so install `ffmpeg-full` and point narrate at it:
-
-  ```sh
-  brew install ffmpeg-full
-  export NARRATE_FFMPEG="$(brew --prefix ffmpeg-full)/bin/ffmpeg"
-  ```
-
+  downloads its own ffmpeg on Linux only. On macOS, run
+  `brew install ffmpeg-full`, which narrate finds without being told.
+  Homebrew's plain `ffmpeg` lacks libass and rubberband. Elsewhere, narrate
+  uses the ffmpeg on `PATH`.
 - **Another ffmpeg:** narrate uses its own build on Linux, because older
   versions crash on some transitions. `NARRATE_FFMPEG=/path/to/ffmpeg`
   overrides it. It needs ffmpeg 9.0 or later with libx264, libass,
