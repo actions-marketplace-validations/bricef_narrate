@@ -34,9 +34,9 @@ is written for the assistant: give it this page, and it can set everything up.
   like any other app. Larger organisations may need a paid Docker
   subscription; check Docker's terms.
   - **On a Mac, you can skip Docker:** the assistant can install narrate with
-    [Homebrew](https://brew.sh/), a free tool for installing programs.
-    On a Mac with an Apple chip, videos then build several times faster.
-    Installing Homebrew asks for your Mac's password once.
+    [Homebrew](https://brew.sh/), a free tool for installing programs, so
+    Docker Desktop doesn't need to be open while you make videos. Installing
+    Homebrew asks for your Mac's password once.
 - **An AI assistant that can work with files and run programs on your
   computer,** such as Claude Code in the Claude desktop app. An assistant that
   only chats in a web page can write a script for you, but it can't build the
@@ -94,9 +94,7 @@ downloads a voice (about 350 MB). After that, setting up is done.
 
 **How long a build takes** depends on what's in the video: a few minutes for
 pictures and slides, and longer for animated scenes. A four-minute video with
-an animation in every scene took about 18 minutes on a recent Mac, with
-narrate built for its chip. With the standard download, Macs with Apple chips
-currently take several times longer (the assistant's setup covers this).
+an animation in every scene took about 18 minutes on a recent Mac.
 
 **Keep the computer awake while it builds.** If it goes to sleep, the build
 pauses until it wakes. On a Mac, ask the assistant to keep it awake for the
@@ -228,24 +226,15 @@ command line: talk to them in plain words, show them results rather than
 commands, and say where each file is.
 
 **Docker or Homebrew:** use Docker, unless the person asked for Homebrew on a
-Mac. On a Mac with Apple Silicon (`uname -m` prints `arm64`), suggest
-Homebrew: narrate then runs natively, several times faster than the published
-image. For Homebrew, do [On a Mac, without Docker](#on-a-mac-without-docker)
+Mac. For Homebrew, do [On a Mac, without Docker](#on-a-mac-without-docker)
 in place of steps 1 to 3 below.
 
 1. **Docker:** check that `docker version` reaches the engine. If it can't,
    ask the person to open Docker Desktop (on macOS, `open -a Docker` starts
    it), and wait until it answers.
 2. **The image:** `docker pull ghcr.io/bricef/narrate`. It's public, so no
-   login is needed.
-   - **On Apple Silicon,** add `--platform linux/amd64` to `docker pull` and
-     `docker run`: the image is published for x86-64 only, and runs under
-     emulation, several times more slowly
-     ([#91](https://github.com/bricef/narrate/issues/91)). A native image is
-     faster: clone the repository
-     (`git clone https://github.com/bricef/narrate.git`), run
-     `docker build --platform linux/arm64 --target runtime -t narrate:local .`
-     in it (it compiles ffmpeg, so it takes a while), then use `narrate:local`.
+   login is needed. It's built for x86-64 and arm64, so it runs natively on
+   Intel and AMD machines and on Macs with Apple chips.
 3. **How to run narrate,** from the video's folder:
 
    ```sh

@@ -45,12 +45,7 @@ fonts:
 docker pull ghcr.io/bricef/narrate
 ```
 
-On a Mac with Apple Silicon (an M1 chip or later), add `--platform linux/amd64`
-after `docker pull` and `docker run`, here and in the rest of the docs. The
-image is only built for Intel and AMD processors so far, so Docker runs it
-under emulation, several times more slowly
-([#91](https://github.com/bricef/narrate/issues/91)). On those Macs,
-installing [from source](#from-source) is faster.
+It runs natively on Intel and AMD processors and on Macs with Apple chips.
 
 ### From source
 
