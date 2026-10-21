@@ -123,6 +123,9 @@ shows voices, pauses, slides, a clip with a callout, and code.
 
 ## Documentation
 
+- **[Make videos with an AI assistant](docs/with-an-assistant.md):** for
+  people who don't use the command line: what you need, what to ask for, how
+  to review a draft, and what it costs.
 - **[Writing scripts](docs/writing-scripts.md):** how to narrate, show
   pictures and clips, add slides, subtitles, music, transitions and callouts.
 - **[Building videos](docs/building.md):** speech engines and voices,
@@ -148,6 +151,10 @@ Agents draft with free voices, and ask before spending ElevenLabs credits.
 Link it into Claude Code with `just install-skill`. It lives here, so it
 changes with the tool; a test checks it covers every stage direction and
 header key.
+
+For someone who doesn't use the command line, [Make videos with an AI
+assistant](docs/with-an-assistant.md) explains what to ask for, and gives the
+assistant a checklist for setting narrate up.
 
 ## Status
 

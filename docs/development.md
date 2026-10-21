@@ -13,6 +13,7 @@ them:
 | --- | --- |
 | `just test [ARGS]` | run the test suite (`ARGS` go to pytest) |
 | `just build SCRIPT [ARGS]` | render a script |
+| `just studio SCRIPT [ARGS]` | edit a script in narrate studio, opened in a browser |
 | `just demo` | render `examples/demo` with Kokoro and ElevenLabs into `out/` |
 | `just reference` | download Narakeet's example projects and renders, for the conformance tests |
 | `just image` | build the container image as `narrate:local` |

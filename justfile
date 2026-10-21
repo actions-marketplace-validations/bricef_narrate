@@ -14,6 +14,10 @@ test *args:
 build script *args:
     uv run narrate build {{script}} {{args}}
 
+# Edit a script in narrate studio, opened in a browser: just studio examples/demo/demo.md [--tts elevenlabs]
+studio script *args:
+    uv run narrate studio {{script}} --open {{args}}
+
 # Render the demo with each speech engine into out/
 demo:
     mkdir -p out
