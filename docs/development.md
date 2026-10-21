@@ -152,21 +152,29 @@ and on pushes to `main`. It takes about 5 minutes, most of it the tests:
 
 `.github/workflows/image.yml` runs on pushes that touch the code, tests,
 examples, Dockerfile or action. It also runs on pull requests from forks that
-change the Dockerfile, the action or the workflow:
+change the Dockerfile, the action or the workflow. It builds the image for
+`linux/amd64` on `ubuntu-latest` and for `linux/arm64` on `ubuntu-24.04-arm`,
+each natively on its own runner, and on each:
 
 1. Runs the test suite in the image.
 2. Builds the image's `runtime` stage, the one that's published.
 3. Builds a short script with it the way the README does: the folder at
    `/work`, a new cache volume and the runner's own user.
 4. Renders `examples/demo` through the action with that image, keeping the
-   video as the `demo-video` artifact.
-5. On `main` and on `v*` tags only: publishes the image to
-   `ghcr.io/bricef/narrate`, then renders the demo again with the published
-   image. That second render pulls it the way other repositories do.
+   video as the `demo-video-amd64` or `demo-video-arm64` artifact.
 
-Build layers are cached in GitHub's Actions cache. A warm run takes about 4
-minutes. A cold one takes about 17, most of it compiling ffmpeg, after a
-Dockerfile change or a week without builds.
+Other branches and pull requests stop there, and publish nothing. On `main`
+and on `v*` tags, each platform's job also pushes its image, untagged. Once
+both have passed, the `publish` job tags them together as one image,
+`ghcr.io/bricef/narrate`, and Docker pulls the platform it runs on. The
+`published` job then renders the demo with that image on both platforms,
+pulling it the way other repositories do.
+
+Each platform has its own build cache in GitHub's Actions cache, and the two
+build at the same time. A warm run takes about 6 minutes on each, most of it
+the tests, or 1 to 2 when nothing in the image has changed. A cold one, after
+a change to the ffmpeg build or a week without builds, takes about 13 minutes
+on amd64 and 10 on arm64, most of it compiling ffmpeg.
 
 **Image tags:**
 
