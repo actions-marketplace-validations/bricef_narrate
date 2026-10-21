@@ -1,0 +1,30 @@
+name: Feature request
+description: Something narrate could do, or do better
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What you want to do
+      description: What you're trying to make, and what gets in the way today.
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+      description: How narrate could do it. A sketch of the script you'd like to write helps.
+
+  - type: textarea
+    id: narakeet
+    attributes:
+      label: Narakeet
+      description: If Narakeet does this, how? A link to its docs helps.
+
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Helping
+      options:
+        - label: I'd like to work on this.

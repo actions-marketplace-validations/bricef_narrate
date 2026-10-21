@@ -3,6 +3,9 @@
 How to work on narrate itself: set up a checkout, run the tests, build the
 container image, and find your way around the code.
 
+New to the project? Start with [Contributing](../CONTRIBUTING.md): how to pick
+an issue, and what a pull request needs.
+
 ## Set up
 
 Follow [Install from source](../README.md#from-source), then install

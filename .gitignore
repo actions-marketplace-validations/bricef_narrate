@@ -3,8 +3,9 @@
 /reference/narakeet-docs
 /reference/examples
 
-# Local secrets (ELEVENLABS_API_KEY)
+# Local secrets (ELEVENLABS_API_KEY), in .env or direnv's .envrc
 .env
+.envrc
 
 # Build output
 /out/
