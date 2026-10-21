@@ -1,7 +1,7 @@
 name: Checks
 
 # ruff, and the test suite on the runner without the tests that download models
-# or call ElevenLabs: about 5 minutes, where image.yml takes 4 to 17. It runs on
+# or call ElevenLabs: about 5 minutes, where image.yml takes 6 to 13. It runs on
 # every pull request, forks included, since image.yml runs on pushes to this
 # repository's branches.
 on:

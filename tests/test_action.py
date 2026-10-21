@@ -73,19 +73,50 @@ def test_image_workflow_renders_the_demo_with_the_image_it_built():
 
 def test_image_is_published_only_from_main_and_tags():
     workflow = yaml.safe_load((ROOT / ".github/workflows/image.yml").read_text())
+    main_or_tags = "github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')"
     steps = workflow["jobs"]["image"]["steps"]
-    publish = next(s for s in steps if s.get("with", {}).get("push"))
+    push = next(s for s in steps if s.get("id") == "push")
     meta = next(s for s in steps if s.get("id") == "meta")
-    assert publish["if"] == "steps.meta.outcome == 'success'"
-    assert meta["if"] == "github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')"
+    assert push["if"] == "steps.meta.outcome == 'success'"
+    assert meta["if"] == main_or_tags
+    assert workflow["jobs"]["publish"]["if"] == main_or_tags
+    tags = next(s for s in workflow["jobs"]["publish"]["steps"] if s.get("id") == "meta")
+    assert tags["with"]["flavor"] == "latest=false"  # only main moves latest, not v* tags
+
+
+def test_image_is_built_and_published_for_amd64_and_arm64():
+    """Each natively on its own runner, with its own cache, then tagged together as one image (#91)."""
+    workflow = yaml.safe_load((ROOT / ".github/workflows/image.yml").read_text())
+    job = workflow["jobs"]["image"]
+    assert job["strategy"]["matrix"]["include"] == [{"arch": "amd64", "runner": "ubuntu-latest"},
+                                                    {"arch": "arm64", "runner": "ubuntu-24.04-arm"}]
+    assert job["runs-on"] == "${{ matrix.runner }}"
+    builds = [s for s in job["steps"] if s.get("uses", "").startswith("docker/build-push-action")]
+    assert len(builds) == 3
+    for build in builds:
+        assert build["with"]["platforms"] == "linux/${{ matrix.arch }}"
+        assert build["with"]["cache-from"] == "type=gha,scope=${{ matrix.arch }}"
+    # Only main writes the cache, from the test stage's build, which covers every stage
+    [writes] = [b for b in builds if "cache-to" in b["with"]]
+    assert writes["with"]["target"] == "test"
+    assert writes["with"]["cache-to"] == ("${{ github.ref == 'refs/heads/main' && "
+                                          "format('type=gha,mode=max,scope={0}', matrix.arch) || '' }}")
+    push = next(s for s in builds if s.get("id") == "push")
+    assert "push-by-digest=true" in push["with"]["outputs"]
+    publish = workflow["jobs"]["publish"]
+    assert publish["needs"] == "image"
+    assert "docker buildx imagetools create" in next(s for s in publish["steps"] if s.get("id") == "index")["run"]
 
 
 def test_published_image_is_checked_through_the_action():
+    """On both platforms, by the digest of the image published for both."""
     workflow = yaml.safe_load((ROOT / ".github/workflows/image.yml").read_text())
     job = workflow["jobs"]["published"]
-    assert job["needs"] == "image" and job["permissions"]["packages"] == "read"
+    assert job["needs"] == "publish" and job["permissions"]["packages"] == "read"
+    platforms = workflow["jobs"]["image"]["strategy"]["matrix"]["include"]
+    assert job["strategy"]["matrix"]["runner"] == [p["runner"] for p in platforms]
     step = next(s for s in job["steps"] if s.get("uses") == "./")
-    assert step["with"]["image"].startswith("ghcr.io/") and "needs.image.outputs.digest" in step["with"]["image"]
+    assert step["with"]["image"].startswith("ghcr.io/") and "needs.publish.outputs.digest" in step["with"]["image"]
 
 
 def test_image_built_and_published_is_the_runtime_stage():
@@ -93,5 +124,5 @@ def test_image_built_and_published_is_the_runtime_stage():
     workflow = yaml.safe_load((ROOT / ".github/workflows/image.yml").read_text())
     steps = workflow["jobs"]["image"]["steps"]
     built = next(s for s in steps if s.get("with", {}).get("load"))
-    published = next(s for s in steps if s.get("with", {}).get("push"))
+    published = next(s for s in steps if s.get("id") == "push")
     assert built["with"]["target"] == published["with"]["target"] == "runtime"
