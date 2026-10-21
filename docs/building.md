@@ -65,6 +65,10 @@ The studio is a web app for writing a script, served from your computer.
       time.
     - **The exact check:** your browser draws the page, so fonts can differ
       from narrate's Chromium; **Render scene** is exact.
+    - **Sandboxed:** the page runs in an origin of its own, so it can't use
+      the studio. Its own files (pictures, styles, scripts, fonts and data it
+      fetches) load as in a build, but it has no storage, such as
+      `localStorage`.
   - **Mermaid diagrams** are drawn as you type, fitted and coloured as a
     build draws them. A diagram that doesn't parse shows Mermaid's message
     instead.
@@ -176,9 +180,14 @@ The studio is a web app for writing a script, served from your computer.
   [design/studio.md](design/studio.md).
 
 **Other sites:** the studio answers only to `localhost`, `127.0.0.1`,
-`[::1]` and its `--host` address, and refuses changes sent from another
-site's page. So a web page open in your browser can't read your project or
-start builds through it.
+`[::1]` and its `--host` address, refuses changes sent from another site's
+page, and can't be shown in another site's frame. So a web page open in your
+browser can't read your project or start builds through it.
+
+**Other people's projects:** the preview runs a project's HTML scenes,
+overlays and slides sandboxed. So a page in a project from someone else can't
+change your script, switch the engine, start builds or read what the studio
+answers.
 
 **On another machine,** such as a server you reach over a VPN:
 `narrate studio script.md --host 0.0.0.0 --allow-host server`, then open

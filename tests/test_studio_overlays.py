@@ -43,7 +43,7 @@ def project(tmp_path, monkeypatch):
 
 def overlays(project, text: str, scene: int, t: float) -> tuple[list[dict], object]:
     analysis = run(text, project / "s.md", SilentSynth())
-    shown = frame(analysis.plans[scene], t, analysis.settings, Files(project, project / "scratch"), analysis.plans)
+    shown = frame(analysis.plans[scene], t, analysis.settings, Files(project, project / "scratch", "k"), analysis.plans)
     return shown["overlays"], analysis
 
 
@@ -55,7 +55,7 @@ def test_the_scenes_overlays_then_the_videos_each_on_its_clock(project):
     text = ("---\nsize: 320x180\noverlay: slider.html\n---\n\n![](red.png)\n\n(duration: 1.5)\n\n---\n\n![](blue.png)\n\n"
             "(overlay: {file: still.html, viewport: 640x640, colour: blue})\n\nA few words to speak.\n")
     [own, video], analysis = overlays(project, text, 2, 0.4)
-    assert own["url"].startswith("/pages/still.html?") and video["url"].startswith("/pages/slider.html?")
+    assert own["url"].startswith("/pages/k/still.html?") and video["url"].startswith("/pages/k/slider.html?")
     # The scene's: its clock, cues and parameters, laid out at its viewport and centred
     assert (own["start"], own["time"]) == (0.0, 0.4)
     assert narration(own)["cues"] == pytest.approx(analysis.plans[2].marks, abs=1e-3)
@@ -76,8 +76,8 @@ def test_overlays_a_scene_leaves_out(project):
             "(overlay: gone.html)\n\n(duration: 1)\n\n---\n\n![](blue.png)\n\n(duration: 1)\n\n---\n\n"
             "(overlay: none)\n\n![](grey.png)\n\n(duration: 1)\n")
     pages = lambda scene: [urlsplit(o["url"]).path for o in overlays(project, text, scene, 0.5)[0]]  # noqa: E731
-    assert pages(1) == ["/pages/still.html"]  # a missing page is left out; the slider covers scene 2 only
-    assert pages(2) == ["/pages/slider.html", "/pages/still.html"]
+    assert pages(1) == ["/pages/k/still.html"]  # a missing page is left out; the slider covers scene 2 only
+    assert pages(2) == ["/pages/k/slider.html", "/pages/k/still.html"]
     assert pages(3) == []  # (overlay: none)
 
 
@@ -128,7 +128,7 @@ def test_overlays_lie_over_the_preview_as_over_the_video(project, dark_page):
         assert tuple(pixels[90, 160]) == pytest.approx((255, 0, 0), abs=60)  # the picture shows through
         assert tuple(pixels[172, 12]) == pytest.approx((255, 0, 255), abs=60)  # the scene's overlay
         assert tuple(pixels[30, 8]) == pytest.approx((0, 255, 0), abs=60)  # the video's, at its start
-        slider = next(f for f in page.frames if "/pages/slider.html" in f.url)
+        slider = next(f for f in page.frames if "/slider.html" in f.url)
         slider.evaluate("window.__stillHere = true")
 
         def at(frame_index: int):

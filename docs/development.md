@@ -43,7 +43,8 @@ with `narrate doctor`.
   container keeps them. `docker volume rm narrate-devcontainer-cache` frees
   the space.
 - **The studio:** VS Code and Codespaces forward its port, 8787, to your
-  browser.
+  browser. Open it in a browser tab: other pages can't frame the studio, so
+  VS Code's preview pane can't show it.
 
 ## Run the tests
 

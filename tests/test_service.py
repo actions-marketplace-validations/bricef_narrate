@@ -133,7 +133,8 @@ def test_a_script_sent_inline_a_zip_and_narration_alone(client, tmp_path):
                                            "project": {"script": "hi.md", "text": "Hello there.\n"}}).json()
     done = wait(client, inline["id"], "done")
     assert set(done["outputs"]) == {"audio"} and done["outputs"]["audio"].endswith("/hi.wav")
-    assert client.get(done["outputs"]["audio"]).content[:4] == b"RIFF"
+    output = client.get(done["outputs"]["audio"])
+    assert output.content[:4] == b"RIFF" and output.headers["content-security-policy"] == "sandbox"  # can't act as the service
 
     archive = io.BytesIO()
     with zipfile.ZipFile(archive, "w") as z:

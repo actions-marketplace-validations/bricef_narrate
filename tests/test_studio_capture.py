@@ -61,10 +61,10 @@ def test_a_stored_output_is_addressed_by_its_version(tmp_path):
     kept = tmp_path / ".narrate" / "generated" / "web" / "x.png"
     kept.parent.mkdir(parents=True)
     kept.write_bytes(b"png")
-    files = Files(tmp_path, tmp_path / "scratch")
-    assert re.fullmatch(r"/files/\.narrate/generated/web/x\.png\?v=\d+", files.url(kept))
+    files = Files(tmp_path, tmp_path / "scratch", "k")
+    assert re.fullmatch(r"/pages/k/\.narrate/generated/web/x\.png\?v=\d+", files.url(kept))
     (tmp_path / "photo.png").write_bytes(b"png")
-    assert files.url(tmp_path / "photo.png") == "/files/photo.png"
+    assert files.url(tmp_path / "photo.png") == "/pages/k/photo.png"
 
 
 def colour_of(path) -> tuple[int, ...]:
@@ -92,7 +92,7 @@ def test_capture_then_retake_a_web_page(tmp_path, site, page, monkeypatch):  # n
         page.get_by_role("tab", name="Frame").click()  # the render played in the Scene tab
         expect(row).to_contain_text("taken")
         shown = page.frame_locator("iframe[title=frame]").locator("img.media")
-        expect(shown).to_have_attribute("src", re.compile(r"^/files/\.narrate/generated/web/.*\?v=\d+$"))
+        expect(shown).to_have_attribute("src", re.compile(r"^/pages/[\w-]+/\.narrate/generated/web/.*\?v=\d+$"))
         first = shown.get_attribute("src")
 
         # The page changes: retaking replaces the capture, and the preview shows the new one

@@ -298,7 +298,9 @@ export function Inspector({ analysis, line, onEdit, onRetake, retaking, busy }) 
     ${entry.capture && html`<div class="row capture" data-testid="capture">
       <span class="label">Capture</span>
       <span class="small">${entry.capture.stored ? taken(entry.capture.made) : "not taken yet"}${entry.capture.url
-        && html` from <a href=${entry.capture.url} target="_blank" rel="noreferrer">${entry.capture.url}</a>`}</span>
+        && (/^https?:\/\//i.test(entry.capture.url)  // a link to anything else (javascript:) could act as the studio
+          ? html` from <a href=${entry.capture.url} target="_blank" rel="noreferrer">${entry.capture.url}</a>`
+          : ` from ${entry.capture.url}`)}</span>
       <button disabled=${busy || retaking} onClick=${() => onRetake(entry.line)}
         title="capture the page again, with the scene's render, and keep the new capture">
         ${entry.capture.stored ? "Retake capture" : "Capture now"}</button>

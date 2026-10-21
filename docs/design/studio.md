@@ -92,11 +92,14 @@ Decided with the author.
   - **Origin:** a request that changes something gets 403 when its `Origin`
     isn't one of those names on the port it was sent to. Browsers send an
     `Origin` with every such request; programs and curl don't.
-  - **No CORS:** it sends no CORS headers, so other sites' pages can't read
-    its answers.
+  - **No CORS:** the API sends no CORS headers, so other sites' pages can't
+    read its answers. Only the preview's own pages get one (D17).
+  - **No framing:** other sites can't show the studio in a frame (D17).
   - **Docker:** in the container it binds `0.0.0.0`, and the browser opens it
     as `localhost` or `127.0.0.1`, so publishing the port on `127.0.0.1` needs
     no other option.
+- **Pages in your project (#93):** they run sandboxed, so they can't use the
+  studio either (D17).
 
 ### D4. Python and Starlette for the server
 
@@ -165,9 +168,9 @@ Decided with the author.
   real engine's cache where it can and estimates from text length where it
   can't. Durations sharpen as audio is synthesised.
 - **Frames:** the HTML that `frames.py` composes for a build, with project
-  files served over HTTP instead of `file://`, shown in an iframe. The preview
-  is the build's own composition, drawn by the user's browser instead of
-  headless Chromium.
+  files served over HTTP instead of `file://`, shown in a sandboxed iframe
+  (D17). The preview is the build's own composition, drawn by the user's
+  browser instead of headless Chromium.
 - **Narration:** a scene's audio is the planner's own track for that scene,
   synthesised by the chosen engine and cached as usual. Paragraph play
   buttons start it at that paragraph.
@@ -210,7 +213,8 @@ Decided with the author.
 - **Going back:** timers can't run backwards.
   - A page with scripts of its own reloads and runs forward to the moment.
   - A page without scripts seeks straight there.
-- **Its address:** the page's path in the project, plus its version and cues.
+- **Its address:** the page's path in the project, under the session's key
+  (D17), plus its version and cues.
   - Its relative files load naturally.
   - Moving the moment never reloads it; a new cue or an edited file does.
 - **Exactness:** the clock steps and seeking are the build's own, but the
@@ -272,6 +276,54 @@ copy to vendor.
 scene render's child process, progress and **Cancel** (D6), and stores the
 capture where a build would. No new command or code path is needed.
 
+### D17. Project pages run sandboxed, in origins of their own
+
+A project may come from someone else: a ZIP project, a shared repository. Its
+HTML scenes, overlays and slides used to run in the preview with the studio's
+own origin, so they could use its API as the app does (#93).
+- **Sandboxed frames:** every frame in the preview has
+  `sandbox="allow-scripts"`, without `allow-same-origin`. That's HTML scenes,
+  overlays, and the frame composed for slides, pictures and Mermaid, whose
+  slides may carry HTML of their own.
+- **Opened on their own:** `/pages/` sends
+  `Content-Security-Policy: sandbox allow-scripts`, so a page opened outside
+  the app is sandboxed too. `/files/` and `/scratch/` send `sandbox`.
+- **What that defends:** a sandboxed page's origin is opaque.
+  - A request it sends to change something carries `Origin: null`, which the
+    studio refuses (D3).
+  - The API sends no CORS headers, so the page can't read the script, the
+    voices or the build's state.
+  - It can't reach into the app's page, open windows or move the app
+    elsewhere.
+- **Its own files:** a page's fonts, module scripts and `fetch()` are
+  cross-origin requests from its sandbox, which need CORS.
+  - `/pages/` answers them with `Access-Control-Allow-Origin: null`, but only
+    under a random key in the address, made for each session.
+  - The key is only in `/api/frame`'s answers, which other sites can't read,
+    so their sandboxed pages can't read the project.
+  - The preview's frames load every project file from there, and a page's
+    relative files resolve there, so they load as in a build.
+- **What a page loses:** storage (`localStorage`, cookies, IndexedDB), and
+  reading back the pixels of its own pictures from a canvas, unless it loads
+  them with `crossorigin`. A build's page has both. **Render scene** stays the
+  exact check.
+- **Messages:** the app posts each page its time to `"*"`, since an opaque
+  origin can't be named; the time is no secret. The app listens to no messages
+  from pages.
+- **Links:** the inspector links a capture's address only when it's `http` or
+  `https`, so a `javascript:` address in a script can't run as the studio.
+- **Framing:** the app and its API send `frame-ancestors 'self'` and
+  `X-Frame-Options: SAMEORIGIN`, so other sites can't frame them. The service
+  does the same.
+- **Alternatives:**
+  - *Project pages on a second port:* they would keep a real origin, with
+    storage and canvases. But Docker, the dev container and Codespaces would
+    need a second port published or forwarded. Codespaces gives that port an
+    address and a sign-in of its own, which a frame in the app may not get.
+  - *Another host name on the same port,* such as `localhost` for the app and
+    `127.0.0.1` for pages: Codespaces, a tunnel or `--allow-host` reach the
+    studio by one name only.
+
 ## API
 
 | Request | Does |
@@ -295,10 +347,10 @@ capture where a build would. No new command or code path is needed.
 | `GET /api/scenes/render` | the latest scene render's state |
 | `POST /api/scenes/render/cancel` | stop the scene render |
 | `GET /api/events` | the event stream (SSE) |
-| `GET /files/{path}` | the project's own files, nothing outside its folder and no hidden files |
+| `GET /files/{path}` | the project's own files, nothing outside its folder and no hidden files, sandboxed (D17) |
 | `GET /mermaid/{version}/mermaid.min.js` | narrate's own pinned mermaid.js, for live diagrams (D15) |
-| `GET /pages/{path}` | the same files, an HTML scene set up to be scrubbed (D12) with the narration its `narrate` query gives |
-| `GET /scratch/{name}` | the session's scratch files: clip stills, scene audio, copies of renders |
+| `GET /pages/{key}/{path}` | the same files for the preview's frames, under the session's key, readable by their sandbox (D17); an HTML scene is set up to be scrubbed (D12) with the narration its `narrate` query gives |
+| `GET /scratch/{name}` | the session's scratch files: clip stills, scene audio, copies of renders, sandboxed |
 
 ## Milestones
 

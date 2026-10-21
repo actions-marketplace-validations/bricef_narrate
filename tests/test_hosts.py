@@ -80,6 +80,15 @@ def test_its_own_pages_and_programs_are_answered(server, host):
     assert server.written(app)
 
 
+def test_other_sites_cant_frame_it(server):
+    """Or they could show it under a page of their own and steer the user's clicks into it."""
+    with TestClient(server.make(allowed("127.0.0.1")), base_url="http://localhost:8787") as client:
+        for answer in (client.get("/"), client.get(server.read), client.get("/missing"),
+                       server.write(client, {"Origin": "https://evil.example"})):
+            assert answer.headers["content-security-policy"] == "frame-ancestors 'self'"
+            assert answer.headers["x-frame-options"] == "SAMEORIGIN"
+
+
 @pytest.mark.parametrize("bind, more, host, answered", [
     ("127.0.0.1", [], "localhost:8787", True),
     ("0.0.0.0", [], "localhost:8787", True),  # in Docker, published as -p 127.0.0.1:8787:8787
