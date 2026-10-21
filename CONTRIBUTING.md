@@ -25,7 +25,7 @@ That's a sign the docs need a line too.
 
 - **On Linux or macOS:** follow [Install from source](README.md#from-source),
   then [Development](docs/development.md) for `just`, the tests and a tour of
-  the code.
+  the code. `uv run narrate doctor` checks the setup and says what's missing.
 - **Anywhere else, or in GitHub Codespaces:** open the repository in its
   [dev container](.devcontainer/), which has the Linux setup ready.
 
