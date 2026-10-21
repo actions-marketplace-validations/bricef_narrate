@@ -1,9 +1,9 @@
 name: Checks
 
-# ruff, and the test suite on the runner without the tests that download models
-# or call ElevenLabs: about 5 minutes, where image.yml takes 6 to 13. It runs on
-# every pull request, forks included, since image.yml runs on pushes to this
-# repository's branches.
+# ruff, and the test suite on Linux and macOS without the tests that download
+# models or call ElevenLabs: about 6 minutes on Linux and 10 to 14 on macOS,
+# where image.yml takes 6 to 13. It runs on every pull request, forks included,
+# since image.yml runs on pushes to this repository's branches.
 on:
   pull_request:
   push:
@@ -59,6 +59,53 @@ jobs:
           key: narrate-tools-${{ runner.os }}-${{ hashFiles('src/narrate/media.py', 'src/narrate/mermaid.py', 'src/narrate/music.py') }}
 
       # As the image's test stage: no Kokoro or speech-to-text models, no Narakeet renders, no ElevenLabs
+      - name: Run the tests
+        env:
+          NARRATE_TOOLS: ${{ runner.temp }}/narrate-tools
+        run: uv run pytest -q -m "not kokoro and not elevenlabs and not conformance and not stt"
+
+  # The same tests on macOS, set up from source as docs/building.md says: Homebrew's
+  # ffmpeg-full, which narrate finds by itself, and the DejaVu fonts. macos-latest is arm64.
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-suffix: test-macos
+
+      # Bottles, so nothing compiles
+      - name: Install ffmpeg-full and the fonts
+        env:
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: "1"
+        run: |
+          brew install ffmpeg-full
+          brew install --cask font-dejavu
+
+      - run: uv sync --locked
+
+      # Chromium's version comes with Playwright's, in uv.lock
+      - name: Cache headless Chromium
+        uses: actions/cache@v6
+        with:
+          path: ~/Library/Caches/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('uv.lock') }}
+
+      # macOS has the libraries Chromium needs: no --with-deps
+      - name: Install headless Chromium
+        run: uv run playwright install --only-shell chromium
+
+      # mermaid.js and the music; ffmpeg is Homebrew's
+      - name: Cache narrate's downloads
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/narrate-tools
+          key: narrate-tools-${{ runner.os }}-${{ hashFiles('src/narrate/media.py', 'src/narrate/mermaid.py', 'src/narrate/music.py') }}
+
       - name: Run the tests
         env:
           NARRATE_TOOLS: ${{ runner.temp }}/narrate-tools
