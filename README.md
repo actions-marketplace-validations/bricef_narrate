@@ -163,13 +163,13 @@ For someone who doesn't use the command line, [Make videos with an AI
 assistant](docs/with-an-assistant.md) explains what to ask for, and gives the
 assistant a checklist for setting narrate up.
 
-## Status
+## Relationship to [Narakeet](https://www.narakeet.com/)
 
-narrate covers the whole Markdown format: every header property, stage
-direction, media option, narration markup, subtitle style and transition.
-Built from Narakeet's own example projects, its videos match Narakeet's
-renders within 0.1 s in length, for the examples without narration (the voices
-themselves differ;
+Narrate tries to be compatible with Narakeet's Markdown format:
+header property, stage direction, media option, narration markup, subtitle style 
+and transition. We compare the video it generates against Narakeet's own example
+projects, and narrate's videos match Narakeet's renders within 0.1 s in length, 
+for the examples without narration (the voices themselves differ;
 [Development](docs/development.md#conformance-with-narakeet)).
 
 It does not take PowerPoint, Google Slides or Keynote input, or offer
