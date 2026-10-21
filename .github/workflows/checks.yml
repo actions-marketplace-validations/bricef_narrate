@@ -23,8 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # A cache of its own: this job installs only the dev group, and would
-      # otherwise save the shared key before the test job could
+      # Each job has its own uv cache: this one installs only the dev group
       - uses: astral-sh/setup-uv@v10.3.0
         with:
           python-version: "3.12"
@@ -43,6 +42,7 @@ jobs:
         with:
           python-version: "3.12"
           enable-cache: true
+          cache-suffix: test
 
       - run: uv sync --locked
 
