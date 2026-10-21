@@ -1,6 +1,10 @@
 # narrate
 
-[![Watch the video](https://img.youtube.com/vi/NyzvmIZcxBs/hqdefault.jpg)](https://youtu.be/NyzvmIZcxBs)
+<p align="center">
+  <a href="https://youtu.be/NyzvmIZcxBs" rel="nofollow">
+    <img src="docs/assets/intro-title.png" alt="Watch the video" style="max-width: 100%;">
+  </a>
+</p>
 
 
 narrate turns a Markdown script and a folder of pictures and clips into a
