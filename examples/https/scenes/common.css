@@ -1,0 +1,76 @@
+/* The look shared by every HTML scene of the HTTPS explainer (https.md).
+   Each part of the story keeps its colour: your browser teal, the site's server amber, whoever is
+   listening rose, secrets and encryption violet, and checks that pass green. */
+:root {
+  --bg: #0b1020;
+  --panel: #131a2e;
+  --line: #2a3553;
+  --fg: #e8edf7;
+  --mute: #8a94ad;
+  --you: #4fd1c5;
+  --server: #f5a524;
+  --eve: #f47c7c;
+  --key: #b794f6;
+  --ok: #5ee08a;
+  --sans: "Noto Sans", "DejaVu Sans", sans-serif;
+  --mono: "DejaVu Sans Mono", "Noto Mono", monospace;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; width: 1920px; height: 1080px; overflow: hidden; color: var(--fg); font-family: var(--sans);
+  background: radial-gradient(ellipse 80% 70% at 50% 40%, #131b36 0%, var(--bg) 70%);
+}
+/* A faint grid of dots: the network everything travels over */
+body::before {
+  content: ""; position: absolute; inset: 0;
+  background-image: radial-gradient(circle, rgba(138, 148, 173, .14) 1.6px, transparent 2px);
+  background-size: 48px 48px;
+}
+.abs { position: absolute; }
+.mono { font-family: var(--mono); }
+.mute { color: var(--mute); }
+.you { color: var(--you); }
+.server { color: var(--server); }
+.eve { color: var(--eve); }
+.key { color: var(--key); }
+.ok { color: var(--ok); }
+.kicker { position: absolute; left: 150px; top: 96px; font-size: 32px; letter-spacing: .16em; text-transform: uppercase;
+          color: var(--mute); display: flex; align-items: center; gap: 18px; }
+.kicker::before { content: ""; width: 44px; height: 4px; border-radius: 2px; background: var(--key); }
+
+/* Line icons, drawn in their element's colour */
+svg.i { fill: none; stroke: currentColor; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; overflow: visible; }
+
+/* An actor: an icon in a rounded tile, its name below */
+.actor { position: absolute; width: 220px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.actor .tile { width: 150px; height: 150px; border-radius: 34px; border: 3px solid currentColor; display: grid; place-items: center;
+               background: color-mix(in srgb, currentColor 13%, var(--panel)); box-shadow: 0 18px 50px rgba(0, 0, 0, .35); }
+.actor .tile svg { width: 84px; height: 84px; }
+.actor b { font-size: 30px; font-weight: 600; color: var(--fg); white-space: nowrap; }
+.actor.small { width: 180px; }
+.actor.small .tile { width: 110px; height: 110px; border-radius: 26px; }
+.actor.small .tile svg { width: 62px; height: 62px; }
+.actor.small b { font-size: 26px; }
+
+/* A connection between two actors */
+.wire { position: absolute; height: 0; border-top: 4px dashed var(--line); }
+
+/* A card */
+.card { background: var(--panel); border: 2px solid var(--line); border-radius: 24px; box-shadow: 0 24px 60px rgba(0, 0, 0, .35); }
+
+/* A short monospace message, as it travels */
+.msg { font-family: var(--mono); font-size: 32px; line-height: 1.45; padding: 22px 30px; border-radius: 16px; white-space: nowrap; }
+
+/* Entrances and exits, each given its moment with animation-delay (a cue, or a fallback) */
+.up { opacity: 0; transform: translateY(24px); animation: up .6s cubic-bezier(.2, .7, .2, 1) forwards; }
+@keyframes up { to { opacity: 1; transform: none; } }
+.fade { opacity: 0; animation: fade .7s ease-out forwards; }
+@keyframes fade { to { opacity: 1; } }
+.pop { opacity: 0; transform: scale(.85); animation: pop .5s cubic-bezier(.2, .9, .3, 1.35) forwards; }
+@keyframes pop { to { opacity: 1; transform: none; } }
+.out { animation: out .4s ease-in forwards; }
+@keyframes out { to { opacity: 0; } }
+/* Flies in from (--dx, --dy) to where it's placed */
+.fly { opacity: 0; animation: fly 1.1s cubic-bezier(.45, 0, .2, 1) forwards; }
+@keyframes fly { from { opacity: 0; transform: translate(var(--dx, 0), var(--dy, 0)) scale(.8); }
+                 15% { opacity: 1; } to { opacity: 1; transform: none; } }

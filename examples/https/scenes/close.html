@@ -1,0 +1,39 @@
+<!doctype html>
+<!-- The close: what the padlock stands for, one line per promise, then the padlock clicking shut on "All", held for
+     the last few seconds with the title. -->
+<link rel="stylesheet" href="common.css">
+<style>
+  .row { position: absolute; left: 150px; width: 1190px; height: 140px; display: flex; align-items: center; gap: 36px; }
+  .row .tile { width: 110px; height: 110px; border-radius: 28px; border: 3px solid currentColor; display: grid; place-items: center; flex: none;
+               background: color-mix(in srgb, currentColor 13%, var(--panel)); }
+  .row .tile svg { width: 64px; height: 64px; }
+  .row div:last-child { font-size: 40px; white-space: nowrap; font-weight: 700; color: var(--fg); }
+  .row small { display: block; font-family: var(--mono); font-size: 24px; font-weight: 400; margin-bottom: 6px; }
+  .lock { position: absolute; left: 1380px; top: 250px; width: 340px; height: 340px; color: var(--mute);
+          animation: green .4s forwards; animation-delay: var(--cue-end, 10.8s); }
+  .lock svg { width: 100%; height: 100%; stroke-width: 6; filter: drop-shadow(0 0 0 transparent); }
+  .shackle { transform: translateY(-13px); animation: shut .45s cubic-bezier(.3, 1.7, .5, 1) forwards; animation-delay: var(--cue-end, 10.8s); }
+  @keyframes shut { to { transform: none; } }
+  @keyframes green { to { color: var(--ok); filter: drop-shadow(0 0 40px rgba(94, 224, 138, .5)); } }
+  .end { position: absolute; left: 150px; top: 760px; font-size: 120px; font-weight: 800; letter-spacing: -.02em; }
+  .end span { color: var(--server); }
+  .credit { position: absolute; left: 150px; bottom: 70px; font-family: var(--mono); font-size: 26px; color: var(--mute); }
+</style>
+<body>
+  <div class="lock fade" style="animation: fade .7s forwards .2s, green .4s forwards var(--cue-end, 10.8s)">
+    <svg class="i" viewBox="0 0 96 96"><rect x="16" y="42" width="64" height="46" rx="9"/><path class="shackle" d="M30 42V30a18 18 0 0 1 36 0v12"/><path d="M48 60v10"/></svg></div>
+
+  <div class="row key up" style="top: 180px; animation-delay: var(--cue-key, 4.1s)">
+    <div class="tile"><svg class="i" viewBox="0 0 96 96"><circle cx="28" cy="48" r="16"/><path d="M44 48h40M72 48v14M60 48v10"/></svg></div>
+    <div><small>private</small>A key, agreed in public</div></div>
+  <div class="row ok up" style="top: 360px; animation-delay: var(--cue-seal, 5.7s)">
+    <div class="tile"><svg class="i" viewBox="0 0 96 96"><circle cx="48" cy="40" r="24"/><path d="M34 60l-8 26 22-10 22 10-8-26"/><path d="M37 40l8 8 15-16"/></svg></div>
+    <div><small>intact</small>A seal on every message</div></div>
+  <div class="row server up" style="top: 540px; animation-delay: var(--cue-id, 7.3s)">
+    <div class="tile"><svg class="i" viewBox="0 0 96 96"><rect x="10" y="20" width="76" height="56" rx="8"/><circle cx="34" cy="43" r="9"/>
+      <path d="M20 66c2-7 8-10 14-10s12 3 14 10M58 40h18M58 54h12"/></svg></div>
+    <div><small>authentic</small>An identity, checked up a chain of trust</div></div>
+
+  <div class="end up" style="animation-delay: calc(var(--cue-end, 10.8s) + 1.6s)">That's HTTP<span>S</span>.</div>
+  <div class="credit fade" style="animation-delay: calc(var(--cue-end, 10.8s) + 2.2s)">Written in Markdown, built with narrate · examples/https/https.md</div>
+</body>

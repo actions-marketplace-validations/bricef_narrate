@@ -1,0 +1,62 @@
+<!doctype html>
+<!-- The TLS 1.3 handshake as a sequence diagram that builds message by message, each on its word. Everything after
+     the server's hello is encrypted (the band), the certificate included. The brace marks the one round trip. -->
+<link rel="stylesheet" href="common.css">
+<style>
+  .lane { position: absolute; top: 322px; height: 630px; border-left: 4px dashed var(--line); }
+  .msg-row { position: absolute; left: 420px; width: 1080px; height: 60px; }
+  .msg-row .lbl { position: absolute; left: 0; right: 0; top: 0; text-align: center; font-size: 30px; font-weight: 600; color: var(--fg);
+                  opacity: 0; animation: fade .4s forwards; animation-delay: inherit; }
+  .msg-row .lbl small { margin-left: 14px; font-family: var(--mono); font-size: 22px; font-weight: 400; color: var(--mute); }
+  .msg-row .lbl svg { width: 26px; height: 26px; color: var(--key); stroke-width: 9; vertical-align: -3px; margin-right: 10px; }
+  .msg-row .ln { position: absolute; left: 4px; right: 4px; top: 48px; height: 4px; background: currentColor; transform: scaleX(0);
+                 animation: grow .6s cubic-bezier(.4, 0, .2, 1) forwards; animation-delay: inherit; }
+  .msg-row .ln::after { content: ""; position: absolute; top: -10px; border: 12px solid transparent; }
+  .to .ln { transform-origin: left; }
+  .to .ln::after { right: -4px; border-left: 18px solid currentColor; border-right: 0; }
+  .from .ln { transform-origin: right; }
+  .from .ln::after { left: -4px; border-right: 18px solid currentColor; border-left: 0; }
+  .to { color: var(--you); }
+  .from { color: var(--server); }
+  @keyframes grow { to { transform: none; } }
+  .band { position: absolute; left: 424px; width: 1072px; top: 486px; height: 446px; border-radius: 18px;
+          background: rgba(183, 148, 246, .08); border: 2px dashed rgba(183, 148, 246, .45); }
+  .band-lbl { position: absolute; left: 1530px; top: 492px; width: 240px; font-size: 26px; line-height: 1.3; color: var(--key); }
+  .brace { position: absolute; left: 350px; top: 374px; width: 26px; height: 320px; border: 4px solid var(--mute); border-right: 0; border-radius: 14px 0 0 14px; }
+  .brace-lbl { position: absolute; left: 150px; top: 488px; width: 180px; text-align: right; font-size: 32px; line-height: 1.25; color: var(--fg); }
+  .brace-lbl b { color: var(--ok); }
+</style>
+<body>
+  <div class="kicker fade" style="animation-delay: .1s">The TLS handshake</div>
+
+  <div class="actor small you" style="left: 330px; top: 160px"><div class="tile"><svg class="i" viewBox="0 0 96 96"><rect x="8" y="16" width="80" height="64" rx="8"/>
+    <path d="M8 34h80"/><circle cx="20" cy="25" r="2"/><circle cx="30" cy="25" r="2"/><path d="M22 52h40M22 64h26"/></svg></div><b>Your browser</b></div>
+  <div class="actor small server" style="left: 1410px; top: 160px"><div class="tile"><svg class="i" viewBox="0 0 96 96"><rect x="14" y="10" width="68" height="22" rx="5"/>
+    <rect x="14" y="37" width="68" height="22" rx="5"/><rect x="14" y="64" width="68" height="22" rx="5"/>
+    <path d="M26 21h1M26 48h1M26 75h1M58 21h14M58 48h14M58 75h14"/></svg></div><b>bank.example</b></div>
+  <div class="lane" style="left: 418px"></div>
+  <div class="lane" style="left: 1498px"></div>
+
+  <div class="band fade" style="animation-delay: calc(var(--cue-reply, 7.8s) + .9s)"></div>
+  <div class="band-lbl fade" style="animation-delay: calc(var(--cue-reply, 7.8s) + .9s)">encrypted from here on, even the certificate</div>
+
+  <div class="msg-row to" style="top: 330px; animation-delay: var(--cue-hello, 3.4s)">
+    <div class="lbl">Hello + my half of the key exchange<small>ClientHello</small></div><div class="ln"></div></div>
+  <div class="msg-row from" style="top: 404px; animation-delay: var(--cue-reply, 7.8s)">
+    <div class="lbl">Hello + my half<small>ServerHello</small></div><div class="ln"></div></div>
+  <div class="msg-row from" style="top: 494px; animation-delay: var(--cue-cert, 10s)">
+    <div class="lbl"><svg class="i" viewBox="0 0 96 96"><rect x="16" y="42" width="64" height="46" rx="9"/><path d="M30 42V30a18 18 0 0 1 36 0v12"/></svg>Certificate</div><div class="ln"></div></div>
+  <div class="msg-row from" style="top: 568px; animation-delay: var(--cue-sig, 11.1s)">
+    <div class="lbl"><svg class="i" viewBox="0 0 96 96"><rect x="16" y="42" width="64" height="46" rx="9"/><path d="M30 42V30a18 18 0 0 1 36 0v12"/></svg>Signature<small>CertificateVerify</small></div><div class="ln"></div></div>
+  <div class="msg-row from" style="top: 642px; animation-delay: var(--cue-fin, 12.3s)">
+    <div class="lbl"><svg class="i" viewBox="0 0 96 96"><rect x="16" y="42" width="64" height="46" rx="9"/><path d="M30 42V30a18 18 0 0 1 36 0v12"/></svg>Finished</div><div class="ln"></div></div>
+  <div class="msg-row to" style="top: 716px; animation-delay: calc(var(--cue-fin, 12.3s) + 1.6s)">
+    <div class="lbl"><svg class="i" viewBox="0 0 96 96"><rect x="16" y="42" width="64" height="46" rx="9"/><path d="M30 42V30a18 18 0 0 1 36 0v12"/></svg>Finished</div><div class="ln"></div></div>
+  <div class="msg-row to" style="top: 790px; animation-delay: var(--cue-data, 17.5s)">
+    <div class="lbl"><svg class="i" viewBox="0 0 96 96"><rect x="16" y="42" width="64" height="46" rx="9"/><path d="M30 42V30a18 18 0 0 1 36 0v12"/></svg>GET /account<small>HTTP</small></div><div class="ln"></div></div>
+  <div class="msg-row from" style="top: 864px; animation-delay: calc(var(--cue-data, 17.5s) + 1.2s)">
+    <div class="lbl"><svg class="i" viewBox="0 0 96 96"><rect x="16" y="42" width="64" height="46" rx="9"/><path d="M30 42V30a18 18 0 0 1 36 0v12"/></svg>200 OK, and the page<small>HTTP</small></div><div class="ln"></div></div>
+
+  <div class="brace fade" style="animation-delay: var(--cue-rtt, 20s)"></div>
+  <div class="brace-lbl up" style="animation-delay: var(--cue-rtt, 20s)"><b>One</b> round trip</div>
+</body>

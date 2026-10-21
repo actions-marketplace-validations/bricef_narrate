@@ -1,0 +1,51 @@
+<!doctype html>
+<!-- HTTPS is HTTP inside TLS, as an equation that builds: the request, then the tunnel on "TLS", then the
+     sum. Below, the two jobs the tunnel needs done, each on its word. -->
+<link rel="stylesheet" href="common.css">
+<style>
+  .part { position: absolute; top: 250px; height: 340px; padding: 36px 40px; display: flex; flex-direction: column; gap: 22px; }
+  .part .name { font-size: 54px; font-weight: 800; }
+  .part .what { margin-top: auto; font-size: 30px; color: var(--mute); }
+  .req { font-family: var(--mono); font-size: 30px; line-height: 1.5; color: var(--fg); }
+  .req .m { color: var(--you); }
+  .op { position: absolute; top: 370px; font-size: 90px; font-weight: 300; color: var(--mute); }
+  .tls { border-color: var(--key); box-shadow: 0 0 60px rgba(183, 148, 246, .18); }
+  .tube { position: relative; height: 96px; border-radius: 48px; border: 3px solid var(--key); overflow: hidden;
+          background: linear-gradient(90deg, rgba(183, 148, 246, .06), rgba(183, 148, 246, .2), rgba(183, 148, 246, .06)); }
+  .capsule { position: absolute; top: 20px; left: -120px; width: 100px; height: 50px; border-radius: 25px; background: var(--key);
+             display: grid; place-items: center; color: var(--bg); animation: through 2.4s linear infinite; }
+  .capsule svg { width: 30px; height: 30px; stroke-width: 9; }
+  @keyframes through { to { transform: translateX(560px); } }
+  .https { align-items: center; justify-content: center; text-align: center; border-color: var(--ok); }
+  .https svg { width: 120px; height: 120px; color: var(--ok); stroke-width: 6; }
+  .https .name { font-size: 64px; }
+  .steps { position: absolute; left: 150px; right: 150px; top: 690px; display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
+  .step { display: flex; align-items: center; gap: 30px; padding: 30px 40px; font-size: 36px; font-weight: 600; white-space: nowrap; }
+  .step .n { flex: none; width: 76px; height: 76px; border-radius: 50%; display: grid; place-items: center; font-size: 40px; font-weight: 800;
+             background: currentColor; }
+  .step .n i { font-style: normal; color: var(--bg); }
+  .step span { color: var(--fg); }
+</style>
+<body>
+  <div class="kicker fade" style="animation-delay: .1s">HTTP inside TLS</div>
+
+  <div class="card part up" style="left: 150px; width: 560px; animation-delay: .3s">
+    <div class="name you">HTTP</div>
+    <div class="req"><span class="m">GET</span> /account HTTP/1.1<br>Host: bank.example<br>Cookie: session=7f3a…</div>
+    <div class="what">The requests and the pages</div></div>
+  <div class="op fade" style="left: 735px; animation-delay: var(--cue-tls, 4.9s)">+</div>
+  <div class="card part tls up" style="left: 810px; width: 500px; animation-delay: var(--cue-tls, 4.9s)">
+    <div class="name key">TLS</div>
+    <div class="tube"><div class="capsule"><svg class="i" viewBox="0 0 96 96"><rect x="16" y="42" width="64" height="46" rx="9"/>
+      <path d="M30 42V30a18 18 0 0 1 36 0v12"/></svg></div></div>
+    <div class="what">Transport Layer Security</div></div>
+  <div class="op fade" style="left: 1335px; animation-delay: calc(var(--cue-tls, 4.9s) + 1.6s)">=</div>
+  <div class="card part https pop" style="left: 1410px; width: 360px; animation-delay: calc(var(--cue-tls, 4.9s) + 1.6s)">
+    <svg class="i" viewBox="0 0 96 96"><rect x="16" y="42" width="64" height="46" rx="9"/><path d="M30 42V30a18 18 0 0 1 36 0v12"/><path d="M48 60v10"/></svg>
+    <div class="name">HTTPS</div></div>
+
+  <div class="steps">
+    <div class="card step key up" style="animation-delay: var(--cue-one, 10s)"><div class="n"><i>1</i></div><span>Agree on a secret key</span></div>
+    <div class="card step server up" style="animation-delay: var(--cue-two, 13.9s)"><div class="n"><i>2</i></div><span>Check who's on the other end</span></div>
+  </div>
+</body>

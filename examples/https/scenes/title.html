@@ -1,0 +1,34 @@
+<!doctype html>
+<!-- The opening: complete from its first frame, which players show as the video's cover. The padlock clicks
+     shut on "padlock", and the S of https lights up on "S". -->
+<link rel="stylesheet" href="common.css">
+<style>
+  .bar { position: absolute; left: 270px; right: 270px; top: 230px; height: 150px; border-radius: 75px; background: var(--panel);
+         border: 3px solid var(--line); display: flex; align-items: center; gap: 36px; padding: 0 70px;
+         box-shadow: 0 30px 90px rgba(0, 0, 0, .5), 0 0 0 14px rgba(183, 148, 246, .05); }
+  .lock { width: 74px; height: 74px; flex: none; color: var(--mute);
+          animation: green .4s forwards; animation-delay: var(--cue-lock, 1.6s); }
+  .lock svg { width: 100%; height: 100%; stroke-width: 7; }
+  .shackle { transform: translateY(-13px); animation: shut .45s cubic-bezier(.3, 1.7, .5, 1) forwards;
+             animation-delay: var(--cue-lock, 1.6s); }
+  @keyframes shut { to { transform: none; } }
+  @keyframes green { to { color: var(--ok); } }
+  .addr { font-family: var(--mono); font-size: 70px; color: var(--mute); white-space: nowrap; }
+  .addr b { color: var(--fg); font-weight: 400; }
+  .s { display: inline-block; animation: glow .6s cubic-bezier(.3, 1.6, .5, 1) forwards; animation-delay: var(--cue-s, 3.5s); }
+  @keyframes glow { to { color: var(--server); transform: scale(1.3) translateY(-5px); text-shadow: 0 0 34px rgba(245, 165, 36, .8); } }
+  .title { position: absolute; left: 0; right: 0; top: 480px; text-align: center; font-size: 168px; font-weight: 800;
+           letter-spacing: -.02em; line-height: 1; }
+  .title span { color: var(--server); }
+  .sub { position: absolute; left: 0; right: 0; top: 700px; text-align: center; font-size: 48px; color: var(--mute); }
+  .sub b { color: var(--fg); font-weight: 600; }
+</style>
+<body>
+  <div class="bar">
+    <div class="lock"><svg class="i" viewBox="0 0 96 96"><rect x="16" y="42" width="64" height="46" rx="9"/>
+      <path class="shackle" d="M30 42V30a18 18 0 0 1 36 0v12"/><path d="M48 60v10"/></svg></div>
+    <div class="addr">http<span class="s">s</span>://<b>bank.example</b>/account</div>
+  </div>
+  <div class="title">How HTTP<span>S</span> works</div>
+  <div class="sub">The <b>keys</b>, <b>certificates</b> and <b>handshake</b> behind the padlock</div>
+</body>

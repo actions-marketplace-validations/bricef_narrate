@@ -1,0 +1,56 @@
+<!doctype html>
+<!-- Integrity: each encrypted message carries a seal (an authentication tag). The attacker flips one byte on the
+     way, on "Change"; when it arrives the seal no longer matches, on "no longer", and the browser rejects it. -->
+<link rel="stylesheet" href="common.css">
+<style>
+  .rec { position: absolute; left: 1060px; top: 535px; --to: -330px; animation: leg 1.6s cubic-bezier(.45, 0, .3, 1) forwards;
+         animation-delay: .6s; }
+  .rec2 { --to: -360px; animation: leg 1.2s cubic-bezier(.45, 0, .3, 1) forwards; animation-delay: calc(var(--cue-flip, 5s) + 1s); }
+  @keyframes leg { to { transform: translateX(var(--to)); } }
+  .capsule { width: 460px; height: 130px; border-radius: 65px; border: 3px solid var(--key); background: color-mix(in srgb, var(--key) 12%, var(--panel));
+             display: flex; align-items: center; gap: 22px; padding: 0 22px 0 34px; box-shadow: 0 20px 50px rgba(0, 0, 0, .45); }
+  .capsule > svg { width: 40px; height: 40px; color: var(--key); flex: none; stroke-width: 8; }
+  .bytes { font-family: var(--mono); font-size: 32px; color: var(--fg); white-space: nowrap; }
+  .b { position: relative; }
+  .b .now { position: absolute; left: 0; top: 0; }
+  .b .was { animation: out .2s forwards; animation-delay: var(--cue-flip, 5s); }
+  .b .now { opacity: 0; color: var(--eve); font-weight: 700; animation: fade .2s forwards; animation-delay: calc(var(--cue-flip, 5s) + .1s); }
+  .tag { margin-left: auto; width: 86px; height: 86px; border-radius: 50%; flex: none; display: grid; place-items: center;
+         color: var(--ok); border: 3px solid currentColor; background: color-mix(in srgb, currentColor 14%, var(--panel));
+         animation: hi .8s ease-in-out, broken .3s forwards; animation-delay: var(--cue-seal, 2.5s), var(--cue-broken, 7.1s); }
+  .tag svg { width: 50px; height: 50px; stroke-width: 9; grid-area: 1 / 1; }
+  .tag .x { opacity: 0; animation: fade .2s forwards; animation-delay: var(--cue-broken, 7.1s); }
+  .tag .v { animation: out .2s forwards; animation-delay: var(--cue-broken, 7.1s); }
+  @keyframes hi { 50% { transform: scale(1.3); box-shadow: 0 0 40px currentColor; } }
+  @keyframes broken { to { color: var(--eve); } }
+  .tag-lbl { position: absolute; left: 1040px; top: 684px; font-size: 26px; color: var(--ok); opacity: 0;
+             animation: fade .4s forwards var(--cue-seal, 2.5s), out .3s forwards var(--cue-flip, 5s); }
+  .flipper { position: absolute; left: 955px; top: 385px; height: 140px; border-left: 4px dashed var(--eve); }
+  .reject { position: absolute; left: 150px; top: 760px; display: flex; align-items: center; gap: 20px; font-size: 38px; }
+  .reject svg { width: 54px; height: 54px; color: var(--eve); stroke-width: 9; }
+  .reject small { display: block; font-size: 28px; color: var(--mute); }
+</style>
+<body>
+  <div class="kicker fade" style="animation-delay: .1s">Sealed messages</div>
+
+  <div class="wire" style="left: 335px; width: 1250px; top: 598px"></div>
+  <div class="actor you" style="left: 150px; top: 525px"><div class="tile"><svg class="i" viewBox="0 0 96 96"><rect x="8" y="16" width="80" height="64" rx="8"/>
+    <path d="M8 34h80"/><circle cx="20" cy="25" r="2"/><circle cx="30" cy="25" r="2"/><path d="M22 52h40M22 64h26"/></svg></div><b>Your browser</b></div>
+  <div class="actor server" style="left: 1550px; top: 525px"><div class="tile"><svg class="i" viewBox="0 0 96 96"><rect x="14" y="10" width="68" height="22" rx="5"/>
+    <rect x="14" y="37" width="68" height="22" rx="5"/><rect x="14" y="64" width="68" height="22" rx="5"/>
+    <path d="M26 21h1M26 48h1M26 75h1M58 21h14M58 48h14M58 75h14"/></svg></div><b>bank.example</b></div>
+  <div class="actor small eve pop" style="left: 870px; top: 200px; animation-delay: calc(var(--cue-flip, 5s) - .6s)"><div class="tile">
+    <svg class="i" viewBox="0 0 96 96"><circle cx="48" cy="34" r="20"/><path d="M12 90c3-18 18-30 36-30s33 12 36 30"/><path d="M31 32h34" stroke-width="10"/></svg></div>
+    <b>Attacker</b></div>
+  <div class="flipper fade" style="animation-delay: calc(var(--cue-flip, 5s) - .3s)"></div>
+
+  <div class="rec"><div class="rec2"><div class="capsule">
+    <svg class="i" viewBox="0 0 96 96"><rect x="16" y="42" width="64" height="46" rx="9"/><path d="M30 42V30a18 18 0 0 1 36 0v12"/></svg>
+    <div class="bytes">a3 9f <span class="b"><span class="was">41</span><span class="now">40</span></span> 0c 7e</div>
+    <div class="tag"><svg class="i v" viewBox="0 0 96 96"><path d="M18 50l20 20 40-42"/></svg><svg class="i x" viewBox="0 0 96 96"><path d="M26 26l44 44M70 26 26 70"/></svg></div>
+  </div></div></div>
+  <div class="tag-lbl">↑ the seal</div>
+
+  <div class="reject up" style="animation-delay: calc(var(--cue-broken, 7.1s) + .3s)"><svg class="i" viewBox="0 0 96 96"><path d="M26 26l44 44M70 26 26 70"/></svg>
+    <div>Seal broken: message rejected<small>and the connection is closed</small></div></div>
+</body>

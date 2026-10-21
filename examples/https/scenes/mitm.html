@@ -1,0 +1,60 @@
+<!doctype html>
+<!-- The weak spot: an attacker in the middle runs a key exchange with each side, a different shared colour on each
+     link, and passes the message on after reading it. -->
+<link rel="stylesheet" href="common.css">
+<style>
+  .pot { position: absolute; width: 74px; height: 74px; border-radius: 50%; top: 418px;
+         background: radial-gradient(circle at 34% 30%, rgba(255, 255, 255, .55) 0 7%, transparent 28%), var(--c);
+         box-shadow: inset 0 -8px 16px rgba(0, 0, 0, .28), 0 10px 24px rgba(0, 0, 0, .45); }
+  .potlbl { position: absolute; top: 506px; width: 200px; text-align: center; font-size: 26px; color: var(--mute); }
+  .bubble { position: absolute; top: 230px; padding: 16px 28px; border-radius: 20px; border: 3px solid var(--eve); background: var(--panel);
+            font-size: 34px; font-weight: 600; white-space: nowrap; }
+  .bubble::after { content: ""; position: absolute; bottom: -16px; width: 26px; height: 26px; background: var(--panel);
+                   border: 3px solid var(--eve); border-top: 0; border-left: 0; transform: rotate(45deg); }
+  .bubble.l::after { right: 40px; }
+  .bubble.r::after { left: 40px; }
+  .bubble small { display: block; font-size: 22px; font-weight: 400; color: var(--mute); margin-bottom: 2px; }
+  .leg1 { position: absolute; left: 75px; top: 640px; opacity: 0; --to: 700px;
+          animation: fade .3s forwards var(--cue-relay, 11.4s), leg 1.6s cubic-bezier(.45, 0, .3, 1) forwards var(--cue-relay, 11.4s); }
+  .leg2 { --to: 700px; animation: leg 1.6s cubic-bezier(.45, 0, .3, 1) forwards; animation-delay: calc(var(--cue-relay, 11.4s) + 2.8s); }
+  @keyframes leg { to { transform: translateX(var(--to)); } }
+  .env { width: 370px; padding: 16px 22px; border-radius: 12px; font-family: var(--mono); font-size: 26px; color: var(--fg);
+         background: var(--panel); border: 3px solid var(--key); display: flex; align-items: center; gap: 14px; white-space: nowrap; }
+  .env svg { width: 30px; height: 30px; color: var(--key); flex: none; }
+  .read { position: absolute; left: 680px; top: 650px; color: var(--eve); }
+  .read svg { width: 80px; height: 50px; stroke-width: 6; }
+  .cap { position: absolute; left: 150px; font-size: 42px; }
+</style>
+<body>
+  <div class="kicker fade" style="animation-delay: .1s">The attacker in the middle</div>
+
+  <div class="wire" style="left: 335px; width: 550px; top: 453px"></div>
+  <div class="wire" style="left: 1035px; width: 550px; top: 453px"></div>
+  <div class="actor you" style="left: 150px; top: 380px">
+    <div class="tile"><svg class="i" viewBox="0 0 96 96"><rect x="8" y="16" width="80" height="64" rx="8"/><path d="M8 34h80"/>
+      <circle cx="20" cy="25" r="2"/><circle cx="30" cy="25" r="2"/><path d="M22 52h40M22 64h26"/></svg></div>
+    <b>Your browser</b></div>
+  <div class="actor eve pop" style="left: 850px; top: 380px; animation-delay: var(--cue-mitm, 2.7s)">
+    <div class="tile"><svg class="i" viewBox="0 0 96 96"><circle cx="48" cy="34" r="20"/><path d="M12 90c3-18 18-30 36-30s33 12 36 30"/>
+      <path d="M31 32h34" stroke-width="10"/></svg></div>
+    <b>Attacker</b></div>
+  <div class="actor server" style="left: 1550px; top: 380px">
+    <div class="tile"><svg class="i" viewBox="0 0 96 96"><rect x="14" y="10" width="68" height="22" rx="5"/><rect x="14" y="37" width="68" height="22" rx="5"/>
+      <rect x="14" y="64" width="68" height="22" rx="5"/><path d="M26 21h1M26 48h1M26 75h1M58 21h14M58 48h14M58 75h14"/></svg></div>
+    <b>bank.example</b></div>
+
+  <div class="bubble l up" style="left: 400px; animation-delay: calc(var(--cue-mitm, 2.7s) + .5s)"><small>to your browser</small>“I'm bank.example”</div>
+  <div class="pot pop" style="left: 573px; --c: #9c6644; animation-delay: calc(var(--cue-mitm, 2.7s) + 1.2s)"></div>
+  <div class="potlbl fade" style="left: 510px; animation-delay: calc(var(--cue-mitm, 2.7s) + 1.2s)">one key</div>
+  <div class="bubble r up" style="left: 1130px; animation-delay: calc(var(--cue-both, 7.9s) + .3s)"><small>to the bank</small>“I'm your browser”</div>
+  <div class="pot pop" style="left: 1273px; --c: #6b7f3a; animation-delay: calc(var(--cue-both, 7.9s) + 1s)"></div>
+  <div class="potlbl fade" style="left: 1210px; animation-delay: calc(var(--cue-both, 7.9s) + 1s)">another key</div>
+
+  <div class="leg1"><div class="leg2"><div class="env"><svg class="i" viewBox="0 0 96 96"><rect x="16" y="42" width="64" height="46" rx="9"/>
+    <path d="M30 42V30a18 18 0 0 1 36 0v12"/></svg>to=Sam&amp;amount=20</div></div></div>
+  <div class="read pop" style="animation-delay: calc(var(--cue-relay, 11.4s) + 1.6s)"><svg class="i" viewBox="0 0 96 60">
+    <path d="M4 30s18-26 44-26 44 26 44 26-18 26-44 26S4 30 4 30z"/><circle cx="48" cy="30" r="11"/></svg></div>
+
+  <div class="cap up" style="top: 790px; animation-delay: calc(var(--cue-relay, 11.4s) + .4s)">A private line, <b class="eve">to the wrong person</b>.</div>
+  <div class="cap up" style="top: 858px; animation-delay: var(--cue-proof, 15.1s)">Your browser needs <b class="server">proof of identity</b>.</div>
+</body>

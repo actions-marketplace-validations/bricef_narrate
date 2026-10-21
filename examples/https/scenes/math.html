@@ -1,0 +1,78 @@
+<!doctype html>
+<!-- Paint becomes mathematics. Left: an elliptic curve, y² = x³ − x + 1, where a secret number of jumps from P is
+     quick to make ("Mixing") and impractical to count back ("unmixing"). Right: a fresh key for each connection,
+     thrown away after; a key stolen later unlocks nothing; and the post-quantum method now mixed in. -->
+<link rel="stylesheet" href="common.css">
+<style>
+  .plot { position: absolute; left: 150px; top: 190px; width: 760px; height: 600px; }
+  .plot .axis { stroke: var(--line); stroke-width: 2; }
+  .plot .curve { fill: none; stroke: var(--you); stroke-width: 5; stroke-dasharray: 1; stroke-dashoffset: 1;
+                 animation: draw 1.6s ease-out forwards .3s; }
+  .plot .chord { stroke: var(--key); stroke-width: 3; stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw .35s linear forwards; }
+  .plot .dot { fill: var(--key); opacity: 0; transform-box: fill-box; transform-origin: center; animation: pop .3s forwards; }
+  .plot .back { fill: none; stroke: var(--eve); stroke-width: 4; stroke-dasharray: 12 10; opacity: 0; animation: fade .5s forwards; }
+  .plot text { font-family: var(--sans); font-size: 30px; font-weight: 700; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  .say { position: absolute; left: 150px; font-size: 36px; }
+  .say b { font-weight: 700; }
+  .side { position: absolute; left: 1030px; width: 740px; }
+  .side h3 { margin: 0; font-size: 36px; font-weight: 700; }
+  .conn { position: absolute; left: 1030px; width: 740px; height: 92px; padding: 0 34px; display: flex; align-items: center; gap: 26px; font-size: 32px; }
+  .conn .ico { width: 56px; height: 56px; color: var(--key); animation: spent .5s forwards; }
+  .conn .ico svg { width: 56px; height: 56px; }
+  @keyframes spent { to { color: var(--line); } }
+  .conn .st { margin-left: auto; font-size: 28px; color: var(--mute); }
+  .stolen { position: absolute; left: 1030px; top: 640px; width: 740px; padding: 26px 34px; border-color: var(--eve);
+            display: grid; grid-template-columns: 56px 1fr; gap: 14px 26px; align-items: center; font-size: 32px; }
+  .stolen svg { width: 56px; height: 56px; }
+  .pq { position: absolute; left: 1030px; top: 860px; width: 740px; padding: 20px 34px; border-radius: 40px; border: 3px solid var(--key);
+        background: color-mix(in srgb, var(--key) 12%, var(--panel)); font-size: 27px; display: flex; align-items: center; gap: 16px;
+        white-space: nowrap; }
+  .pq .tag { margin-left: auto; font-family: var(--mono); font-size: 22px; color: var(--key); }
+</style>
+<body>
+  <div class="kicker fade" style="animation-delay: .1s">Key exchange, for real</div>
+
+  <svg class="plot" viewBox="0 0 760 600">
+    <path class="axis" d="M0 300H760M300 0V600"/>
+    <path class="curve" pathLength="1" d="M760 0 L735 26 L709 51 L685 74 L660 96 L636 116 L613 136 L590 154 L567 170 L544 185 L522 198 L501 209 L480 217 L459 224 L438 227 L418 229 L399 228 L380 226 L361 223 L343 219 L325 215 L308 211 L291 207 L274 204 L258 200 L243 198 L228 196 L213 194 L199 193 L185 193 L172 193 L159 194 L147 196 L135 198 L124 200 L114 204 L104 207 L94 212 L85 217 L77 222 L70 228 L63 235 L56 242 L51 250 L46 258 L42 267 L38 276 L36 287 L35 299 L36 313 L38 324 L42 333 L46 342 L51 350 L56 358 L63 365 L70 372 L77 378 L85 383 L94 388 L104 393 L114 396 L124 400 L135 402 L147 404 L159 406 L172 407 L185 407 L199 407 L213 406 L228 404 L243 402 L258 400 L274 396 L291 393 L308 389 L325 385 L343 381 L361 377 L380 374 L399 372 L418 371 L438 373 L459 376 L480 383 L501 391 L522 402 L544 415 L567 430 L590 446 L613 464 L636 484 L660 504 L685 526 L709 549 L735 574 L760 600"/>
+    <line class="chord" pathLength="1" x1="100" y1="209" x2="620" y2="470" style="animation-delay: var(--cue-curve, 2.9s)"/>
+    <line class="chord" pathLength="1" x1="620" y1="470" x2="360" y2="222" style="animation-delay: calc(var(--cue-curve, 2.9s) + .35s)"/>
+    <line class="chord" pathLength="1" x1="360" y1="222" x2="700" y2="540" style="animation-delay: calc(var(--cue-curve, 2.9s) + .7s)"/>
+    <line class="chord" pathLength="1" x1="700" y1="540" x2="60" y2="362" style="animation-delay: calc(var(--cue-curve, 2.9s) + 1.05s)"/>
+    <line class="chord" pathLength="1" x1="60" y1="362" x2="480" y2="217" style="animation-delay: calc(var(--cue-curve, 2.9s) + 1.4s)"/>
+    <circle class="dot" cx="100" cy="209" r="13" style="animation-delay: .9s"/>
+    <circle class="dot" cx="620" cy="470" r="9" style="animation-delay: calc(var(--cue-curve, 2.9s) + .35s)"/>
+    <circle class="dot" cx="360" cy="222" r="9" style="animation-delay: calc(var(--cue-curve, 2.9s) + .7s)"/>
+    <circle class="dot" cx="700" cy="540" r="9" style="animation-delay: calc(var(--cue-curve, 2.9s) + 1.05s)"/>
+    <circle class="dot" cx="60" cy="362" r="9" style="animation-delay: calc(var(--cue-curve, 2.9s) + 1.4s)"/>
+    <circle class="dot" cx="480" cy="217" r="15" style="animation-delay: calc(var(--cue-curve, 2.9s) + 1.75s); fill: var(--fg)"/>
+    <text x="80" y="180" fill="#e8edf7" class="fade" style="animation-delay: .9s">P</text>
+    <text x="505" y="266" fill="#b794f6" class="fade" style="animation-delay: calc(var(--cue-curve, 2.9s) + 1.9s)">secret × P</text>
+    <path class="back" d="M470 240Q290 110 112 226" style="animation-delay: var(--cue-hard, 4.4s)"/>
+    <text x="268" y="150" fill="#f47c7c" class="fade" style="font-size: 54px; animation-delay: var(--cue-hard, 4.4s)">?</text>
+  </svg>
+  <div class="say up" style="top: 812px; animation-delay: var(--cue-curve, 2.9s)"><b class="key">Easy:</b> a secret number of jumps</div>
+  <div class="say up" style="top: 868px; animation-delay: var(--cue-hard, 4.4s)"><b class="eve">Impractical:</b> counting the jumps back</div>
+
+  <div class="side fade" style="top: 196px; animation-delay: var(--cue-fresh, 9.7s)"><h3>A fresh key for every connection</h3></div>
+  <div class="card conn up" style="top: 272px; animation-delay: var(--cue-fresh, 9.7s)"><span>Connection 1</span>
+    <span class="ico" style="animation-delay: calc(var(--cue-fresh, 9.7s) + 1s)"><svg class="i" viewBox="0 0 96 96"><circle cx="28" cy="48" r="16"/><path d="M44 48h40M72 48v14M60 48v10"/></svg></span>
+    <span class="st fade" style="animation-delay: calc(var(--cue-fresh, 9.7s) + 1s)">thrown away</span></div>
+  <div class="card conn up" style="top: 384px; animation-delay: calc(var(--cue-fresh, 9.7s) + .9s)"><span>Connection 2</span>
+    <span class="ico" style="animation-delay: calc(var(--cue-fresh, 9.7s) + 1.9s)"><svg class="i" viewBox="0 0 96 96"><circle cx="28" cy="48" r="16"/><path d="M44 48h40M72 48v14M60 48v10"/></svg></span>
+    <span class="st fade" style="animation-delay: calc(var(--cue-fresh, 9.7s) + 1.9s)">thrown away</span></div>
+  <div class="card conn up" style="top: 496px; animation-delay: calc(var(--cue-fresh, 9.7s) + 1.8s)"><span>Connection 3</span>
+    <span class="ico" style="animation-delay: calc(var(--cue-fresh, 9.7s) + 2.8s)"><svg class="i" viewBox="0 0 96 96"><circle cx="28" cy="48" r="16"/><path d="M44 48h40M72 48v14M60 48v10"/></svg></span>
+    <span class="st fade" style="animation-delay: calc(var(--cue-fresh, 9.7s) + 2.8s)">thrown away</span></div>
+
+  <div class="card stolen up" style="animation-delay: var(--cue-later, 14.4s)">
+    <svg class="i eve" viewBox="0 0 96 96"><circle cx="28" cy="48" r="16"/><path d="M44 48h40M72 48v14M60 48v10"/></svg>
+    <span>The server's own key, stolen later</span>
+    <svg class="i ok fade" viewBox="0 0 96 96" style="animation-delay: calc(var(--cue-later, 14.4s) + 1.6s)"><rect x="16" y="42" width="64" height="46" rx="9"/>
+      <path d="M30 42V30a18 18 0 0 1 36 0v12"/><path d="M48 60v10"/></svg>
+    <span class="fade ok" style="animation-delay: calc(var(--cue-later, 14.4s) + 1.6s)">Today's recordings stay locked</span></div>
+
+  <div class="pq pop" style="animation-delay: var(--cue-pq, 20.7s)"><b class="key">+</b> A newer, quantum-resistant method
+    <span class="tag">ML-KEM</span></div>
+</body>

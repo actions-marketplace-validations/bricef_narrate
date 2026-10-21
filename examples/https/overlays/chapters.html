@@ -1,0 +1,22 @@
+<!doctype html>
+<!-- An overlay on the whole video's clock (overlay: in https.md's header): the five chapters along the bottom, each
+     lit while it plays and filling as it goes. Chapters start at scenes 2, 5, 8, 12 and 14; the close, scene 15,
+     ends the last. The title and the close hide it with (overlay: none). The page is transparent elsewhere. -->
+<style>
+  html, body { margin: 0; width: 1920px; height: 1080px; font-family: "Noto Sans", "DejaVu Sans", sans-serif; }
+  .chapters { position: absolute; left: 150px; right: 150px; bottom: 34px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
+  .seg span { display: block; margin-bottom: 10px; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: #5d6782;
+              animation: on linear; animation-delay: var(--a); animation-duration: calc(var(--b) - var(--a)); }
+  @keyframes on { from, to { color: #e8edf7; } }
+  .seg div { height: 5px; border-radius: 3px; background: rgba(42, 53, 83, .9); overflow: hidden; }
+  .seg i { display: block; height: 100%; width: 0; background: #b794f6;
+           animation: fill linear forwards; animation-delay: var(--a); animation-duration: calc(var(--b) - var(--a)); }
+  @keyframes fill { to { width: 100%; } }
+</style>
+<div class="chapters">
+  <div class="seg" style="--a: var(--scene-2, 17.5s); --b: var(--scene-5, 63.6s)"><span>The problem</span><div><i></i></div></div>
+  <div class="seg" style="--a: var(--scene-5, 63.6s); --b: var(--scene-8, 133.1s)"><span>A shared secret</span><div><i></i></div></div>
+  <div class="seg" style="--a: var(--scene-8, 133.1s); --b: var(--scene-12, 201.8s)"><span>Proof of identity</span><div><i></i></div></div>
+  <div class="seg" style="--a: var(--scene-12, 201.8s); --b: var(--scene-14, 239.5s)"><span>The handshake</span><div><i></i></div></div>
+  <div class="seg" style="--a: var(--scene-14, 239.5s); --b: var(--scene-15, 260.7s)"><span>The limits</span><div><i></i></div></div>
+</div>

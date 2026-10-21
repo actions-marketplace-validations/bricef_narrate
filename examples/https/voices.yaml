@@ -1,0 +1,4 @@
+# The voice of the HTTPS explainer, on each engine: the script names it, this pins it.
+Narrator:
+  kokoro: af_heart
+  elevenlabs: Alice

@@ -1,0 +1,60 @@
+<!doctype html>
+<!-- Signatures: the private key stays in the server and signs the handshake so far, on "signs"; the public key, from
+     the certificate, checks it on "check"; someone else's key can't make one that passes, on "fake". -->
+<link rel="stylesheet" href="common.css">
+<style>
+  .srv { position: absolute; left: 150px; top: 200px; width: 470px; height: 560px; padding: 40px; border-color: var(--server);
+         display: flex; flex-direction: column; align-items: center; gap: 20px; text-align: center; }
+  .srv .head { display: flex; align-items: center; gap: 16px; font-size: 32px; font-weight: 700; color: var(--server); align-self: flex-start; }
+  .srv .head svg { width: 46px; height: 46px; }
+  .srv .big { margin-top: 50px; width: 160px; height: 160px; border-radius: 50%; display: grid; place-items: center; color: var(--server);
+              background: color-mix(in srgb, var(--server) 14%, var(--panel)); border: 3px solid var(--server);
+              box-shadow: 0 0 50px rgba(245, 165, 36, .25); }
+  .srv .big svg { width: 96px; height: 96px; }
+  .srv h3 { margin: 0; font-size: 42px; }
+  .srv p { margin: 0; font-size: 30px; color: var(--mute); }
+  .arrow { position: absolute; left: 640px; top: 470px; width: 100px; height: 4px; background: var(--server); transform-origin: left;
+           transform: scaleX(0); animation: grow .5s ease-out forwards; }
+  .arrow::after { content: ""; position: absolute; right: -4px; top: -10px; border: 12px solid transparent; border-left: 16px solid var(--server); border-right: 0; }
+  @keyframes grow { to { transform: none; } }
+  .doc { position: absolute; left: 760px; top: 230px; width: 440px; height: 500px; padding: 40px; display: flex; flex-direction: column; gap: 22px; }
+  .doc .t { font-size: 28px; color: var(--mute); }
+  .doc i { display: block; height: 16px; border-radius: 8px; background: var(--line); }
+  .doc .seal { margin-top: auto; align-self: flex-end; display: flex; align-items: center; gap: 14px; font-size: 30px; font-weight: 700; color: var(--server);
+               opacity: 0; animation: stamp .45s cubic-bezier(.2, .9, .3, 1.4) forwards; }
+  .doc .seal svg { width: 90px; height: 90px; }
+  @keyframes stamp { from { opacity: 0; transform: scale(1.7) rotate(-14deg); } to { opacity: 1; transform: none; } }
+  .who { position: absolute; left: 1270px; width: 500px; padding: 30px 34px; display: grid; grid-template-columns: 70px 1fr 64px; gap: 22px;
+         align-items: center; font-size: 30px; }
+  .who svg { width: 64px; height: 64px; }
+  .who small { display: block; font-size: 24px; color: var(--mute); }
+  .res svg { stroke-width: 9; }
+  .cap { position: absolute; left: 150px; top: 830px; font-size: 40px; }
+</style>
+<body>
+  <div class="kicker fade" style="animation-delay: .1s">Signatures</div>
+
+  <div class="card srv up" style="animation-delay: .2s">
+    <div class="head"><svg class="i" viewBox="0 0 96 96"><rect x="14" y="10" width="68" height="22" rx="5"/><rect x="14" y="37" width="68" height="22" rx="5"/>
+      <rect x="14" y="64" width="68" height="22" rx="5"/></svg>bank.example</div>
+    <div class="big"><svg class="i" viewBox="0 0 96 96"><circle cx="28" cy="48" r="16"/><path d="M44 48h40M72 48v14M60 48v10"/></svg></div>
+    <h3>Private key</h3><p>never leaves the server</p></div>
+
+  <div class="arrow" style="animation-delay: var(--cue-sign, 4.8s)"></div>
+  <div class="card doc up" style="animation-delay: .5s">
+    <div class="t">The handshake so far</div>
+    <i style="width: 92%"></i><i style="width: 74%"></i><i style="width: 86%"></i><i style="width: 60%"></i><i style="width: 80%"></i>
+    <div class="seal" style="animation-delay: calc(var(--cue-sign, 4.8s) + .5s)"><svg class="i" viewBox="0 0 96 96"><circle cx="48" cy="40" r="26"/>
+      <circle cx="48" cy="40" r="18" stroke-dasharray="3 5"/><path d="M34 62l-8 26 22-10 22 10-8-26"/></svg>signed</div></div>
+
+  <div class="card who up" style="top: 250px; animation-delay: var(--cue-verify, 6.6s)">
+    <svg class="i server" viewBox="0 0 96 96"><circle cx="28" cy="48" r="16"/><path d="M44 48h40M72 48v14M60 48v10"/></svg>
+    <span>Public key<small>from the certificate</small></span>
+    <svg class="i ok res pop" viewBox="0 0 96 96" style="animation-delay: calc(var(--cue-verify, 6.6s) + .6s)"><path d="M18 50l20 20 40-42"/></svg></div>
+  <div class="card who up" style="top: 470px; border-color: var(--eve); animation-delay: var(--cue-forge, 9.1s)">
+    <svg class="i eve" viewBox="0 0 96 96"><circle cx="28" cy="48" r="16"/><path d="M44 48h40M72 48v14M60 48v10"/></svg>
+    <span>Another key<small>can't fake one</small></span>
+    <svg class="i eve res pop" viewBox="0 0 96 96" style="animation-delay: calc(var(--cue-forge, 9.1s) + .6s)"><path d="M26 26l44 44M70 26 26 70"/></svg></div>
+
+  <div class="cap up" style="animation-delay: var(--cue-proof, 11.4s)">The certificate is <b class="server">the server's own</b>, not a copy.</div>
+</body>

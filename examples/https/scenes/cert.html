@@ -1,0 +1,62 @@
+<!doctype html>
+<!-- A certificate, filled in as the narration names each part: the site, its public key, and the signature of the
+     certificate authority, which checked that whoever asked controls the name. -->
+<link rel="stylesheet" href="common.css">
+<style>
+  .doc { position: absolute; left: 150px; top: 190px; width: 1000px; height: 680px; padding: 50px 60px;
+         background: linear-gradient(160deg, #1a2238, var(--panel)); border: 2px solid var(--line); border-radius: 26px;
+         box-shadow: 0 30px 80px rgba(0, 0, 0, .5), inset 0 0 0 12px rgba(245, 165, 36, .04); }
+  .doc .top { font-size: 30px; letter-spacing: .3em; color: var(--mute); text-transform: uppercase; }
+  .grid { margin-top: 56px; display: grid; grid-template-columns: 230px 1fr; row-gap: 56px; align-items: center; }
+  .lab { font-size: 26px; letter-spacing: .1em; text-transform: uppercase; color: var(--mute); }
+  .val { font-size: 36px; }
+  .site { font-family: var(--mono); font-size: 52px; color: var(--fg); }
+  .pk { font-family: var(--mono); font-size: 30px; color: var(--server); display: flex; align-items: center; gap: 18px; }
+  .pk svg { width: 54px; height: 54px; }
+  .sig { width: 360px; height: 80px; }
+  .sig path { fill: none; stroke: var(--fg); stroke-width: 4; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 1;
+              animation: draw 1.2s ease-in-out forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  .seal { position: absolute; right: 50px; top: 40px; width: 150px; height: 150px; color: var(--server); opacity: 0;
+          animation: stamp .45s cubic-bezier(.2, .9, .3, 1.4) forwards; }
+  .seal svg { width: 150px; height: 150px; stroke-width: 4; }
+  @keyframes stamp { from { opacity: 0; transform: scale(1.7) rotate(-20deg); } to { opacity: 1; transform: rotate(-8deg); } }
+  .ca { position: absolute; left: 1250px; top: 230px; width: 520px; display: flex; flex-direction: column; align-items: center; gap: 22px; }
+  .ca .tile { width: 170px; height: 170px; border-radius: 38px; border: 3px solid var(--fg); display: grid; place-items: center;
+              background: color-mix(in srgb, var(--fg) 8%, var(--panel)); }
+  .ca .tile svg { width: 100px; height: 100px; }
+  .ca h3 { margin: 0; font-size: 40px; text-align: center; }
+  .ca p { margin: 0; font-size: 30px; color: var(--mute); text-align: center; }
+  .check { position: absolute; left: 1250px; top: 650px; width: 520px; padding: 28px 34px; display: flex; gap: 22px; align-items: center;
+           font-size: 29px; border-color: var(--ok); }
+  .check svg { width: 54px; height: 54px; flex: none; color: var(--ok); stroke-width: 8; }
+</style>
+<body>
+  <div class="kicker fade" style="animation-delay: .1s">Certificates</div>
+
+  <div class="doc up" style="animation-delay: .2s">
+    <div class="top">Certificate</div>
+    <div class="seal" style="animation-delay: calc(var(--cue-issuer, 5.1s) + 1.4s)"><svg class="i" viewBox="0 0 96 96"><circle cx="48" cy="40" r="26"/>
+      <circle cx="48" cy="40" r="18" stroke-dasharray="3 5"/><path d="M34 62l-8 26 22-10 22 10-8-26"/></svg></div>
+    <div class="grid">
+      <div class="lab fade" style="animation-delay: var(--cue-name, 1.9s)">Issued to</div>
+      <div class="site up" style="animation-delay: var(--cue-name, 1.9s)">bank.example</div>
+      <div class="lab fade" style="animation-delay: var(--cue-key, 3.1s)">Public key</div>
+      <div class="pk up" style="animation-delay: var(--cue-key, 3.1s)"><svg class="i" viewBox="0 0 96 96"><circle cx="28" cy="48" r="16"/>
+        <path d="M44 48h40M72 48v14M60 48v10"/></svg>04:6b:17:d1:f2:e1:2c:42…</div>
+      <div class="lab fade" style="animation-delay: calc(var(--cue-key, 3.1s) + .8s)">Valid</div>
+      <div class="val up" style="animation-delay: calc(var(--cue-key, 3.1s) + .8s)">1 Oct 2026 → 30 Dec 2026</div>
+      <div class="lab fade" style="animation-delay: var(--cue-issuer, 5.1s)">Issued by</div>
+      <div class="val up" style="animation-delay: var(--cue-issuer, 5.1s)">Example CA</div>
+      <div class="lab fade" style="animation-delay: calc(var(--cue-issuer, 5.1s) + .5s)">Signature</div>
+      <svg class="sig" viewBox="0 0 360 80"><path pathLength="1" style="animation-delay: calc(var(--cue-issuer, 5.1s) + .5s)"
+        d="M8 58c18-40 30-44 34-30s-6 30 6 24 20-40 32-36-6 34 8 32 18-26 28-24 2 22 14 22 22-18 34-20 10 16 24 14 30-12 52-14 50 6 110 2"/></svg>
+    </div>
+  </div>
+
+  <div class="ca up" style="animation-delay: var(--cue-issuer, 5.1s)">
+    <div class="tile"><svg class="i" viewBox="0 0 96 96"><path d="M10 36 48 12l38 24z"/><path d="M20 42v32M38 42v32M58 42v32M76 42v32M10 84h76"/></svg></div>
+    <h3>Certificate authority</h3><p>trusted to vouch for names</p></div>
+  <div class="card check up" style="animation-delay: var(--cue-checked, 8s)"><svg class="i" viewBox="0 0 96 96"><path d="M18 50l20 20 40-42"/></svg>
+    <span>Checked: whoever asked controls <b>bank.example</b></span></div>
+</body>

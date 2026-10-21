@@ -1,0 +1,52 @@
+<!doctype html>
+<!-- The chain of trust, built upwards from the site's certificate: the authority that signed it, then the root
+     built into the browser. Right: what the browser checks, each on its word, and the warning when one fails. -->
+<link rel="stylesheet" href="common.css">
+<style>
+  .link { position: absolute; left: 150px; width: 780px; height: 150px; padding: 0 40px; display: flex; align-items: center; gap: 30px; }
+  .link .tile { width: 90px; height: 90px; border-radius: 24px; border: 3px solid currentColor; display: grid; place-items: center; flex: none;
+                background: color-mix(in srgb, currentColor 13%, var(--panel)); }
+  .link .tile svg { width: 54px; height: 54px; }
+  .link h3 { margin: 0; font-size: 40px; color: var(--fg); }
+  .link p { margin: 4px 0 0; font-size: 26px; color: var(--mute); }
+  .root { border-color: var(--ok); animation: up .6s cubic-bezier(.2, .7, .2, 1) forwards, trust 1.2s ease-out forwards; }
+  @keyframes trust { to { box-shadow: 0 0 0 6px rgba(94, 224, 138, .25), 0 0 60px rgba(94, 224, 138, .25); } }
+  .sigline { position: absolute; left: 538px; width: 4px; height: 110px; background: var(--line); }
+  .sigline::after { content: ""; position: absolute; left: -10px; bottom: -4px; border: 12px solid transparent; border-top: 16px solid var(--line); border-bottom: 0; }
+  .sigline span { position: absolute; left: 30px; top: 36px; font-size: 26px; color: var(--mute); white-space: nowrap; }
+  .checks { position: absolute; left: 1030px; top: 180px; width: 740px; }
+  .checks h3 { margin: 0 0 26px; font-size: 34px; color: var(--mute); font-weight: 600; }
+  .item { display: flex; align-items: center; gap: 24px; font-size: 40px; margin-bottom: 26px; }
+  .item svg { width: 54px; height: 54px; color: var(--ok); stroke-width: 9; }
+  .warn { position: absolute; left: 1030px; top: 620px; width: 740px; padding: 34px 30px; border-color: var(--eve);
+          display: grid; grid-template-columns: 70px 1fr; gap: 6px 24px; align-items: center; }
+  .warn svg { grid-row: span 2; width: 70px; height: 70px; color: var(--eve); }
+  .warn b { font-size: 30px; white-space: nowrap; }
+  .warn span { font-size: 26px; color: var(--mute); }
+</style>
+<body>
+  <div class="kicker fade" style="animation-delay: .1s">The chain of trust</div>
+
+  <div class="card link root you" style="top: 170px; opacity: 0; transform: translateY(24px); animation-delay: var(--cue-root, 5.8s)">
+    <div class="tile ok"><svg class="i" viewBox="0 0 96 96"><path d="M48 8 80 20v26c0 20-14 34-32 42-18-8-32-22-32-42V20z"/><path d="M34 48l10 10 18-20"/></svg></div>
+    <div><h3>Root authority</h3><p>built into your browser or operating system</p></div></div>
+  <div class="sigline fade" style="top: 330px; animation-delay: calc(var(--cue-root, 5.8s) + .4s)"><span>signs</span></div>
+  <div class="card link up" style="top: 450px; color: var(--fg); animation-delay: var(--cue-chain, 1.9s)">
+    <div class="tile"><svg class="i" viewBox="0 0 96 96"><path d="M10 36 48 12l38 24z"/><path d="M20 42v32M38 42v32M58 42v32M76 42v32M10 84h76"/></svg></div>
+    <div><h3>Example CA</h3><p>the authority that signed the site's certificate</p></div></div>
+  <div class="sigline fade" style="top: 610px; animation-delay: calc(var(--cue-chain, 1.9s) + .4s)"><span>signs</span></div>
+  <div class="card link server up" style="top: 730px; animation-delay: .3s">
+    <div class="tile"><svg class="i" viewBox="0 0 96 96"><rect x="10" y="20" width="76" height="56" rx="8"/><circle cx="34" cy="43" r="9"/>
+      <path d="M20 66c2-7 8-10 14-10s12 3 14 10M58 40h18M58 54h12"/></svg></div>
+    <div><h3>bank.example</h3><p>the site's certificate</p></div></div>
+
+  <div class="checks">
+    <h3 class="fade" style="animation-delay: var(--cue-2, 10.2s)">Your browser checks</h3>
+    <div class="item up" style="animation-delay: var(--cue-sigs, 11.6s)"><svg class="i" viewBox="0 0 96 96"><path d="M18 50l20 20 40-42"/></svg>every signature</div>
+    <div class="item up" style="animation-delay: var(--cue-name, 12.7s)"><svg class="i" viewBox="0 0 96 96"><path d="M18 50l20 20 40-42"/></svg>the name</div>
+    <div class="item up" style="animation-delay: var(--cue-dates, 13.3s)"><svg class="i" viewBox="0 0 96 96"><path d="M18 50l20 20 40-42"/></svg>the dates</div>
+  </div>
+  <div class="card warn up" style="animation-delay: var(--cue-warn, 14.3s)">
+    <svg class="i" viewBox="0 0 96 96"><path d="M48 10 90 84H6z"/><path d="M48 38v20M48 70v1"/></svg>
+    <b>Your connection is not private</b><span>what you see instead, if anything is off</span></div>
+</body>

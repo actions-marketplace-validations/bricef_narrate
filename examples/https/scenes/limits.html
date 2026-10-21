@@ -1,0 +1,43 @@
+<!doctype html>
+<!-- The limits: what HTTPS hides and what still shows, then a padlock on a lookalike address. 203.0.113.7 is an
+     address reserved for documentation; bank.examp1e is made up. -->
+<link rel="stylesheet" href="common.css">
+<style>
+  .col { position: absolute; top: 180px; width: 780px; height: 440px; padding: 44px 50px; }
+  .col h3 { margin: 0 0 30px; display: flex; align-items: center; gap: 20px; font-size: 46px; }
+  .col h3 svg { width: 56px; height: 56px; }
+  .col ul { margin: 0; padding: 0; list-style: none; }
+  .col li { position: relative; padding-left: 32px; font-size: 32px; line-height: 1.3; margin-bottom: 20px; }
+  .col li::before { content: ""; position: absolute; left: 0; top: 15px; width: 12px; height: 12px; border-radius: 50%; background: currentColor; }
+  .col li span { color: var(--fg); }
+  .col li code { font-family: var(--mono); font-size: 27px; color: var(--mute); white-space: nowrap; }
+  .hid { border-color: var(--key); color: var(--key); }
+  .vis { border-color: var(--eve); color: var(--eve); }
+  .bar { position: absolute; left: 150px; top: 700px; width: 1620px; height: 140px; border-radius: 70px; background: var(--panel);
+         border: 3px solid var(--line); display: flex; align-items: center; gap: 30px; padding: 0 56px; }
+  .bar > svg { width: 60px; height: 60px; color: var(--ok); stroke-width: 7; }
+  .bar .addr { font-family: var(--mono); font-size: 52px; color: var(--mute); }
+  .bar .addr b { color: var(--fg); font-weight: 400; }
+  .one { display: inline-block; border-radius: 10px; animation: flag .4s forwards; animation-delay: var(--cue-scam, 19.5s); }
+  @keyframes flag { to { color: var(--eve); box-shadow: 0 0 0 5px var(--eve); } }
+  .bar .note { margin-left: auto; font-size: 36px; font-weight: 700; color: var(--eve); }
+</style>
+<body>
+  <div class="kicker fade" style="animation-delay: .1s">What HTTPS doesn't do</div>
+
+  <div class="card col hid up" style="left: 150px; animation-delay: var(--cue-hidden, 1.2s)">
+    <h3><svg class="i" viewBox="0 0 96 96"><rect x="16" y="42" width="64" height="46" rx="9"/><path d="M30 42V30a18 18 0 0 1 36 0v12"/><path d="M48 60v10"/></svg>
+      <span style="color: var(--fg)">Hidden</span></h3>
+    <ul><li><span>The pages you read</span></li><li><span>Passwords and card numbers</span></li>
+      <li><span>The rest of the address</span> <code>/account?id=42</code></li><li><span>Cookies</span></li></ul></div>
+  <div class="card col vis up" style="left: 990px; animation-delay: var(--cue-seen, 7.3s)">
+    <h3><svg class="i" viewBox="0 0 96 60"><path d="M4 30s18-26 44-26 44 26 44 26-18 26-44 26S4 30 4 30z"/><circle cx="48" cy="30" r="11"/></svg>
+      <span style="color: var(--fg)">Still visible</span></h3>
+    <ul><li><span>The site's name, usually</span> <code>bank.example</code></li><li><span>Its internet address</span> <code>203.0.113.7</code></li>
+      <li><span>When, and how much</span></li></ul></div>
+
+  <div class="bar up" style="animation-delay: var(--cue-padlock, 14s)">
+    <svg class="i" viewBox="0 0 96 96"><rect x="16" y="42" width="64" height="46" rx="9"/><path d="M30 42V30a18 18 0 0 1 36 0v12"/><path d="M48 60v10"/></svg>
+    <span class="addr">https://<b>bank.examp<span class="one">1</span>e</b>/login</span>
+    <span class="note fade" style="animation-delay: var(--cue-scam, 19.5s)">a padlock, on a scam site</span></div>
+</body>

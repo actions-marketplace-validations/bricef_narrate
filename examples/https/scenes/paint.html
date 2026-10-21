@@ -1,0 +1,91 @@
+<!doctype html>
+<!-- The key exchange as paint mixing, each step on its word: a public colour shared, a secret added on each side,
+     the mixtures swapped across the middle (where whoever is listening sees them), each secret added again, and
+     the same colour on both sides. Pots fly from where they were to where they land (.fly, --dx/--dy). -->
+<link rel="stylesheet" href="common.css">
+<style>
+  :root { --yellow: #f2c94c; --red: #eb5757; --blue: #3d7eea; --orange: #f2994a; --green: #5fbf7a; --brown: #9c6644; }
+  .panel { position: absolute; top: 180px; height: 710px; border-radius: 28px; border: 2px solid var(--line); background: rgba(19, 26, 46, .7); }
+  .panel.mid { border-style: dashed; background: rgba(244, 124, 124, .04); }
+  .head { position: absolute; top: 205px; display: flex; align-items: center; gap: 16px; font-size: 32px; font-weight: 700; }
+  .head svg { width: 46px; height: 46px; }
+  /* A pot of paint, centred on (--x, --y) */
+  .pot { position: absolute; left: calc(var(--x) - 60px); top: calc(var(--y) - 60px); width: 120px; height: 120px; border-radius: 50%;
+         background: radial-gradient(circle at 34% 30%, rgba(255, 255, 255, .55) 0 7%, transparent 28%), var(--c);
+         box-shadow: inset 0 -12px 22px rgba(0, 0, 0, .28), 0 14px 30px rgba(0, 0, 0, .45); }
+  .pot.sm { left: calc(var(--x) - 45px); top: calc(var(--y) - 45px); width: 90px; height: 90px; }
+  .lbl { position: absolute; left: calc(var(--x) - 120px); top: calc(var(--y) + 72px); width: 240px; text-align: center;
+         font-size: 26px; color: var(--mute); }
+  .sm + .lbl { top: calc(var(--y) + 56px); }
+  .op { position: absolute; left: calc(var(--x) - 30px); top: calc(var(--y) - 40px); width: 60px; text-align: center;
+        font-size: 64px; font-weight: 300; line-height: 80px; color: var(--mute); }
+  .lock::after { content: "secret"; position: absolute; left: 50%; top: -38px; transform: translateX(-50%); padding: 2px 12px;
+                 border-radius: 12px; font-size: 20px; letter-spacing: .08em; text-transform: uppercase; color: var(--bg);
+                 background: var(--mute); }
+  .same { animation: pop .5s cubic-bezier(.2, .9, .3, 1.35) forwards, ring 1.6s ease-out forwards; }
+  @keyframes ring { 0% { box-shadow: 0 0 0 0 rgba(183, 148, 246, .9); } 100% { box-shadow: 0 0 0 16px rgba(183, 148, 246, .55),
+                    0 0 60px 20px rgba(183, 148, 246, .35); } }
+  .key-lbl { color: var(--key); font-weight: 700; }
+  .unknown { position: absolute; left: calc(var(--x) - 45px); top: calc(var(--y) - 45px); width: 90px; height: 90px; border-radius: 50%;
+             border: 4px dashed var(--eve); display: grid; place-items: center; font-size: 54px; font-weight: 800; color: var(--eve); }
+</style>
+<body>
+  <div class="kicker fade" style="animation-delay: .1s">Key exchange</div>
+
+  <div class="panel fade" style="left: 150px; width: 540px; animation-delay: .2s"></div>
+  <div class="panel mid fade" style="left: 770px; width: 380px; animation-delay: .2s"></div>
+  <div class="panel fade" style="left: 1230px; width: 540px; animation-delay: .2s"></div>
+  <div class="head you fade" style="left: 190px; animation-delay: .3s"><svg class="i" viewBox="0 0 96 96"><rect x="8" y="16" width="80" height="64" rx="8"/>
+    <path d="M8 34h80"/></svg>Your browser</div>
+  <div class="head eve fade" style="left: 810px; animation-delay: .3s"><svg class="i" viewBox="0 0 96 60"><path d="M4 30s18-26 44-26 44 26 44 26-18 26-44 26S4 30 4 30z"/>
+    <circle cx="48" cy="30" r="11"/></svg>In public</div>
+  <div class="head server fade" style="left: 1270px; animation-delay: .3s"><svg class="i" viewBox="0 0 96 96"><rect x="14" y="10" width="68" height="22" rx="5"/>
+    <rect x="14" y="37" width="68" height="22" rx="5"/><rect x="14" y="64" width="68" height="22" rx="5"/></svg>bank.example</div>
+
+  <!-- The public colour, then a copy to each side -->
+  <div class="pot pop" style="--x: 960px; --y: 370px; --c: var(--yellow); animation-delay: var(--cue-public, 3.3s)"></div>
+  <div class="lbl fade" style="--x: 960px; --y: 370px; animation-delay: var(--cue-public, 3.3s)">public colour</div>
+  <div class="pot fly" style="--x: 240px; --y: 370px; --c: var(--yellow); --dx: 720px; animation-delay: calc(var(--cue-public, 3.3s) + .7s)"></div>
+  <div class="pot fly" style="--x: 1320px; --y: 370px; --c: var(--yellow); --dx: -360px; animation-delay: calc(var(--cue-public, 3.3s) + .7s)"></div>
+
+  <!-- Each side's secret, and its mixture -->
+  <div class="op fade" style="--x: 330px; --y: 370px; animation-delay: var(--cue-secret, 6.9s)">+</div>
+  <div class="op fade" style="--x: 1410px; --y: 370px; animation-delay: var(--cue-secret, 6.9s)">+</div>
+  <div class="pot lock pop" style="--x: 420px; --y: 370px; --c: var(--red); animation-delay: var(--cue-secret, 6.9s)"></div>
+  <div class="pot lock pop" style="--x: 1500px; --y: 370px; --c: var(--blue); animation-delay: var(--cue-secret, 6.9s)"></div>
+  <div class="op fade" style="--x: 510px; --y: 370px; animation-delay: calc(var(--cue-secret, 6.9s) + 1.2s)">=</div>
+  <div class="op fade" style="--x: 1590px; --y: 370px; animation-delay: calc(var(--cue-secret, 6.9s) + 1.2s)">=</div>
+  <div class="pot pop" style="--x: 600px; --y: 370px; --c: var(--orange); animation-delay: calc(var(--cue-secret, 6.9s) + 1.2s)"></div>
+  <div class="pot pop" style="--x: 1680px; --y: 370px; --c: var(--green); animation-delay: calc(var(--cue-secret, 6.9s) + 1.2s)"></div>
+  <div class="lbl fade" style="--x: 600px; --y: 370px; animation-delay: calc(var(--cue-secret, 6.9s) + 1.4s)">mixture</div>
+  <div class="lbl fade" style="--x: 1680px; --y: 370px; animation-delay: calc(var(--cue-secret, 6.9s) + 1.4s)">mixture</div>
+
+  <!-- The swap, across the middle: whoever is listening sees both mixtures go by -->
+  <div class="pot fly" style="--x: 1320px; --y: 650px; --c: var(--orange); --dx: -720px; --dy: -280px; animation-delay: var(--cue-swap, 10.1s); animation-duration: 1.6s"></div>
+  <div class="pot fly" style="--x: 240px; --y: 650px; --c: var(--green); --dx: 1440px; --dy: -280px; animation-delay: var(--cue-swap, 10.1s); animation-duration: 1.6s"></div>
+  <div class="lbl fade" style="--x: 240px; --y: 650px; animation-delay: calc(var(--cue-swap, 10.1s) + 1.4s)">theirs</div>
+  <div class="lbl fade" style="--x: 1320px; --y: 650px; animation-delay: calc(var(--cue-swap, 10.1s) + 1.4s)">theirs</div>
+  <div class="pot sm pop" style="--x: 905px; --y: 610px; --c: var(--orange); animation-delay: calc(var(--cue-swap, 10.1s) + .6s)"></div>
+  <div class="pot sm pop" style="--x: 1015px; --y: 610px; --c: var(--green); animation-delay: calc(var(--cue-swap, 10.1s) + .6s)"></div>
+  <div class="lbl fade" style="--x: 960px; --y: 610px; top: 668px; animation-delay: calc(var(--cue-swap, 10.1s) + .8s)">seen on the way</div>
+
+  <!-- Each adds its own secret again -->
+  <div class="op fade" style="--x: 330px; --y: 650px; animation-delay: var(--cue-final, 12.5s)">+</div>
+  <div class="op fade" style="--x: 1410px; --y: 650px; animation-delay: var(--cue-final, 12.5s)">+</div>
+  <div class="pot lock pop" style="--x: 420px; --y: 650px; --c: var(--red); animation-delay: var(--cue-final, 12.5s)"></div>
+  <div class="pot lock pop" style="--x: 1500px; --y: 650px; --c: var(--blue); animation-delay: var(--cue-final, 12.5s)"></div>
+  <div class="op fade" style="--x: 510px; --y: 650px; animation-delay: calc(var(--cue-final, 12.5s) + 1.1s)">=</div>
+  <div class="op fade" style="--x: 1590px; --y: 650px; animation-delay: calc(var(--cue-final, 12.5s) + 1.1s)">=</div>
+  <div class="pot pop" style="--x: 600px; --y: 650px; --c: var(--brown); animation-delay: calc(var(--cue-final, 12.5s) + 1.1s)"></div>
+  <div class="pot pop" style="--x: 1680px; --y: 650px; --c: var(--brown); animation-delay: calc(var(--cue-final, 12.5s) + 1.1s)"></div>
+
+  <!-- The same colour on both sides: the shared key -->
+  <div class="pot same" style="--x: 600px; --y: 650px; --c: var(--brown); opacity: 0; animation-delay: var(--cue-same, 16.2s)"></div>
+  <div class="pot same" style="--x: 1680px; --y: 650px; --c: var(--brown); opacity: 0; animation-delay: var(--cue-same, 16.2s)"></div>
+  <div class="lbl key-lbl fade" style="--x: 600px; --y: 650px; animation-delay: var(--cue-same, 16.2s)">shared key</div>
+  <div class="lbl key-lbl fade" style="--x: 1680px; --y: 650px; animation-delay: var(--cue-same, 16.2s)">shared key</div>
+
+  <!-- What the listener can't do -->
+  <div class="unknown pop" style="--x: 960px; --y: 790px; animation-delay: var(--cue-eve, 18.9s)">?</div>
+  <div class="lbl fade" style="--x: 960px; --y: 790px; top: 845px; color: var(--eve); animation-delay: var(--cue-eve, 18.9s)">can't be unmixed</div>
+</body>

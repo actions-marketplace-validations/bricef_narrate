@@ -1,0 +1,60 @@
+<!doctype html>
+<!-- A shared key: the message turns to noise on "noise", and back with the same key on "back". Below, the
+     catch: the key itself sent across the network, copied by whoever is listening, then the question. -->
+<link rel="stylesheet" href="common.css">
+<style>
+  .box { position: absolute; top: 230px; height: 160px; padding: 0 28px; display: flex; flex-direction: column; justify-content: center; }
+  .box label { position: absolute; top: -46px; left: 0; font-family: var(--sans); font-size: 26px; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+  .plain { font-family: var(--mono); font-size: 32px; color: var(--fg); }
+  .noise { font-family: var(--mono); font-size: 32px; line-height: 1.45; color: var(--key); border-color: var(--key); }
+  .noise div { overflow: hidden; white-space: nowrap; width: 0; animation: type .8s steps(17) forwards; }
+  @keyframes type { to { width: 17ch; } }
+  .arrow { position: absolute; top: 309px; height: 3px; background: var(--line); }
+  .k { position: absolute; top: 250px; width: 120px; height: 120px; border-radius: 50%; display: grid; place-items: center; color: var(--key);
+       background: color-mix(in srgb, var(--key) 15%, var(--panel)); border: 3px solid var(--key); box-shadow: 0 0 40px rgba(183, 148, 246, .3); }
+  .k svg { width: 66px; height: 66px; }
+  .same { position: absolute; left: 635px; width: 650px; top: 410px; height: 26px; border: 3px solid var(--key); border-top: 0; border-radius: 0 0 14px 14px; }
+  .same span { position: absolute; left: 0; right: 0; top: 34px; text-align: center; font-size: 30px; color: var(--key); }
+  /* The catch */
+  .trip { position: absolute; left: 432px; top: 618px; width: 70px; height: 70px; color: var(--key); opacity: 0;
+          animation: fade .3s forwards var(--cue-catch, 10.8s), cross 2.6s cubic-bezier(.45, 0, .3, 1) forwards var(--cue-catch, 10.8s); }
+  .trip svg, .copy svg { width: 70px; height: 70px; }
+  @keyframes cross { to { transform: translateX(950px); } }
+  .copy { position: absolute; left: 925px; top: 720px; color: var(--eve); text-align: center; width: 70px; }
+  .copy span { position: absolute; top: 74px; left: -80px; width: 230px; font-size: 26px; }
+  .q { position: absolute; left: 0; right: 0; top: 880px; text-align: center; font-size: 46px; font-weight: 700; }
+  .q b { color: var(--key); }
+</style>
+<body>
+  <div class="kicker fade" style="animation-delay: .1s">Encryption with a shared key</div>
+
+  <div class="arrow fade" style="left: 530px; width: 210px; animation-delay: var(--cue-lock, 1.2s)"></div>
+  <div class="arrow fade" style="left: 1180px; width: 210px; animation-delay: var(--cue-unlock, 5s)"></div>
+  <div class="card box up" style="left: 150px; width: 380px; animation-delay: .3s"><label>Message</label>
+    <div class="plain">to=Sam&amp;amount=20</div></div>
+  <div class="k pop" style="left: 575px; animation-delay: var(--cue-lock, 1.2s)">
+    <svg class="i" viewBox="0 0 96 96"><circle cx="28" cy="48" r="16"/><path d="M44 48h40M72 48v14M60 48v10"/></svg></div>
+  <div class="card box noise up" style="left: 740px; width: 440px; animation-delay: calc(var(--cue-lock, 1.2s) + .4s)"><label>Encrypted</label>
+    <div style="animation-delay: calc(var(--cue-lock, 1.2s) + .6s)">9f 2c a1 7e 04 bd</div>
+    <div style="animation-delay: calc(var(--cue-lock, 1.2s) + 1.2s)">e6 c1 5a 33 8f d0</div></div>
+  <div class="k pop" style="left: 1225px; animation-delay: var(--cue-unlock, 5s)">
+    <svg class="i" viewBox="0 0 96 96"><circle cx="28" cy="48" r="16"/><path d="M44 48h40M72 48v14M60 48v10"/></svg></div>
+  <div class="card box up" style="left: 1390px; width: 380px; animation-delay: calc(var(--cue-unlock, 5s) + .5s)"><label>Message</label>
+    <div class="plain">to=Sam&amp;amount=20</div></div>
+  <div class="same fade" style="animation-delay: calc(var(--cue-unlock, 5s) + 1s)"><span>the same key</span></div>
+
+  <div class="wire fade" style="left: 425px; width: 1070px; top: 653px; animation-delay: var(--cue-2, 7.3s)"></div>
+  <div class="actor small you fade" style="left: 300px; top: 600px; animation-delay: var(--cue-2, 7.3s)">
+    <div class="tile"><svg class="i" viewBox="0 0 96 96"><rect x="8" y="16" width="80" height="64" rx="8"/><path d="M8 34h80"/>
+      <circle cx="20" cy="25" r="2"/><circle cx="30" cy="25" r="2"/><path d="M22 52h40M22 64h26"/></svg></div><b>You</b></div>
+  <div class="actor small server fade" style="left: 1440px; top: 600px; animation-delay: var(--cue-2, 7.3s)">
+    <div class="tile"><svg class="i" viewBox="0 0 96 96"><rect x="14" y="10" width="68" height="22" rx="5"/><rect x="14" y="37" width="68" height="22" rx="5"/>
+      <rect x="14" y="64" width="68" height="22" rx="5"/><path d="M26 21h1M26 48h1M26 75h1M58 21h14M58 48h14M58 75h14"/></svg></div><b>The bank</b></div>
+  <div class="eye pop" style="position: absolute; left: 912px; top: 530px; width: 96px; color: var(--eve); animation-delay: var(--cue-catch, 10.8s)">
+    <svg class="i" viewBox="0 0 96 60" style="width: 96px; height: 60px; stroke-width: 6"><path d="M4 30s18-26 44-26 44 26 44 26-18 26-44 26S4 30 4 30z"/><circle cx="48" cy="30" r="11"/></svg></div>
+  <div class="trip"><svg class="i" viewBox="0 0 96 96"><circle cx="28" cy="48" r="16"/><path d="M44 48h40M72 48v14M60 48v10"/></svg></div>
+  <div class="copy pop" style="animation-delay: var(--cue-copy, 13.6s)"><svg class="i" viewBox="0 0 96 96"><circle cx="28" cy="48" r="16"/>
+    <path d="M44 48h40M72 48v14M60 48v10"/></svg><span>a copy</span></div>
+
+  <div class="q up" style="animation-delay: var(--cue-3, 16s)">How do two strangers agree on a key, <b>in public</b>?</div>
+</body>
