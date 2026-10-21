@@ -195,12 +195,19 @@ compiles it on every push, until it is merged.
 | `main` | `latest` and `sha-<commit>` |
 | tag `v1.2.3` | `1.2.3`, `1.2` and `sha-<commit>` |
 
-To release, tag a commit on `main` and push the tag:
+To release:
 
-```sh
-git tag v1.2.3
-git push origin v1.2.3
-```
+1. **A pull request** that sets `version` in `pyproject.toml`, turns
+   `CHANGELOG.md`'s Unreleased section into the release's, and points the
+   docs at the new tag: the README's `uv tool install` and the action example
+   in [building.md](building.md#build-in-github-actions). A test checks the
+   four agree.
+2. **Tag** the merged commit on `main`, and push the tag:
+
+   ```sh
+   git tag v1.2.3
+   git push origin v1.2.3
+   ```
 
 Workflows can then pin both parts: `uses: bricef/narrate@v1.2.3`, with
 `image: ghcr.io/bricef/narrate:1.2.3`.

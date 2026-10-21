@@ -521,8 +521,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - id: video
-        uses: bricef/narrate@main
+        uses: bricef/narrate@v0.1.0
         with:
+          image: ghcr.io/bricef/narrate:0.1.0                     # the same release
           source-path: videos/intro.md
           output: out/intro.mp4
           elevenlabs-api-key: ${{ secrets.ELEVENLABS_API_KEY }}   # optional
@@ -547,6 +548,10 @@ jobs:
 Outputs: `video-file`, `poster-file`, `srt-file` and `vtt-file` when subtitles
 are on, and `transcript-file` when a transcript is asked for.
 
+- **Versions:** `@v0.1.0` pins the action, and `image` the narrate it runs.
+  Change both together to move to a new
+  [release](https://github.com/bricef/narrate/releases). Without `image`, the
+  action uses `latest`, which follows `main`.
 - The voice model and synthesised speech are cached between runs, so
   unchanged paragraphs cost nothing.
 - Paths must be inside the repository checkout.
