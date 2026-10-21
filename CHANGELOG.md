@@ -21,6 +21,9 @@ Notable changes to narrate, newest first. The format follows
   `image`.
 - **Only release tags build images:** `v1.2.3`, and pre-releases such as
   `v1.3.0-rc.1`, which publish only their own image tag.
+- **The GitHub Action is named "narrate video",** so that it can be listed on
+  the GitHub Marketplace, which refuses `narrate`: an organisation has that
+  name. `uses: bricef/narrate@…` doesn't change.
 
 ## [0.1.0] - 2026-10-21
 

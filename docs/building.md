@@ -506,8 +506,8 @@ To build the image from a checkout, see [Development](development.md#the-contain
 
 ## Build in GitHub Actions
 
-The repository is a GitHub Action that builds a video in the narrate image.
-Its outputs match Narakeet's `build-video-github-action`:
+The repository is a GitHub Action, named "narrate video", that builds a video
+in the narrate image. Its outputs match Narakeet's `build-video-github-action`:
 
 ```yaml
 name: Video

@@ -234,6 +234,12 @@ its image, `1`. Those that pin `@v1.2.3` keep the image `1.2.3`.
   `python3 scripts/release_tags.py move v1.2.3 v1.2.3 --dry-run` in a
   checkout. Without `--dry-run`, it moves `v1` by hand, should the
   `major-tag` job fail.
+- **To list a release on the GitHub Marketplace,** edit its release on
+  GitHub, tick **Publish this Action to the GitHub Marketplace**, and choose
+  **Utilities** as the primary category. It needs the maintainer's two-factor
+  authentication, and the Marketplace developer agreement accepted once. The
+  action is listed by its name, "narrate video", at
+  `github.com/marketplace/actions/narrate-video`.
 
 ## How a build works
 

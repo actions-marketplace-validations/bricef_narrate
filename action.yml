@@ -1,4 +1,4 @@
-name: narrate
+name: narrate video
 description: Build a narrated video from a Markdown script (Narakeet format) on the runner, with narrate
 branding:
   icon: video

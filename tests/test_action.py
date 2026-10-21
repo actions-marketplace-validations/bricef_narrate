@@ -18,6 +18,11 @@ def image_workflow():
     return yaml.safe_load((ROOT / ".github/workflows/image.yml").read_text())
 
 
+def test_action_has_a_name_the_marketplace_accepts():
+    """The Marketplace refuses an action named after a GitHub user or organisation, and Narrate is one."""
+    assert action()["name"] == "narrate video"
+
+
 def test_action_mirrors_narakeets_outputs():
     a = action()
     assert a["runs"]["using"] == "composite"
