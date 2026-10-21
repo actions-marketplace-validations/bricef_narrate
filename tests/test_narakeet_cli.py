@@ -56,7 +56,8 @@ def test_zip_url(project, tmp_path):
 
 
 def test_github_fetches_only_the_script_folder(project, tmp_path):
-    files = {"script/source.md": SCRIPT, "script/pic.png": (project / "pic.png").read_bytes()}
+    files = {"script/source.md": SCRIPT, "script/pic.png": (project / "pic.png").read_bytes(),
+             "script/.env": b"NARRATE_FFMPEG=/nowhere\n"}  # hidden files aren't fetched, as a ZIP's aren't unpacked
     requested = []
 
     def fake_get(url, token=None, accept=None):
@@ -74,4 +75,4 @@ def test_github_fetches_only_the_script_folder(project, tmp_path):
     assert main(["--repository-type", "github", "--repository", "owner/repo", "--source", "script/source.md",
                  "--github-token", "tok", "--output", str(out), "--tts", "silent"], get=fake_get) == 0
     assert built(out)
-    assert not any("huge.mp4" in u for u in requested)
+    assert not any("huge.mp4" in u or ".env" in u for u in requested)

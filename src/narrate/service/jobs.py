@@ -22,6 +22,7 @@ from urllib.parse import quote, unquote
 from .. import network
 from .. import project as zips
 from ..child import Child
+from ..cli import DOTENV
 from . import options as job_options
 from .costs import Prices, price
 from .projects import ProjectError, lay_out
@@ -176,9 +177,7 @@ class Runner:
         captures = folder / "project" / GENERATED
         before = _versions(captures)
         cwd = folder / "project" if (folder / "project").is_dir() else folder
-        # Set either way: the service's flag decides for its jobs, not its own environment
-        child = Child(args, cwd=cwd, on_progress=lambda p: self._set(job_id, progress=p),
-                      env={network.ENV: "1" if self.local_network else "0"})
+        child = Child(args, cwd=cwd, on_progress=lambda p: self._set(job_id, progress=p), env=self.env())
         self.children[job_id] = child
         try:
             outcome = await child.run()
@@ -196,6 +195,12 @@ class Runner:
         self._set(job_id, state=state, finished=time.time(), outputs=outputs, notes=outcome.notes,
                   errors=[] if state == "done" else outcome.errors, summary=outcome.summary,
                   usage=self._usage(spent))
+
+    def env(self) -> dict[str, str]:
+        """What the service sets in its jobs' environment, whatever its own says (#93): whether their pages
+        reach local addresses, which its flag decides, not a job; and that they read no .env, so a project
+        can't set anything. The service's own key is in their environment already."""
+        return {network.ENV: "1" if self.local_network else "0", DOTENV: "0"}
 
     def _usage(self, spent: Path) -> dict | None:
         """What the job spent, as its command reported it, priced at the service's prices (#81)."""

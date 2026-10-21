@@ -17,12 +17,21 @@ class ProjectError(Exception):
     pass
 
 
+def hidden(path: PurePosixPath) -> bool:
+    """Whether a project's file is hidden (.env, .git/, .DS_Store), apart from narrate's own .narrate/ folders.
+    Hidden files aren't part of a project: they hold secrets, or settings for narrate and the programs it runs."""
+    return any(part.startswith(".") and part != ".narrate" for part in path.parts)
+
+
 def _safe_members(archive: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
+    """The members to extract: unsafe ones are refused, and hidden files left out (#93)."""
     members, total = [], 0
     for info in archive.infolist():
         path = PurePosixPath(info.filename)
         if path.is_absolute() or ".." in path.parts or info.filename.startswith("\\") or ":" in path.parts[0]:
             raise ProjectError(f"unsafe path in archive: {info.filename}")
+        if hidden(path):
+            continue
         if stat.S_ISLNK(info.external_attr >> 16):
             raise ProjectError(f"symbolic links are not supported in archives: {info.filename}")
         total += info.file_size

@@ -23,7 +23,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path, PurePosixPath
 
-from . import cli
+from . import cli, project
 
 
 def _get(url: str, token: str | None = None, accept: str | None = None) -> bytes:
@@ -38,13 +38,15 @@ def _get(url: str, token: str | None = None, accept: str | None = None) -> bytes
 
 def fetch_github(repository: str, source: str, token: str | None, sha: str | None, dest: Path,
                  get=_get) -> Path:
-    """Download the files under the script's directory (not the whole repository)."""
+    """Download the files under the script's directory (not the whole repository), apart from hidden ones,
+    as a ZIP project is unpacked."""
     api = f"https://api.github.com/repos/{repository}"
     ref = sha or json.loads(get(api, token))["default_branch"]
     tree = json.loads(get(f"{api}/git/trees/{urllib.parse.quote(ref)}?recursive=1", token))
     folder = PurePosixPath(source).parent
     prefix = "" if str(folder) == "." else f"{folder}/"
-    blobs = [item["path"] for item in tree.get("tree", []) if item["type"] == "blob" and item["path"].startswith(prefix)]
+    blobs = [item["path"] for item in tree.get("tree", []) if item["type"] == "blob" and item["path"].startswith(prefix)
+             and not project.hidden(PurePosixPath(item["path"][len(prefix):]))]
     if source not in blobs:
         raise SystemExit(f"error: {source} is not in {repository}@{ref}")
     for path in blobs:

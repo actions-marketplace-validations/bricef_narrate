@@ -4,11 +4,11 @@ Three forms:
 - files by content: `{"script": "intro.md", "files": {"intro.md": "<sha256>", "team.jpg": "<sha256>"}}`;
 - a script sent inline, with or without files: `{"script": "intro.md", "text": "…"}`;
 - a ZIP, uploaded as a file: `{"zip": "<sha256>", "source": "intro.md"}` (`source` only if it holds
-  more than one script), unpacked as `narrate build` unpacks one (project.extract).
+  more than one script), unpacked as `narrate build` unpacks one (project.extract), hidden files left out.
 
 Paths are relative, with no `..` and no hidden parts except narrate's own
 `.narrate/`: a folder sent whole may hold secrets such as `.env`, which don't
-belong in the store.
+belong in the store, and a project mustn't bring settings to its job (#93).
 """
 
 from __future__ import annotations
@@ -51,7 +51,8 @@ def _path(path: Any) -> str:
     pure = PurePosixPath(path)
     if pure.is_absolute() or "\\" in path or any(part in ("..", "") for part in path.split("/")):
         raise ProjectError(f"{path!r}: paths are relative, with no '..'")
-    if any(part.startswith(".") for part in pure.parts) and pure.parts[0] != ".narrate":
+    inside = pure.parts[1:] if pure.parts[0] == ".narrate" else pure.parts  # .narrate/ only at the top
+    if any(part.startswith(".") for part in inside):
         raise ProjectError(f"{path!r}: hidden files (.env, .git) aren't part of a project; leave them out")
     return pure.as_posix()
 

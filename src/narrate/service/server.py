@@ -121,7 +121,8 @@ def create_app(root: Path, engine: str = "kokoro", workers: int = 1, prices: Pri
         folder = store.root / "checks" / secrets.token_hex(8)
         try:
             script = lay_out(project, store, folder)
-            outcome = await Child(["check", str(script), "--timing", "--json", *args], cwd=folder).run()
+            outcome = await Child(["check", str(script), "--timing", "--json", *args], cwd=folder,
+                                  env=runner.env()).run()
         except ProjectError as e:
             return _error(str(e), **({"missing": e.missing} if e.missing else {}))
         finally:
