@@ -25,7 +25,10 @@ If `narrate` isn't on the PATH, use one of these, and use it in place of
 - **A source checkout:** `uv run --project <checkout> narrate …`. On the
   author's machines the checkout is `~/Code/github.com/bricef/narrate`.
 - **Docker:** `docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -v narrate-cache:/cache ghcr.io/bricef/narrate …`,
-  run from the folder holding the script.
+  run from the folder holding the script. On Apple Silicon (`uname -m`
+  prints `arm64`), add `--platform linux/amd64` after `docker run`: the image
+  is built for x86-64 only, so it runs under emulation, several times more
+  slowly than a source checkout.
 
 The first real build downloads the Kokoro voice model (about 350 MB), so
 expect it to be slower than later ones.

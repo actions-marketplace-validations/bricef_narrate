@@ -186,6 +186,9 @@ docker run --rm -it --user "$(id -u):$(id -g)" -v "$PWD:/work" -v narrate-cache:
     -p 127.0.0.1:8787:8787 ghcr.io/bricef/narrate studio script.md --host 0.0.0.0
 ```
 
+On Apple Silicon, add `--platform linux/amd64` after `docker run`
+([Build in Docker](#build-in-docker)).
+
 ## Build a video
 
 ```sh
@@ -443,6 +446,12 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -v narrate-cache:/cac
 - **Cache:** the voice model, music and synthesised speech go in `/cache`. The
   `narrate-cache` volume keeps them between runs. Use the same `--user` with
   it each time; another user can't write to it.
+- **Apple Silicon:** the image is built for x86-64 only so far
+  ([#91](https://github.com/bricef/narrate/issues/91)). On a Mac with an
+  Apple chip, add `--platform linux/amd64` after `docker pull` and
+  `docker run`, or Docker finds no image for the Mac. Docker then runs it
+  under emulation, several times more slowly. Installed
+  [from source](../README.md#from-source), narrate runs natively.
 - **ElevenLabs:** keep the key in a `.env` in the mounted folder, or pass
   `-e ELEVENLABS_API_KEY`.
 - **Other commands** work the same way: put `check script.md`, `audio
@@ -459,17 +468,6 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -v narrate-cache:/cac
   USER narrate
   ```
 
-- **Private package:** while it is private, log in with a GitHub token that
-  can read packages:
-
-  ```sh
-  gh auth refresh -h github.com -s read:packages   # once, to add the scope
-  gh auth token | docker login ghcr.io -u <your GitHub user> --password-stdin
-  ```
-
-- **Apple Silicon:** the image is built for x86-64. Docker runs it under
-  emulation, more slowly; add `--platform linux/amd64` to silence its
-  warning.
 - **Size:** about 1.2 GB unpacked, 420 MB to download.
 
 To build the image from a checkout, see [Development](development.md#the-container-image).
@@ -520,11 +518,6 @@ are on, and `transcript-file` when a transcript is asked for.
 - The voice model and synthesised speech are cached between runs, so
   unchanged paragraphs cost nothing.
 - Paths must be inside the repository checkout.
-- **While narrate is private,** other repositories need access to both parts:
-  - **The repository:** Settings → Actions → General → Access, so they can
-    use the action.
-  - **The package:** "Manage Actions access" in its settings, so they can
-    pull the image.
 
 ## Use Narakeet's command line
 
@@ -804,7 +797,7 @@ takes `--keep-work`. `narrate COMMAND --help` lists every option.
 | `NARRATE_JOBS` | up to 4 | encodes at once, like `--jobs` |
 | `NARRATE_STT_MODEL` | `small` | faster-whisper model for transcribing recordings |
 | `NARRATE_MUSIC_DIR` | none | recordings to use instead of the built-in music |
-| `NARRATE_FFMPEG` | narrate's own | the ffmpeg to use |
+| `NARRATE_FFMPEG` | narrate's own on Linux; on macOS, Homebrew's `ffmpeg-full` or the one on `PATH` | the ffmpeg to use |
 | `NARRATE_MERMAID_JS` | narrate's own | the mermaid.js to use for `render:mermaid` |
 | `NARRATE_TOOLS` | `~/.cache/narrate` | where downloads go |
 | `NARRATE_CACHE` | `~/.cache/narrate` | where synthesised speech and transcripts are cached |
