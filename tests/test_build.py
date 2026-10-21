@@ -6,7 +6,7 @@ import pytest
 from PIL import Image
 
 from narrate import media
-from narrate.build import Builder, Layout, ScenePlan, Visual, allocate_frames, layout_visuals
+from narrate.build import Builder, Visual, allocate_frames, layout_visuals
 from narrate.config import FPS
 from narrate.script import parse, parse_file
 from narrate.tts import SilentSynth

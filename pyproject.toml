@@ -25,6 +25,7 @@ narakeet-api-client = "narrate.narakeet_cli:main"
 dev = [
     "httpx2>=2.13",
     "pytest>=8",
+    "ruff>=0.17.1",
 ]
 
 [build-system]
@@ -41,3 +42,14 @@ markers = [
     "conformance: compares against Narakeet's renders (needs `just reference`; skip with -m 'not conformance')",
     "stt: transcribes speech with faster-whisper (downloads its model on first use)",
 ]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+# Ruff's long-standing defaults (E4, E7, E9, F), which the code's noqa comments
+# were written for, named so that a ruff update can't change them. Then checks
+# the code already passes: whitespace and escapes (W), blocking calls in async
+# code (ASYNC), leftover debuggers (T10), and noqa without a code (PGH).
+select = ["E4", "E7", "E9", "F", "W", "ASYNC", "T10", "PGH"]

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from playwright.sync_api import expect
 
-from narrate.script import Narration, parse
+from narrate.script import parse
 from narrate.ssml import ssml_runs
 from narrate.studio.analysis import run
 from narrate.studio.edits import EditError, apply, for_editor, index_of, insert_mark
@@ -60,7 +60,7 @@ def test_a_mark_before_any_word_changes_nothing_but_where_the_speech_splits(text
         assert len([b for s in parse(marked, Path("s.md")).scenes for b in s.blocks]) == blocks
         runs = spoken(paragraph, ssml)
         assert flat(runs) == flat(spoken(text, ssml)), (at, paragraph)
-        caption = (lambda t: subtitle_text(ssml_text(t) if ssml else t))
+        caption = (lambda t: subtitle_text(ssml_text(t) if ssml else t))  # noqa: E731
         assert caption(paragraph) == caption(text), (at, paragraph)
         # The speech splits at the mark: one run carries it, with words, not a silent run after them
         [carrier] = [r for r in runs if name in r.marks]

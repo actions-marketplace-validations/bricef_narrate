@@ -73,7 +73,7 @@ def narration(url: str) -> dict:
 
 def test_a_page_gets_the_cues_a_build_gives_it(project):
     text = "---\nsize: 320x180\n---\n\n![](red.png)\n\n![](scene.html)\n\nFirst words.\n\nSecond words, a few more.\n"
-    page, analysis = shown(project, text, 1, 2.5)
+    page, analysis = shown(project, text, 1, 2.5)  # noqa: F811
     plan = analysis.plans[1]
     assert page["kind"] == "page" and page["url"].startswith("/pages/scene.html?v=")
     # The page starts half way through the scene, on a whole frame, and its cues count from there
@@ -94,7 +94,7 @@ def test_a_page_gets_the_cues_a_build_gives_it(project):
 ])
 def test_a_page_designed_at_another_size_is_fitted_as_a_build_fits_it(project, fit, box):
     text = f"---\nsize: 320x180\n---\n\n(html: {{file: scene.html, viewport: 360x360, size: {fit}}})\n\n(duration: 1)\n"
-    page, _ = shown(project, text, 1, 0.5)
+    page, _ = shown(project, text, 1, 0.5)  # noqa: F811
     assert page["size"] == [360, 360]
     assert page["box"] == {k: pytest.approx(v) for k, v in box.items()}
 

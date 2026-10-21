@@ -18,10 +18,19 @@ on:
       - skills/**
       - action.yml
       - .github/workflows/image.yml
+  # Pull requests from forks that change the image or the action; this
+  # repository's own branches are built on push
+  pull_request:
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - action.yml
+      - .github/workflows/image.yml
   workflow_dispatch:
 
 jobs:
   image:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -41,13 +50,26 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # The runtime stage, not the last one (test): it is what's published (#88)
       - name: Build the image
         uses: docker/build-push-action@v7
         with:
           context: .
+          target: runtime
           load: true
           tags: narrate:ci
           cache-from: type=gha
+
+      # As the README runs it: the current folder at /work, where the image
+      # starts, a new cache volume and your own user, rather than the action's -w
+      - name: Run it as the README does
+        run: |
+          mkdir "$RUNNER_TEMP/readme" && cd "$RUNNER_TEMP/readme"
+          printf '# Hello\n\nThis video was made the way the README says.\n' > script.md
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -v narrate-cache:/cache \
+              narrate:ci build script.md --tts silent
+          test -O script.mp4
+          test -O script.jpg
 
       - id: video
         name: Render the demo with it
@@ -89,6 +111,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
+          target: runtime
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
