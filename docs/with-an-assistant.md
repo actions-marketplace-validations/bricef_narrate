@@ -33,21 +33,26 @@ is written for the assistant: give it this page, and it can set everything up.
   [docker.com](https://www.docker.com/products/docker-desktop/) and install it
   like any other app. Larger organisations may need a paid Docker
   subscription; check Docker's terms.
+  - **On a Mac, you can skip Docker:** the assistant can install narrate with
+    [Homebrew](https://brew.sh/), a free tool for installing programs.
+    On a Mac with an Apple chip, videos then build several times faster.
+    Installing Homebrew asks for your Mac's password once.
 - **An AI assistant that can work with files and run programs on your
   computer,** such as Claude Code in the Claude desktop app. An assistant that
   only chats in a web page can write a script for you, but it can't build the
   video.
-- **Access to narrate:** this guide, and the narrate skill (the instructions
-  that teach the assistant to use narrate). Both are in the narrate repository
-  on GitHub. If you can't open it, ask whoever told you about narrate to send
-  you this page and the `skills/narrate` folder.
+- **This guide and the narrate skill** (the instructions that teach the
+  assistant to use narrate). Both are free, in the
+  [narrate repository](https://github.com/bricef/narrate) on GitHub, and the
+  assistant can download them.
 - **Optionally, an ElevenLabs account,** for the most natural voices. It's a
   paid service; narrate's free voices are fine for most drafts.
 
 ## Set up, once
 
 1. **Install Docker Desktop and open it.** Wait until it says its engine is
-   running. Docker Desktop needs to be open whenever you make videos.
+   running. Docker Desktop needs to be open whenever you make videos. To use
+   Homebrew on a Mac instead, skip this step, and tell the assistant in step 3.
 2. **Make a folder for your videos,** for example `Videos` in your Documents.
    Each video gets its own folder inside it.
 3. **Open your assistant in that folder** and give it this page (the file, or
@@ -58,8 +63,10 @@ is written for the assistant: give it this page, and it can set everything up.
    "For the assistant: setting up" in this guide, and tell me when it's done.
    ```
 
-The assistant downloads narrate (about 420 MB), installs the narrate skill,
-and makes a short test video to show it all works. The first real video also
+The assistant downloads narrate (about 420 MB with Docker), installs the
+narrate skill, and makes a short test video to show it all works. If your Mac
+doesn't have Homebrew yet, the assistant may ask you to paste one command into
+the Terminal app and type your Mac's password. The first real video also
 downloads a voice (about 350 MB). After that, setting up is done.
 
 ## Make your first video
@@ -211,6 +218,7 @@ the folder first.
 | **Credits** | What ElevenLabs charges in, per character spoken. |
 | **narrate studio** | narrate's editor, in your web browser. |
 | **Docker** | The app that runs narrate on your computer. |
+| **Homebrew** | A free tool for installing programs on a Mac: the other way to run narrate on one. |
 | **Skill** | Instructions that teach the AI assistant to use narrate. |
 
 ## For the assistant: setting up
@@ -218,6 +226,12 @@ the folder first.
 This part is for the AI assistant. The person you're helping doesn't use the
 command line: talk to them in plain words, show them results rather than
 commands, and say where each file is.
+
+**Docker or Homebrew:** use Docker, unless the person asked for Homebrew on a
+Mac. On a Mac with Apple Silicon (`uname -m` prints `arm64`), suggest
+Homebrew: narrate then runs natively, several times faster than the published
+image. For Homebrew, do [On a Mac, without Docker](#on-a-mac-without-docker)
+in place of steps 1 to 3 below.
 
 1. **Docker:** check that `docker version` reaches the engine. If it can't,
    ask the person to open Docker Desktop (on macOS, `open -a Docker` starts
@@ -227,10 +241,11 @@ commands, and say where each file is.
    - **On Apple Silicon,** add `--platform linux/amd64` to `docker pull` and
      `docker run`: the image is published for x86-64 only, and runs under
      emulation, several times more slowly
-     ([#91](https://github.com/bricef/narrate/issues/91)). With access to
-     the repository, a native image is faster: in a checkout, run
+     ([#91](https://github.com/bricef/narrate/issues/91)). A native image is
+     faster: clone the repository
+     (`git clone https://github.com/bricef/narrate.git`), run
      `docker build --platform linux/arm64 --target runtime -t narrate:local .`
-     (it compiles ffmpeg, so it takes a while), then use `narrate:local`.
+     in it (it compiles ffmpeg, so it takes a while), then use `narrate:local`.
 3. **How to run narrate,** from the video's folder:
 
    ```sh
@@ -263,6 +278,24 @@ commands, and say where each file is.
    - **ElevenLabs:** never use it without asking. Quote the characters from
      `check --timing --tts elevenlabs` first, as the skill says.
    - **The result:** say where the video is, and offer to open it.
+
+### On a Mac, without Docker
+
+These replace steps 1 to 3 above.
+
+1. **Homebrew:** check that `brew --version` works. If it doesn't, ask the
+   person to install Homebrew: they paste the command from
+   [brew.sh](https://brew.sh/) into the Terminal app and type their Mac's
+   password, which you can't do for them. Say that it can take a few minutes.
+2. **narrate:** follow the README's macOS steps
+   ([From source](../README.md#from-source)). Clone the repository into a
+   folder of its own, such as `~/narrate`, not the videos folder. Homebrew's
+   `ffmpeg-full` is the one narrate needs: the plain `ffmpeg` lacks the
+   subtitle and pitch filters.
+3. **How to run narrate,** from the video's folder:
+   `uv run --project ~/narrate narrate COMMAND …`. The studio needs no
+   published port: `studio script.md --open` opens it in the person's
+   browser.
 
 For narrate's full documentation, see [Writing scripts](writing-scripts.md)
 and [Building videos](building.md).

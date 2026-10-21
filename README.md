@@ -13,7 +13,8 @@ generates the voice-over, lays out the pictures, slides and subtitles, and
 times every scene to its narration.
 
 It reads the script format of Narakeet's "Markdown to Video" service, so
-Narakeet projects build unchanged, without uploading anything.
+Narakeet projects build unchanged, without uploading anything. narrate isn't
+affiliated with or endorsed by Narakeet.
 
 - **Speech:** Kokoro, free and running on your computer, or ElevenLabs with
   your own account.
@@ -44,17 +45,20 @@ fonts:
 docker pull ghcr.io/bricef/narrate
 ```
 
-While the image is private, log in to `ghcr.io` first
-([Build in Docker](docs/building.md#build-in-docker)).
+On a Mac with Apple Silicon (an M1 chip or later), add `--platform linux/amd64`
+after `docker pull` and `docker run`, here and in the rest of the docs. The
+image is only built for Intel and AMD processors so far, so Docker runs it
+under emulation, several times more slowly
+([#91](https://github.com/bricef/narrate/issues/91)). On those Macs,
+installing [from source](#from-source) is faster.
 
 ### From source
 
 On Linux (tested on Ubuntu 24.04 and Debian 13), with
-[uv](https://docs.astral.sh/uv/getting-started/installation/) installed. The
-repository is private, so cloning needs a GitHub account with access to it:
+[uv](https://docs.astral.sh/uv/getting-started/installation/) installed:
 
 ```sh
-git clone git@github.com:bricef/narrate.git
+git clone https://github.com/bricef/narrate.git
 cd narrate
 uv sync                                          # Python and narrate's packages
 uv run playwright install --with-deps chromium   # headless Chromium; asks for sudo for its libraries
@@ -65,6 +69,22 @@ uv run narrate doctor                            # checks the setup
 Without sudo, see [Troubleshoot](docs/building.md#troubleshoot) for Chromium's
 libraries. narrate downloads its own ffmpeg and the Kokoro voice model on the
 first build.
+
+On macOS, with [Homebrew](https://brew.sh/) installed:
+
+```sh
+brew install uv ffmpeg-full                      # uv, and ffmpeg with subtitles and pitch
+brew install --cask font-dejavu                  # the subtitle font
+git clone https://github.com/bricef/narrate.git
+cd narrate
+uv sync                                          # Python and narrate's packages
+uv run playwright install chromium               # headless Chromium
+uv run narrate doctor                            # checks the setup
+```
+
+narrate uses Homebrew's `ffmpeg-full` on macOS: the plain `ffmpeg` lacks the
+subtitle and pitch filters narrate needs. narrate downloads the Kokoro voice
+model on the first build.
 
 narrate runs inside the checkout's environment. To use it in your own folders,
 as the rest of the docs do, add aliases to your shell profile (`~/.bashrc` or
@@ -177,6 +197,16 @@ for the examples without narration (the voices themselves differ;
 [Development](docs/development.md#conformance-with-narakeet)).
 
 It does not take PowerPoint, Google Slides or Keynote input, or offer
-Narakeet's REST API or web editor. It runs on Linux; elsewhere, use Docker.
-The image is built for x86-64, so on Apple Silicon Docker runs it under
-emulation, more slowly.
+Narakeet's REST API or web editor. It runs on Linux and macOS; on Windows,
+use Docker.
+
+## Contributing
+
+Contributions are welcome: bug reports, fixes, examples and better docs.
+[CONTRIBUTING.md](CONTRIBUTING.md) explains how to set up, find something to
+work on and send a pull request. Everyone taking part follows the
+[code of conduct](CODE_OF_CONDUCT.md).
+
+## Licence
+
+narrate is released under the [MIT licence](LICENSE).
