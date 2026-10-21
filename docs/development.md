@@ -183,7 +183,7 @@ compiles it on every push, until it is merged.
 | Push | Tags |
 | --- | --- |
 | `main` | `latest` and `sha-<commit>` |
-| tag `v1.2.3` | `1.2.3` and `1.2` |
+| tag `v1.2.3` | `1.2.3`, `1.2` and `sha-<commit>` |
 
 To release, tag a commit on `main` and push the tag:
 

@@ -186,9 +186,6 @@ docker run --rm -it --user "$(id -u):$(id -g)" -v "$PWD:/work" -v narrate-cache:
     -p 127.0.0.1:8787:8787 ghcr.io/bricef/narrate studio script.md --host 0.0.0.0
 ```
 
-On Apple Silicon, add `--platform linux/amd64` after `docker run`
-([Build in Docker](#build-in-docker)).
-
 ## Build a video
 
 ```sh
@@ -446,12 +443,8 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -v narrate-cache:/cac
 - **Cache:** the voice model, music and synthesised speech go in `/cache`. The
   `narrate-cache` volume keeps them between runs. Use the same `--user` with
   it each time; another user can't write to it.
-- **Apple Silicon:** the image is built for x86-64 only so far
-  ([#91](https://github.com/bricef/narrate/issues/91)). On a Mac with an
-  Apple chip, add `--platform linux/amd64` after `docker pull` and
-  `docker run`, or Docker finds no image for the Mac. Docker then runs it
-  under emulation, several times more slowly. Installed
-  [from source](../README.md#from-source), narrate runs natively.
+- **Processors:** the image is built for x86-64 and arm64, so it runs
+  natively on Intel and AMD machines and on Macs with Apple chips.
 - **ElevenLabs:** keep the key in a `.env` in the mounted folder, or pass
   `-e ELEVENLABS_API_KEY`.
 - **Other commands** work the same way: put `check script.md`, `audio
