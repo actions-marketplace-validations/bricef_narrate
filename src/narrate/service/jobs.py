@@ -22,6 +22,7 @@ from urllib.parse import quote, unquote
 from .. import network
 from .. import project as zips
 from ..child import Child
+from ..cli import DOTENV
 from . import options as job_options
 from .costs import Prices, price
 from .projects import ProjectError, lay_out
@@ -176,9 +177,7 @@ class Runner:
         captures = folder / "project" / GENERATED
         before = _versions(captures)
         cwd = folder / "project" if (folder / "project").is_dir() else folder
-        # Set either way: the service's flag decides for its jobs, not its own environment
-        child = Child(args, cwd=cwd, on_progress=lambda p: self._set(job_id, progress=p),
-                      env={network.ENV: "1" if self.local_network else "0"})
+        child = Child(args, cwd=cwd, on_progress=lambda p: self._set(job_id, progress=p), env=self.env())
         self.children[job_id] = child
         try:
             outcome = await child.run()
@@ -196,6 +195,12 @@ class Runner:
         self._set(job_id, state=state, finished=time.time(), outputs=outputs, notes=outcome.notes,
                   errors=[] if state == "done" else outcome.errors, summary=outcome.summary,
                   usage=self._usage(spent))
+
+    def env(self) -> dict[str, str]:
+        """What the service sets in its jobs' environment, whatever its own says (#93): whether their pages
+        reach local addresses, which its flag decides, not a job; and that they read no .env, so a project
+        can't set anything. The service's own key is in their environment already."""
+        return {network.ENV: "1" if self.local_network else "0", DOTENV: "0"}
 
     def _usage(self, spent: Path) -> dict | None:
         """What the job spent, as its command reported it, priced at the service's prices (#81)."""
@@ -262,15 +267,27 @@ class Runner:
         return found
 
     def output(self, job_id: str, name: str) -> Path | None:
-        """An output's file, by the name in its address; None if there's no such output."""
+        """An output's file, by the name in its address; None unless the job lists it (#93). Its path, links
+        resolved, must be inside the folder outputs of its kind are in, not elsewhere in the job's folder."""
+        job = self.store.job(job_id)
+        if job is None or name not in _listed(job["outputs"]):
+            return None
         folder = self.store.folder(job_id)
-        base = folder / "project" if name.startswith(GENERATED + "/") else folder / "out"
-        path = (base / name).resolve()
-        return path if path.is_relative_to(folder.resolve()) and path.is_file() else None
+        captured = name.startswith(GENERATED + "/")
+        base = (folder / "project" / GENERATED if captured else folder / "out").resolve()
+        path = (folder / "project" / name if captured else folder / "out" / name).resolve()
+        return path if path.is_relative_to(base) and path.is_file() else None
 
 
 def output_url(job_id: str, name: str) -> str:
     return f"/v1/jobs/{job_id}/outputs/{quote(name)}"
+
+
+def _listed(outputs: dict | None) -> set[str]:
+    """The names a job's outputs are served by, its captures' included."""
+    urls = [url for value in (outputs or {}).values()
+            for url in (value.values() if isinstance(value, dict) else [value])]
+    return {unquote(url.rsplit("/outputs/", 1)[1]) for url in urls}
 
 
 def _versions(folder: Path) -> dict[str, tuple]:

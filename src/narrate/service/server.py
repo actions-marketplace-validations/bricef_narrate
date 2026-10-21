@@ -121,7 +121,8 @@ def create_app(root: Path, engine: str = "kokoro", workers: int = 1, prices: Pri
         folder = store.root / "checks" / secrets.token_hex(8)
         try:
             script = lay_out(project, store, folder)
-            outcome = await Child(["check", str(script), "--timing", "--json", *args], cwd=folder).run()
+            outcome = await Child(["check", str(script), "--timing", "--json", *args], cwd=folder,
+                                  env=runner.env()).run()
         except ProjectError as e:
             return _error(str(e), **({"missing": e.missing} if e.missing else {}))
         finally:
@@ -227,8 +228,7 @@ def create_app(root: Path, engine: str = "kokoro", workers: int = 1, prices: Pri
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     async def output(request: Request) -> Response:
-        job_id = request.path_params["id"]
-        path = runner.output(job_id, request.path_params["name"]) if store.job(job_id) else None
+        path = runner.output(request.path_params["id"], request.path_params["name"])
         if path is None:
             return _error("no such output", 404)
         # Sandboxed: a file a project made, opened in a browser, runs in an origin of its own, not the service's

@@ -151,6 +151,7 @@ def test_a_script_sent_inline_a_zip_and_narration_alone(client, tmp_path):
     ({"script": "../intro.md", "text": "Hi."}, "no '..'"),
     ({"script": "/etc/intro.md", "text": "Hi."}, "relative"),
     ({"script": "intro.md", "text": "Hi.", "files": {".env": "0" * 64}}, "hidden files"),
+    ({"script": ".narrate/intro.md", "text": "Hi.", "files": {".narrate/.env": "0" * 64}}, "hidden files"),
     ({"script": "intro.png", "text": "Hi."}, "isn't a script"),
     ({"script": "intro.md"}, "neither in files nor sent as text"),
     ({"script": "intro.md", "files": {"intro.md": "nothex"}}, "not a SHA-256"),
@@ -158,6 +159,63 @@ def test_a_script_sent_inline_a_zip_and_narration_alone(client, tmp_path):
 def test_projects_that_cant_be_laid_out_are_refused(client, project, message):
     refused = client.post("/v1/jobs", json={"kind": "build", "project": project})
     assert refused.status_code == 400 and message in refused.json()["error"]
+
+
+def test_a_zips_hidden_files_are_left_out(client, tmp_path):
+    """Its .env, .git and the like never reach the job (#93); narrate's own .narrate/ does."""
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as z:
+        z.writestr("p/hi.md", "Hello there.\n")
+        z.writestr("p/.env", f"NARRATE_FFMPEG={tmp_path / 'nowhere'}\nELEVENLABS_API_KEY=sk_client\n")
+        z.writestr(".env", "NODE_OPTIONS=--require=/nowhere.js\n")
+        z.writestr("p/.git/config", "[core]\n")
+        z.writestr("__MACOSX/p/._hi.md", "x")
+        z.writestr("p/.narrate/generated/web/kept.png", png("blue"))
+    data = archive.getvalue()
+    client.put(f"/v1/files/{sha(data)}", content=data)
+    job = client.post("/v1/jobs", json={"kind": "audio", "project": {"zip": sha(data)},
+                                        "options": {"format": "wav"}}).json()
+    assert wait(client, job["id"], "done")["notes"] == []
+    project = client.app.state.store.folder(job["id"]) / "project"
+    assert sorted(p.relative_to(project).as_posix() for p in project.rglob("*") if p.is_file()) == [
+        "p/.narrate/generated/web/kept.png", "p/hi.md"]
+
+
+def test_a_job_reads_no_env_file(client, tmp_path, monkeypatch):
+    """Not even one in its folder: the service's own environment is what counts (#93)."""
+    from narrate.service import jobs
+
+    real = jobs.lay_out
+
+    def planting(project, store, folder):
+        script = real(project, store, folder)
+        (folder / ".env").write_text(f"NARRATE_FFMPEG={tmp_path / 'nowhere'}\nELEVENLABS_API_KEY=sk_client\n")
+        return script
+
+    monkeypatch.setattr(jobs, "lay_out", planting)
+    job = client.post("/v1/jobs", json={"kind": "audio", "options": {"format": "wav"},
+                                        "project": {"script": "hi.md", "text": "Hello there.\n"}}).json()
+    done = wait(client, job["id"], "done")
+    assert (client.app.state.store.folder(job["id"]) / "project" / ".env").is_file()
+    assert done["notes"] == []  # not read at all: a .env read would warn of NARRATE_FFMPEG
+
+
+def test_only_a_jobs_outputs_are_served(client):
+    """Not the rest of its folder, by a name that climbs out of its outputs or a link that leads out (#93)."""
+    files = {"hi.md": b"Hello there.\n", ".narrate/generated/web/sent.png": png("blue")}
+    job = client.post("/v1/jobs", json={"kind": "audio", "options": {"format": "wav"},
+                                        "project": {"script": "hi.md", "files": upload(client, files)}}).json()
+    done = wait(client, job["id"], "done")
+    assert client.get(done["outputs"]["audio"]).status_code == 200
+    outputs = f"/v1/jobs/{job['id']}/outputs"
+    for name in (".narrate/generated/%2e%2e/%2e%2e/hi.md", ".narrate/generated/%2e%2e/%2e%2e/%2e%2e/usage.json",
+                 "%2e%2e/usage.json", "%2e%2e/project/hi.md",
+                 ".narrate/generated/web/sent.png"):  # sent with the project, not taken by the job
+        assert client.get(f"{outputs}/{name}").status_code == 404, name
+    made = client.app.state.store.folder(job["id"]) / "out" / "hi.wav"
+    made.unlink()
+    made.symlink_to(made.parent.parent / "usage.json")
+    assert client.get(done["outputs"]["audio"]).status_code == 404
 
 
 def test_files_must_be_uploaded_first_and_match_their_hash(client):

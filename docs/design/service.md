@@ -104,7 +104,9 @@ same definitions as the CLI's flags, so the two can't drift.
 - **The whole folder:** a client sends the whole project folder, not only the
   files the script names. HTML scenes load their own CSS, scripts and
   pictures, which narrate's parser can't see.
-- **Paths are checked:** no `..`, no absolute paths.
+- **Paths are checked:** no `..`, no absolute paths, and no hidden files
+  (`.env`, `.git`) apart from narrate's `.narrate/`. A ZIP's hidden files are
+  left out when it's unpacked.
 - **Two shortcuts:** a project of just a script can send it inline,
   `{"script": "intro.md", "text": "…"}`; and a ZIP is accepted, as
   `narrate build` accepts one.
@@ -205,6 +207,11 @@ addresses (#93):
 - **The operator decides:** `narrate serve --allow-local-network` lets every
   build job reach local and private addresses. A job can't ask for it, and
   the service sets its jobs' `NARRATE_ALLOW_LOCAL_NETWORK` itself.
+
+A project mustn't set anything for its job either. Jobs read no `.env`
+(the service sets `NARRATE_DOTENV=0` for them), and hidden files never reach
+a job's folder. The service's own environment, its key included, is what
+jobs run with.
 
 ## Narakeet compatibility
 

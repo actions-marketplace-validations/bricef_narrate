@@ -59,6 +59,19 @@ def test_symlinks_are_rejected(tmp_path):
             pass
 
 
+def test_hidden_files_are_left_out(tmp_path):
+    """A project's .env, .git and the like aren't unpacked (#93); narrate's own .narrate/ folders are."""
+    archive = make_project(tmp_path, {
+        "p/script.md": b"Hello there.\n", ".env": b"NARRATE_FFMPEG=planted\n", "p/.env": b"NODE_OPTIONS=planted\n",
+        "p/.git/config": b"[core]\n", "p/.DS_Store": b"x", "__MACOSX/p/._script.md": b"x",
+        "p/.narrate/generated/web/kept.png": b"png", "p/.narrate/.env": b"LD_PRELOAD=planted\n",
+    })
+    folder = tmp_path / "unpacked"
+    assert project.extract(archive, folder) == folder / "p" / "script.md"
+    assert sorted(p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file()) == [
+        "p/.narrate/generated/web/kept.png", "p/script.md"]
+
+
 def test_source_must_be_inside_the_archive(tmp_path):
     archive = make_project(tmp_path, {"script.md": b"x"})
     with pytest.raises(project.ProjectError, match="not in the archive"):
