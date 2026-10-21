@@ -143,7 +143,7 @@ with Playwright, so neither needs Node.
 ## CI and releases
 
 `.github/workflows/checks.yml` runs on every pull request, forks' included,
-and on pushes to `main`. It takes a few minutes:
+and on pushes to `main`. It takes about 5 minutes, most of it the tests:
 - **Lint:** `ruff check`, as `just lint` runs it. The rules are in
   `pyproject.toml`.
 - **Tests:** the test suite on the runner, with headless Chromium and the

@@ -1,7 +1,7 @@
 name: Checks
 
 # ruff, and the test suite on the runner without the tests that download models
-# or call ElevenLabs: a few minutes, where image.yml takes 4 to 17. It runs on
+# or call ElevenLabs: about 5 minutes, where image.yml takes 4 to 17. It runs on
 # every pull request, forks included, since image.yml runs on pushes to this
 # repository's branches.
 on:
@@ -23,10 +23,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Each job has its own uv cache: this one installs only the dev group
       - uses: astral-sh/setup-uv@v10.3.0
         with:
           python-version: "3.12"
           enable-cache: true
+          cache-suffix: lint
 
       - name: ruff
         run: uv run --locked --only-group dev ruff check --output-format github
@@ -40,6 +42,7 @@ jobs:
         with:
           python-version: "3.12"
           enable-cache: true
+          cache-suffix: test
 
       - run: uv sync --locked
 
