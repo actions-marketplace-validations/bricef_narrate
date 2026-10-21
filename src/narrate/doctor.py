@@ -20,9 +20,12 @@ BROWSER_INSTALL = "uv run playwright install chromium"
 BROWSER_DEPS = ("uv run playwright install-deps chromium (needs root); without root, see "
                 "docs/building.md, Troubleshoot")
 
-FONT_DIRS = [Path("/usr/share/fonts"), Path("/usr/local/share/fonts"), Path.home() / ".fonts",
-             Path.home() / ".local/share/fonts", Path("/Library/Fonts"), Path("/System/Library/Fonts"),
-             Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts"]
+def font_dirs() -> list[Path]:
+    """Where fonts are installed, on Linux, macOS (Homebrew's font casks use ~/Library/Fonts) and Windows."""
+    home = Path.home()
+    return [Path("/usr/share/fonts"), Path("/usr/local/share/fonts"), home / ".fonts", home / ".local/share/fonts",
+            home / "Library/Fonts", Path("/Library/Fonts"), Path("/System/Library/Fonts"),
+            Path("/opt/homebrew/share/fonts"), Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts"]
 
 
 def explain_browser_error(message: str) -> str:
@@ -111,7 +114,8 @@ def check_chromium() -> Check:
 
 
 def find_font(*names: str) -> Path | None:
-    for d in FONT_DIRS:
+    """The first font file with one of these names (subtitles and contact sheets use it)."""
+    for d in font_dirs():
         if not d.is_dir():
             continue
         for name in names:
@@ -125,8 +129,11 @@ def check_fonts() -> Check:
     font = find_font("DejaVuSans.ttf")
     if font:
         return Check("fonts", True, f"DejaVu Sans ({font})")
-    return Check("fonts", False, "DejaVu Sans not found; slides and subtitles fall back to other fonts",
-                 "install fonts-dejavu (or the DejaVu fonts for your OS)")
+    if sys.platform == "darwin":
+        fix = "brew install --cask font-dejavu"
+    else:
+        fix = "install fonts-dejavu (or the DejaVu fonts for your OS)"
+    return Check("fonts", False, "DejaVu Sans not found; slides and subtitles fall back to other fonts", fix)
 
 
 def check_kokoro() -> Check:

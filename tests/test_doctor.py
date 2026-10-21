@@ -83,6 +83,24 @@ def test_files_still_to_download_are_not_faults(monkeypatch, tmp_path):
     assert kokoro.ok and "first Kokoro build" in kokoro.detail
 
 
+def test_finds_fonts_in_the_users_library(monkeypatch, tmp_path):
+    """Where `brew install --cask font-dejavu` puts them; subtitles and contact sheets use find_font too."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    font = tmp_path / "Library" / "Fonts" / "NarrateTestSans.ttf"
+    font.parent.mkdir(parents=True)
+    font.touch()
+    assert doctor.find_font("NarrateTestSans.ttf") == font
+
+
+@pytest.mark.parametrize("system, fix", [("darwin", "brew install --cask font-dejavu"),
+                                         ("linux", "install fonts-dejavu (or the DejaVu fonts for your OS)")])
+def test_missing_fonts_say_how_to_install_them(monkeypatch, system, fix):
+    monkeypatch.setattr(doctor, "find_font", lambda *names: None)
+    monkeypatch.setattr(sys, "platform", system)
+    check = doctor.check_fonts()
+    assert not check.ok and check.fix == fix
+
+
 # -- the ffmpeg a build will use (#93) ------------------------------------------
 
 FULL = ("subtitles", "xfade", "rubberband")
