@@ -61,8 +61,13 @@ What does matter, for example:
   defend against this. They answer only to their own host names
   (`localhost`, `127.0.0.1`, `[::1]`, the `--host` address and each
   `--allow-host`). They refuse a request that changes something when its
-  `Origin` is another site. They send no CORS headers. A way past these is a
-  vulnerability.
+  `Origin` is another site. Their APIs send no CORS headers, and other sites
+  can't frame them. A way past these is a vulnerability.
+- **Pages in a project:** an HTML scene, an overlay or a slide in the
+  studio's preview that makes the studio act for it, or reads what its API
+  answers. The preview runs them sandboxed, each in an origin of its own, so
+  they can read the project's files, as in a build, but not use the studio. A
+  way past this is a vulnerability.
 - **Leaking keys:** `ELEVENLABS_API_KEY`, or the credentials a `render:web`
   block names, ending up in a video, a log, an error, a cache, a response, or
   the published image.

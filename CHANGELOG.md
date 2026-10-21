@@ -47,5 +47,13 @@ the git history.
   addresses with it, or with `NARRATE_ALLOW_LOCAL_NETWORK=1`, to capture your
   own dev server. `narrate serve` takes it for all its build jobs; a job can't
   turn it on itself.
+- **The studio's preview sandboxes a project's pages:** HTML scenes, overlays
+  and slides run in origins of their own. A page in a project from someone
+  else can no longer save over the script, switch the engine, start builds or
+  read what the studio answers. Its own files still load as in a build, but it
+  has no storage, such as `localStorage`.
+- **No framing by other sites:** the studio and the service send
+  `frame-ancestors 'self'` and `X-Frame-Options`. Project files and the
+  service's outputs are served sandboxed.
 
 [Unreleased]: https://github.com/bricef/narrate/commits/main

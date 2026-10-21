@@ -189,6 +189,10 @@ can send requests to it too, so it checks where each request comes from (#93):
   `Origin` with every such request; programs don't, so they're unaffected.
 - **No CORS:** it sends no CORS headers, so other sites' pages can't read its
   answers.
+- **No framing:** it sends `frame-ancestors 'self'` and `X-Frame-Options`, so
+  other sites can't show it in a frame.
+- **Sandboxed outputs:** they're served with a `sandbox` content security
+  policy, so a file a job made, opened in a browser, can't use the service.
 
 A job's own pages run on the same machine, in the build's Chromium, so they
 could read the service too, or another client's jobs. They reach only public
