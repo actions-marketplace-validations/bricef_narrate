@@ -22,6 +22,25 @@ them:
 Put `ELEVENLABS_API_KEY` in a `.env` at the repository root (it is
 git-ignored) for the ElevenLabs parts.
 
+### In a dev container
+
+`.devcontainer/` holds a dev container: a Linux setup made in one step, with
+Python 3.12 on Debian 13, uv, just, headless Chromium and the fonts. Use it on
+macOS or Windows to run narrate and its tests as on Linux. Creating it ends
+with `narrate doctor`.
+
+- **VS Code:** install Docker and the Dev Containers extension, open the
+  checkout, and choose **Reopen in Container**.
+- **GitHub Codespaces:** on the repository's page, choose **Code**, then
+  **Codespaces**, then **Create codespace on main**.
+- **The first creation downloads several hundred MB:** the image, narrate's
+  packages and Chromium. narrate's own downloads, such as ffmpeg and the voice
+  model, go in a Docker volume, `narrate-devcontainer-cache`, so a rebuilt
+  container keeps them. `docker volume rm narrate-devcontainer-cache` frees
+  the space.
+- **The studio:** VS Code and Codespaces forward its port, 8787, to your
+  browser.
+
 ## Run the tests
 
 ```sh

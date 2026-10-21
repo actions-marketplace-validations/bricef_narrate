@@ -1,0 +1,34 @@
+// A Linux setup for working on narrate, in VS Code or GitHub Codespaces.
+// See docs/development.md, "In a dev container".
+{
+  "name": "narrate",
+  // Python 3.12 on Debian 13 (trixie), the versions narrate's own image is built on
+  "image": "mcr.microsoft.com/devcontainers/python:3-3.12-trixie",
+  "containerEnv": {
+    // The project's environment lives outside the checkout, so it doesn't clash
+    // with one made on the host
+    "UV_PROJECT_ENVIRONMENT": "/home/vscode/.venv"
+  },
+  // narrate's downloads (ffmpeg, the voice and speech-to-text models) and its
+  // caches, in a volume so that a rebuilt container doesn't download them again
+  "mounts": [
+    {
+      "source": "narrate-devcontainer-cache",
+      "target": "/home/vscode/.cache/narrate",
+      "type": "volume"
+    }
+  ],
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "forwardPorts": [8787],
+  "portsAttributes": {
+    "8787": { "label": "narrate studio" }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python"],
+      "settings": {
+        "python.defaultInterpreterPath": "/home/vscode/.venv/bin/python"
+      }
+    }
+  }
+}
