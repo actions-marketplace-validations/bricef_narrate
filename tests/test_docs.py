@@ -17,7 +17,7 @@ from PIL import Image
 
 from narrate import media
 from narrate.build import Builder
-from narrate.doctor import find_font
+from narrate.doctor import check_fonts, find_font
 from narrate.script import parse_file
 from narrate.tts import SilentSynth
 
@@ -36,6 +36,9 @@ def examples():
 
 @pytest.fixture(scope="module")
 def assets(tmp_path_factory):
+    font = find_font("DejaVuSans.ttf")
+    if font is None:  # one failure with the fix, not one per example
+        pytest.skip("DejaVu Sans isn't installed: test_the_font_is_installed fails, with the fix")
     d = tmp_path_factory.mktemp("assets")
     for name, colour in (("photo.jpg", "steelblue"), ("forest.jpg", "darkgreen")):
         Image.linear_gradient("L").resize((1920, 1080)).convert("RGB").save(d / name)
@@ -49,13 +52,19 @@ def assets(tmp_path_factory):
     # Each page the guide shows ("`scene.html`, next to the script:"), under its own name
     for name, page in re.findall(r"`([\w-]+\.html)`, next to the script:\n\n```html\n(.*?)```", guide, re.S):
         (d / name).write_text(page)
-    shutil.copy(find_font("DejaVuSans.ttf"), d / "font.ttf")
+    shutil.copy(font, d / "font.ttf")
     return d
 
 
 @pytest.fixture(autouse=True)
 def own_cache(monkeypatch, tmp_path):
     monkeypatch.setenv("NARRATE_CACHE", str(tmp_path / "cache"))  # render blocks draw into it
+
+
+def test_the_font_is_installed():
+    """The examples' font.ttf is DejaVu Sans, part of the documented setup."""
+    check = check_fonts()
+    assert check.ok, f"{check.detail}. Fix: {check.fix}"
 
 
 def test_the_docs_have_examples():

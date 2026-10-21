@@ -308,8 +308,10 @@ class FrameRenderer:
                                             device_scale_factor=scale)
         try:
             page = context.new_page()
-            page.clock.install(time=0)
-            page.clock.pause_at(1)  # until now the clock ran in real time; from here it waits for us
+            # pause_at installs the clock already paused. After install() the page's clock runs in
+            # real time until the pause, so a slower machine started pages later and moved their
+            # animation frames (#93)
+            page.clock.pause_at(1)
             if init_script:
                 page.add_init_script(init_script)
             page.goto(path.resolve().as_uri(), wait_until="load")

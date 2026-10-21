@@ -1,6 +1,7 @@
 """Timing marks placed by selecting a word (#75): an HTML scene can time something to that word."""
 
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -139,6 +140,17 @@ def test_the_analysis_says_where_each_mark_is_written(tmp_path):
 
 # -- in the browser -------------------------------------------------------------------------------------
 
+WORD = "Alt" if sys.platform == "darwin" else "Control"  # moves the cursor by a word: Option on a Mac
+
+
+def option_m(tab):
+    """Option-M as a Mac keyboard sends it: the M key, as "µ". Playwright's Alt+m sends "m"."""
+    cdp = tab.context.new_cdp_session(tab)
+    key = {"key": "µ", "code": "KeyM", "windowsVirtualKeyCode": 77, "modifiers": 1}  # 1: Alt
+    cdp.send("Input.dispatchKeyEvent", {"type": "keyDown", "text": "µ", **key})
+    cdp.send("Input.dispatchKeyEvent", {"type": "keyUp", **key})
+
+
 def test_add_a_mark_from_the_cursor_and_find_it_from_the_timeline(tmp_path, page):  # noqa: F811
     script = tmp_path / "s.md"
     script.write_text("A first paragraph, to start with.\n\nFive hundred pull requests merged by the fleet.\n")
@@ -146,7 +158,7 @@ def test_add_a_mark_from_the_cursor_and_find_it_from_the_timeline(tmp_path, page
         page.goto(url)
         page.locator(".cm-line", has_text="merged by the fleet").click()
         page.keyboard.press("End")
-        page.keyboard.press("Control+ArrowLeft")  # the cursor before "fleet"
+        page.keyboard.press(f"{WORD}+ArrowLeft")  # the cursor before "fleet"
         page.get_by_role("button", name="Add mark").click()
         content = page.locator(".cm-content")
         expect(content).to_contain_text('Five hundred pull requests merged by the <mark name="fleet"/>fleet.')
@@ -160,10 +172,17 @@ def test_add_a_mark_from_the_cursor_and_find_it_from_the_timeline(tmp_path, page
         # Alt-M marks another word
         page.locator(".cm-line", has_text="A first paragraph").click()
         page.keyboard.press("Home")
-        page.keyboard.press("Control+ArrowRight")
-        page.keyboard.press("Control+ArrowRight")  # the end of "first": the word the cursor touches
+        page.keyboard.press(f"{WORD}+ArrowRight")
+        page.keyboard.press(f"{WORD}+ArrowRight")  # the end of "first": the word the cursor touches
         page.keyboard.press("Alt+m")
         expect(content).to_contain_text('A <mark name="first"/>first paragraph, to start with.')
+        expect(page.locator(".tl-mark-name")).to_have_count(2)
+        # And Option-M on a Mac, which types "µ" unless the studio takes it (#93)
+        page.keyboard.press("ControlOrMeta+z")
+        expect(page.locator(".tl-mark-name")).to_have_count(1)
+        option_m(page)
+        expect(content).to_contain_text('A <mark name="first"/>first paragraph, to start with.')
+        expect(content).not_to_contain_text("µ")
         expect(page.locator(".tl-mark-name")).to_have_count(2)
 
         # The flag leads back to its word, at its moment

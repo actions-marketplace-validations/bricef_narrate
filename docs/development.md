@@ -144,12 +144,21 @@ with Playwright, so neither needs Node.
 ## CI and releases
 
 `.github/workflows/checks.yml` runs on every pull request, forks' included,
-and on pushes to `main`. It takes about 5 minutes, most of it the tests:
+and on pushes to `main`. It takes 10 to 14 minutes, most of it the tests on
+macOS:
 - **Lint:** `ruff check`, as `just lint` runs it. The rules are in
   `pyproject.toml`.
-- **Tests:** the test suite on the runner, with headless Chromium and the
-  DejaVu fonts, without the `kokoro`, `stt`, `conformance` and `elevenlabs`
-  tests. uv's packages and narrate's downloads are cached between runs.
+- **Tests:** the test suite on Linux, with headless Chromium and the DejaVu
+  fonts, without the `kokoro`, `stt`, `conformance` and `elevenlabs` tests:
+  about 6 minutes. uv's packages and narrate's downloads are cached between
+  runs.
+- **Tests on macOS:** the same tests on `macos-latest`, which is Apple
+  Silicon, set up as [Install from source](../README.md#from-source) says:
+  Homebrew's `ffmpeg-full` and the `font-dejavu` cask. It takes 10 to 14
+  minutes, as fast as the runner happens to be: 2 to 3 to install from
+  Homebrew, and 8 to 10 for the tests, which run slower there than on Linux.
+  Homebrew's packages aren't cached: they are ready-built, and most of the
+  time goes on unpacking 60 of them. Headless Chromium is cached as well.
 
 `.github/workflows/image.yml` runs on pushes that touch the code, tests,
 examples, Dockerfile or action. It also runs on pull requests from forks that

@@ -36,8 +36,9 @@ The studio is a web app for writing a script, served from your computer.
 
 - **Editor:** narrate's own syntax is highlighted: scenes, stage directions,
   pictures and clips, slides, render blocks and SSML.
-- **Saving:** Ctrl-S or **Save**. The file on disk stays the script, so you
-  can still edit it elsewhere, diff it and build it from the command line.
+- **Saving:** Ctrl-S (Cmd-S on a Mac) or **Save**. The file on disk stays the
+  script, so you can still edit it elsewhere, diff it and build it from the
+  command line.
 - **Edits made elsewhere:** they appear in the studio by themselves when it
   has nothing unsaved. Otherwise it asks whether to load the file or keep
   your version. It never overwrites a newer file without asking.
@@ -121,12 +122,13 @@ The studio is a web app for writing a script, served from your computer.
     editor's cursor moves to the paragraph playing then, and **Play scene**
     starts from there. Moving the cursor yourself moves the playhead back.
     With the timeline focused, ← and → step a frame, and Shift a second.
-  - **Zoom:** **+** and **−**, or Ctrl and the mouse wheel. **Fit** shows
-    the whole video again.
+  - **Zoom:** **+** and **−**, or Ctrl (or Cmd) and the mouse wheel. **Fit**
+    shows the whole video again.
   - **Double-click** a picture or slide to go to its line.
 - **Inspector:** with the cursor on a picture, clip, HTML scene or render
   block, controls under the preview change how it's shown. Each change edits
-  the script's text, as you would by hand, and can be undone in the editor.
+  the script's text, as you would by hand, and can be undone in the editor
+  with Ctrl-Z (Cmd-Z on a Mac).
   - **Fit:** `cover`, `contain` or `fit`. **Position:** the six positions
     narrate has; those that make no difference for this picture are dimmed.
   - **Framing a picture:** the whole picture shows below, with its crop and
@@ -163,9 +165,9 @@ The studio is a web app for writing a script, served from your computer.
     `voices.yaml` are shown, not changed.
   - With the cursor on a `voice:` line or a `(voice: …)`, the inspector offers
     the picker.
-- **Timing marks:** with the cursor in narration, **Add mark** (or Alt-M)
-  puts a `<mark name="…"/>` before the word at the cursor, so an HTML scene or
-  overlay can time something to it with `--cue-NAME`.
+- **Timing marks:** with the cursor in narration, **Add mark** (or Alt-M;
+  Option-M on a Mac) puts a `<mark name="…"/>` before the word at the cursor,
+  so an HTML scene or overlay can time something to it with `--cue-NAME`.
   - **The name:** it's named after the word (`fleet`, or `fleet-2` if the
     scene has one), and the name is selected, so typing renames it.
   - **The paragraph:** it keeps its markup and is spoken the same way, only

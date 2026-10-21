@@ -61,7 +61,7 @@ def test_edit_save_and_follow_outside_edits(studio, page):
     page.keyboard.press("End")
     page.keyboard.type(" Welcome.")
     expect(page.get_by_test_id("status")).to_have_text("Unsaved changes")
-    page.keyboard.press("Control+s")
+    page.keyboard.press("ControlOrMeta+s")
     expect(page.get_by_test_id("status")).to_have_text("Saved")
     wait_for(lambda: "Hello there. Welcome." in script.read_text())
 
@@ -92,7 +92,7 @@ def test_a_refused_save_offers_to_overwrite(studio, page):
     # Changed on disk, and saved before the watcher's next look: the server refuses the save
     script.write_text(script.read_text() + "\nTheirs.\n")
     page.evaluate("document.activeElement.blur()")
-    page.keyboard.press("Control+s")  # works away from the editor too
+    page.keyboard.press("ControlOrMeta+s")  # works away from the editor too
     alert = page.get_by_role("alert")
     expect(alert).to_contain_text("changed on disk")
     if "wasn't saved" in alert.inner_text():
@@ -348,7 +348,7 @@ def test_the_inspector_edits_the_picture_at_the_cursor(tmp_path, page):
         expect(page.frame_locator("iframe[title=frame]").locator("img.media")).to_have_css("object-position", re.compile(r"^0(px|%) 50%$"))
 
         page.locator(".cm-content").focus()
-        page.keyboard.press("Control+z")
+        page.keyboard.press("ControlOrMeta+z")
         expect(picture_line).to_have_text("![](wide.png)")  # each change is one undo
 
 
@@ -456,7 +456,7 @@ def test_callouts_are_drawn_moved_and_deleted_on_the_preview(tmp_path, page):
         expect(page.locator(".callout-shape")).to_have_count(1)
 
         page.locator(".cm-content").focus()
-        page.keyboard.press("Control+z")
+        page.keyboard.press("ControlOrMeta+z")
         expect(page.locator(".cm-content")).to_contain_text("type: rectangle")  # each change is one undo
 
 

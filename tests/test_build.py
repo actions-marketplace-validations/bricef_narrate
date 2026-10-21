@@ -8,6 +8,7 @@ from PIL import Image
 from narrate import media
 from narrate.build import Builder, Visual, allocate_frames, layout_visuals
 from narrate.config import FPS
+from narrate.doctor import find_font
 from narrate.script import parse, parse_file
 from narrate.tts import SilentSynth
 
@@ -126,8 +127,8 @@ def test_build_end_to_end(project):
 
 
 def test_burned_captions_and_custom_font_render(project):
-    font = Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
-    if not font.exists():
+    font = find_font("DejaVuSans-Bold.ttf")
+    if font is None:
         pytest.skip("needs a TrueType font to copy into the project")
     (project / "bold.ttf").write_bytes(font.read_bytes())
     result = build(project, (
@@ -154,7 +155,8 @@ v = Visual("video", d / "clip.mp4", sync="loop", start=0.0, length=20.0)
 plan = ScenePlan(1, [v], FrameSpec(), np.zeros(1, dtype=np.float32), 30.0, layout=Layout([20.0], [1.0], repeat=True))
 (seg,) = [f.result() for f in b._render_scene(plan, 900, None, d)]
 seg.rename(d / "out.mp4")
-print(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss // 1024)
+# ru_maxrss is in kilobytes on Linux, in bytes on macOS
+print(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss // (1024 * 1024 if sys.platform == "darwin" else 1024))
 """
 
 

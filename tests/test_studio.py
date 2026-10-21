@@ -1,6 +1,7 @@
 """narrate studio's server (#51): the script, saving, conflicts, project files, events."""
 
 import os
+import tempfile
 
 import pytest
 from starlette.testclient import TestClient
@@ -65,6 +66,20 @@ def test_project_files_are_served_but_nothing_outside_or_hidden(client, project)
     for path in ("/files/.env", "/files/../etc/passwd", "/files/%2e%2e/%2e%2e/etc/passwd", "/files/missing.png",
                  "/files/.narrate/../.env"):
         assert client.get(path).status_code == 404, path
+
+
+def test_files_are_served_from_folders_reached_through_a_link(project, tmp_path_factory, monkeypatch):
+    """On macOS the temporary folder is under /var, a link to /private/var, and the studio refused
+    every file in its scratch folder (#93)."""
+    links = tmp_path_factory.mktemp("links")
+    (links / "tmp").symlink_to(tmp_path_factory.mktemp("tmp"), target_is_directory=True)
+    (links / "project").symlink_to(project, target_is_directory=True)
+    monkeypatch.setattr(tempfile, "tempdir", str(links / "tmp"))
+    with TestClient(create_app(links / "project" / "s.md", hosts=["testserver"])) as client:
+        (client.app.state.session.scratch / "still.png").write_bytes(b"png")
+        assert client.get("/scratch/still.png").content == b"png"
+        assert client.get("/files/photo.jpg").content == b"jpeg"
+        assert client.get("/scratch/../s.md").status_code == 404
 
 
 def test_outside_edits_are_noticed_but_our_own_saves_are_not(project):
