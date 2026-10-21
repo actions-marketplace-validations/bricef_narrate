@@ -506,8 +506,8 @@ To build the image from a checkout, see [Development](development.md#the-contain
 
 ## Build in GitHub Actions
 
-The repository is a GitHub Action that builds a video in the narrate image.
-Its outputs match Narakeet's `build-video-github-action`:
+The repository is a GitHub Action, named "narrate video", that builds a video
+in the narrate image. Its outputs match Narakeet's `build-video-github-action`:
 
 ```yaml
 name: Video
@@ -521,9 +521,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - id: video
-        uses: bricef/narrate@v0.1.0
+        uses: bricef/narrate@v0
         with:
-          image: ghcr.io/bricef/narrate:0.1.0                     # the same release
           source-path: videos/intro.md
           output: out/intro.mp4
           elevenlabs-api-key: ${{ secrets.ELEVENLABS_API_KEY }}   # optional
@@ -535,6 +534,15 @@ jobs:
             ${{ steps.video.outputs.poster-file }}
 ```
 
+`@v0` follows narrate's 0.x releases: each release moves it, and the action
+builds with that release's image. Before 1.0 a release may change how a script
+renders, so for builds that change only when you say so, pin a
+[release](https://github.com/bricef/narrate/releases):
+
+```yaml
+        uses: bricef/narrate@v0.1.0
+```
+
 | Input | Default | Meaning |
 | --- | --- | --- |
 | `source-path` | (required) | the script, or a `.zip` project, in the repository |
@@ -543,15 +551,21 @@ jobs:
 | `elevenlabs-api-key` | none | an ElevenLabs key, from a secret |
 | `subtitles` | none | the subtitles for this build, as `--subtitles` (the script decides when empty) |
 | `transcript` | `false` | `true` also writes a transcript, as `--transcript` |
-| `image` | `ghcr.io/bricef/narrate:latest` | the narrate image to build with |
+| `image` | the release's | the narrate image to build with, such as `ghcr.io/bricef/narrate:latest` |
 
 Outputs: `video-file`, `poster-file`, `srt-file` and `vtt-file` when subtitles
 are on, and `transcript-file` when a transcript is asked for.
 
-- **Versions:** `@v0.1.0` pins the action, and `image` the narrate it runs.
-  Change both together to move to a new
-  [release](https://github.com/bricef/narrate/releases). Without `image`, the
-  action uses `latest`, which follows `main`.
+- **The image:** the action builds with the image of the release it's used
+  at: `ghcr.io/bricef/narrate:1.2.3` for `@v1.2.3`, and
+  `ghcr.io/bricef/narrate:0` for `@v0`, which each 0.x release moves too. A
+  branch or a commit, such as `@main`, builds with `latest`, which follows
+  `main`. The `image` input overrides it.
+- **0.1.0's action came before this:** it builds with `latest` unless you
+  give it `image: ghcr.io/bricef/narrate:0.1.0`. `@v0` moves past it with
+  the next release.
+- **From your own composite action,** set `image`: GitHub can give a nested
+  action its caller's ref, and so the wrong image.
 - The voice model and synthesised speech are cached between runs, so
   unchanged paragraphs cost nothing.
 - Paths must be inside the repository checkout.

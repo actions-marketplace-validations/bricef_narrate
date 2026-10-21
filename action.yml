@@ -1,4 +1,4 @@
-name: narrate
+name: narrate video
 description: Build a narrated video from a Markdown script (Narakeet format) on the runner, with narrate
 branding:
   icon: video
@@ -24,8 +24,8 @@ inputs:
     description: "true to also write what's spoken as plain text (<output>.transcript.txt)"
     default: "false"
   image:
-    description: The narrate container image to build with
-    default: ghcr.io/bricef/narrate:latest
+    description: "The narrate container image to build with. By default, the image of the release the action is used at: ghcr.io/bricef/narrate:1.2.3 for @v1.2.3, ghcr.io/bricef/narrate:0 for @v0, and ghcr.io/bricef/narrate:latest for a branch or a commit"
+    default: ""
 
 outputs:
   video-file:
@@ -73,12 +73,32 @@ runs:
         key: narrate-image-speech-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
         restore-keys: narrate-image-speech-${{ runner.os }}-
 
+    # The image of the release the action is used at: v1.2.3 runs 1.2.3, and v0
+    # runs 0, which moves with v0. github.action_ref is empty inside a composite
+    # action's run scripts, so it comes through env (actions/runner#2473); it is
+    # also empty for uses: ./, which runs latest.
+    - name: Choose the image
+      id: image
+      shell: bash
+      env:
+        IMAGE: ${{ inputs.image }}
+        REF: ${{ github.action_ref }}
+      run: |
+        if [ -z "$IMAGE" ]; then
+          if [[ "$REF" =~ ^v([0-9]+(\.[0-9]+(\.[0-9]+(-[0-9A-Za-z.-]+)?)?)?)$ ]]; then
+            IMAGE="ghcr.io/bricef/narrate:${BASH_REMATCH[1]}"
+          else
+            IMAGE=ghcr.io/bricef/narrate:latest
+          fi
+        fi
+        echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
     # Images on ghcr.io are pulled with the workflow's token, so a private
     # package works for repositories it grants access to (needs packages: read)
     - name: Pull the image
       shell: bash
       env:
-        IMAGE: ${{ inputs.image }}
+        IMAGE: ${{ steps.image.outputs.image }}
         TOKEN: ${{ github.token }}
       run: |
         case "$IMAGE" in
@@ -97,7 +117,7 @@ runs:
       shell: bash
       env:
         ELEVENLABS_API_KEY: ${{ inputs.elevenlabs-api-key }}
-        IMAGE: ${{ inputs.image }}
+        IMAGE: ${{ steps.image.outputs.image }}
         SOURCE: ${{ inputs.source-path }}
         OUTPUT: ${{ inputs.output }}
         TTS: ${{ inputs.tts }}

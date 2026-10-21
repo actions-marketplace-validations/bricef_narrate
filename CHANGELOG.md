@@ -5,6 +5,26 @@ Notable changes to narrate, newest first. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **A major tag for the GitHub Action:** `uses: bricef/narrate@v0` follows the
+  0.x releases. Each release moves it, and the image tag `0`, once its image
+  has passed its checks. Only a newer release moves them, never an older one
+  run again.
+
+### Changed
+
+- **The GitHub Action builds with its own release's image,** with no `image`
+  input: `@v1.2.3` uses `ghcr.io/bricef/narrate:1.2.3`, and `@v0` uses
+  `ghcr.io/bricef/narrate:0`. A branch or a commit still uses `latest`, and
+  `image` still overrides it. 0.1.0's action uses `latest` unless given
+  `image`.
+- **Only release tags build images:** `v1.2.3`, and pre-releases such as
+  `v1.3.0-rc.1`, which publish only their own image tag.
+- **The GitHub Action is named "narrate video",** so that it can be listed on
+  the GitHub Marketplace, which refuses `narrate`: an organisation has that
+  name. `uses: bricef/narrate@…` doesn't change.
+
 ## [0.1.0] - 2026-10-21
 
 narrate's first release. Earlier changes are in the git history.
