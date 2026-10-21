@@ -71,7 +71,9 @@ class Session:
         self.build = None  # the latest BuildRun (#55)
         self.scene_build = None  # the latest scene render (#61)
         self.scene_renders: dict = {}  # fingerprint -> (summary, notes) of renders still in scratch
-        self.scratch = Path(tempfile.mkdtemp(prefix="narrate-studio-"))  # clip stills, copies of renders
+        # Clip stills, copies of renders. Resolved, as the files served from it are: on macOS the
+        # temporary folder is under /var, a link to /private/var
+        self.scratch = Path(tempfile.mkdtemp(prefix="narrate-studio-")).resolve()
 
     def remember(self, analysis) -> None:
         self.analyses[analysis.report["id"]] = analysis
