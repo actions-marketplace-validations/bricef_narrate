@@ -12,7 +12,7 @@ from pathlib import Path
 from . import media, project, render
 from .build import Builder, BuildError
 from .config import ConfigError, settings_from_header
-from .doctor import SetupError, run_checks
+from .doctor import SetupError, require_writable_cache, run_checks
 from .voicemap import VoiceMapError
 from .script import Media, ScriptError, parse_file
 from .tts import ELEVENLABS_VOICES, KOKORO_VOICES, NARAKEET_PROFILES, ensure_models, make_synth
@@ -51,6 +51,7 @@ def script_path(args: argparse.Namespace):
 
 
 def cmd_build(args: argparse.Namespace) -> int:
+    require_writable_cache()
     with script_path(args) as path:
         return _build(args, path)
 
@@ -134,6 +135,7 @@ def _build(args: argparse.Namespace, path: Path) -> int:
 
 
 def cmd_audio(args: argparse.Namespace) -> int:
+    require_writable_cache()
     with script_path(args) as path:
         script = parse_file(path)
         out = Path(args.output or path.with_suffix(".mp3").name)

@@ -716,7 +716,7 @@ narrate fetches some files on first use and caches synthesised speech:
 ## Troubleshoot
 
 Start with `narrate doctor`. It checks ffmpeg, Chromium, fonts, the voice
-models and the ElevenLabs key, and prints a fix for each problem.
+models, the cache and the ElevenLabs key, and prints a fix for each problem.
 
 - **"Chromium is not installed for Playwright":** run
   `uv run playwright install chromium`.
@@ -748,8 +748,16 @@ models and the ElevenLabs key, and prints a fix for each problem.
   ([Pick voices](#pick-voices)).
 - **"file not found":** paths are relative to the script's folder, and in
   Docker everything must be inside the mounted folder.
-- **PermissionError under `/cache` in Docker:** the cache volume was filled by
-  another user. Run with the same `--user` as before, or start a new volume.
+- **"narrate can't write to …":** another user filled part of the cache, for
+  example a Docker build without `--user`. `narrate build` stops before it
+  starts, and the message ends with the command that gives the folders back
+  to you. For the Docker volume:
+
+  ```sh
+  docker run --rm --user 0 -v narrate-cache:/cache --entrypoint chown \
+      ghcr.io/bricef/narrate -R "$(id -u):$(id -g)" /cache
+  ```
+
 - **Text shows as boxes:** the font lacks those characters. Install a font that
   has them, or name one in a theme with `@font-face`.
 - **"no ffmpeg on PATH, and narrate has no ffmpeg of its own":** narrate

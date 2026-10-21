@@ -1,3 +1,4 @@
+import os
 import sys
 
 import pytest
@@ -157,3 +158,93 @@ def test_a_missing_narrate_ffmpeg_is_a_fault(mac, tmp_path, monkeypatch):
     monkeypatch.setenv("NARRATE_FFMPEG", str(tmp_path / "nowhere" / "ffmpeg"))
     ffmpeg, = doctor.check_ffmpeg()
     assert not ffmpeg.ok and "nowhere" in ffmpeg.detail and "NARRATE_FFMPEG" in ffmpeg.fix
+
+
+# -- a cache narrate can write to (#89) -----------------------------------------
+
+needs_permissions = pytest.mark.skipif(not hasattr(os, "geteuid") or os.geteuid() == 0,
+                                       reason="root can write anywhere")
+
+
+@pytest.fixture
+def caches(tmp_path, monkeypatch):
+    """Speech in cache/ and downloads in cache/tools/, as in the image. Yields the cache and
+    a function that makes a folder read-only, until the test ends."""
+    monkeypatch.setenv("NARRATE_CACHE", str(tmp_path / "cache"))
+    monkeypatch.setenv("NARRATE_TOOLS", str(tmp_path / "cache" / "tools"))
+    monkeypatch.setenv("NARRATE_FFMPEG", "ffmpeg")
+    monkeypatch.setattr(doctor, "in_container", lambda: False)
+    locked = []
+
+    def lock(folder):
+        folder.mkdir(parents=True, exist_ok=True)
+        folder.chmod(0o555)
+        locked.append(folder)
+
+    yield tmp_path / "cache", lock
+    for folder in locked:
+        folder.chmod(0o755)
+
+
+def test_a_fresh_cache_is_writable(caches):
+    check = doctor.check_cache()
+    assert check.ok and check.detail.endswith("writable")
+
+
+@needs_permissions
+def test_a_folder_narrate_cant_write_to_fails_with_the_fix(caches):
+    root, lock = caches
+    lock(root / "tts" / "kokoro")
+    check = doctor.check_cache()
+    assert not check.ok and f"can't write to {root / 'tts' / 'kokoro'}" in check.detail
+    assert check.fix == f"sudo chown -R {os.geteuid()}:{os.getegid()} {root}"
+
+
+@needs_permissions
+def test_in_docker_the_fix_runs_chown_on_the_volume(caches, monkeypatch):
+    root, lock = caches
+    lock(root / "tools" / "music" / "v2")
+    monkeypatch.setattr(doctor, "in_container", lambda: True)
+    check = doctor.check_cache()
+    assert not check.ok and "music" in check.detail
+    assert check.fix.startswith("docker run --rm --user 0 -v narrate-cache:/cache --entrypoint chown ")
+    assert check.fix.endswith(f" -R {os.geteuid()}:{os.getegid()} {root}")
+
+
+def fill_tools(root, lock, *, but: str = ""):
+    """Download everything ahead of time (except a file called `but`), then make the tools read-only."""
+    from narrate import mermaid, music, stt, tts
+
+    tracks = root / "tools" / "music" / f"v{music.VERSION}"
+    for path in [*(tts.model_dir() / f for f in tts.MODEL_FILES), mermaid.managed_script(),
+                 *(tracks / f"{name}.wav" for name in music.SYNTHS), stt.model_dir() / "small" / "model.bin"]:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.name != but:
+            path.touch()
+    for folder in [root / "tools", *(p for p in (root / "tools").rglob("*") if p.is_dir())]:
+        lock(folder)
+
+
+@needs_permissions
+def test_a_tools_folder_filled_ahead_of_time_can_be_read_only(caches, monkeypatch):
+    monkeypatch.delenv("NARRATE_MERMAID_JS", raising=False)
+    fill_tools(*caches)
+    assert doctor.check_cache().ok
+
+
+@needs_permissions
+def test_but_not_while_something_is_still_to_fetch(caches, monkeypatch):
+    monkeypatch.delenv("NARRATE_MERMAID_JS", raising=False)
+    root, lock = caches
+    fill_tools(root, lock, but="uplifting-2.wav")
+    check = doctor.check_cache()
+    assert not check.ok and str(root / "tools" / "music") in check.detail
+
+
+@needs_permissions
+def test_a_build_stops_before_it_starts(caches, capsys):
+    root, lock = caches
+    lock(root / "render")
+    assert main(["build", "never-read.md"]) == 3
+    err = capsys.readouterr().err
+    assert err.startswith(f"setup problem: narrate can't write to {root / 'render'}") and "Fix: sudo chown" in err

@@ -160,6 +160,80 @@ def check_mermaid() -> Check:
                  "render:mermaid (about 5 MB), or now with `narrate models`")
 
 
+def _subfolders(folder: Path) -> list[Path]:
+    try:
+        return [p for p in folder.iterdir() if p.is_dir()]
+    except OSError:
+        return []
+
+
+def cache_folders() -> list[Path]:
+    """The folders in narrate's caches that the next build may write to (they may not exist yet)."""
+    from . import mermaid, music, stt, tts
+
+    speech = tts.cache_dir()
+    folders = [speech / "stt"]  # transcripts
+    for name in ("tts", "render"):  # a folder per engine or renderer
+        folders += [speech / name, *_subfolders(speech / name)]
+    # Downloads and the built-in music are written only while something is missing,
+    # so a tools folder filled ahead of time can be read-only
+    tracks = tts.tools_dir() / "music" / f"v{music.VERSION}"
+    pending = {
+        tts.model_dir(): not all((tts.model_dir() / f).exists() for f in tts.MODEL_FILES),
+        media.managed_ffmpeg().parent: media.find_ffmpeg()[0] == "download",
+        mermaid.managed_script().parent: not os.environ.get("NARRATE_MERMAID_JS")
+        and not mermaid.managed_script().exists(),
+        tracks: not all((tracks / f"{name}.wav").exists() for name in music.SYNTHS),
+        stt.model_dir(): not any(stt.model_dir().rglob("model.bin")),
+    }
+    return folders + [folder for folder, missing in pending.items() if missing]
+
+
+def blocking(folder: Path) -> Path | None:
+    """The folder that stops this user writing to `folder`: it, or the nearest one above it
+    that exists, when that isn't writable."""
+    while not os.path.isdir(folder) and folder != folder.parent:
+        folder = folder.parent
+    return None if os.access(folder, os.W_OK | os.X_OK) else folder
+
+
+def in_container() -> bool:
+    return os.path.exists("/.dockerenv") or os.path.exists("/run/.containerenv")
+
+
+def check_cache() -> Check:
+    """A cache shared between users can hold folders narrate can't write to (#89)."""
+    from .tts import cache_dir, tools_dir
+
+    roots = sorted({cache_dir(), tools_dir()}, key=lambda r: len(r.parts))  # outermost first
+    blocked = sorted({b for folder in cache_folders() if (b := blocking(folder))})
+    if not blocked:
+        return Check("cache", True, " and ".join(map(str, roots)) + " writable")
+    first = blocked[0]
+    detail = f"narrate can't write to {first}" + (f" or {len(blocked) - 1} more" if len(blocked) > 1 else "")
+    if hasattr(os, "geteuid") and (owner := os.stat(first).st_uid) != os.geteuid():
+        detail += f" (owned by user {owner}; narrate runs as user {os.geteuid()})"
+    ids = f"{os.geteuid()}:{os.getegid()}" if hasattr(os, "geteuid") else '"$(id -u):$(id -g)"'
+    # Hand back the outermost cache folder that holds each blocked one
+    owned = [next((r for r in roots if b.is_relative_to(r)), None) for b in blocked]
+    targets = " ".join(sorted({str(r) for r in owned if r is not None}))
+    if None in owned:  # the cache folder doesn't exist yet, and narrate can't create it
+        fix = "set NARRATE_CACHE and NARRATE_TOOLS to a folder you can write to"
+    elif in_container():
+        fix = ("docker run --rm --user 0 -v narrate-cache:/cache --entrypoint chown ghcr.io/bricef/narrate "
+               f"-R {ids} {targets}")
+    else:
+        fix = f"sudo chown -R {ids} {targets}"
+    return Check("cache", False, detail, fix)
+
+
+def require_writable_cache() -> None:
+    """Stop a build before it starts, rather than once every scene is captured (#89)."""
+    check = check_cache()
+    if not check.ok:
+        raise SetupError(f"{check.detail}. Fix: {check.fix}")
+
+
 def check_elevenlabs() -> Check:
     key = os.environ.get("ELEVENLABS_API_KEY", "")
     if not key:
@@ -172,4 +246,4 @@ def check_elevenlabs() -> Check:
 
 def run_checks() -> list[Check]:
     return [*check_ffmpeg(), check_chromium(), check_fonts(), check_kokoro(), check_stt(), check_mermaid(),
-            check_elevenlabs()]
+            check_cache(), check_elevenlabs()]
