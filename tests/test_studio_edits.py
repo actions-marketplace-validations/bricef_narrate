@@ -152,7 +152,7 @@ def test_the_edit_endpoint(tmp_path):
     from narrate.studio.server import create_app
 
     (tmp_path / "s.md").write_text(SCRIPT)
-    with TestClient(create_app(tmp_path / "s.md", "silent")) as client:
+    with TestClient(create_app(tmp_path / "s.md", "silent", hosts=["testserver"])) as client:
         change = client.post("/api/edit", json={"text": SCRIPT, "line": 5, "set": {"position": "bottom"}}).json()
         assert apply(SCRIPT, change).split("\n")[4] == "![cover bottom](photo.jpg)"
         refused = client.post("/api/edit", json={"text": SCRIPT, "line": 7, "set": {"fit": "cover"}})

@@ -98,7 +98,7 @@ def test_peaks_are_the_lowest_and_highest_samples():
 
 def test_the_peaks_endpoint(project):
     (project / "s.md").write_text(SCRIPT)
-    with TestClient(create_app(project / "s.md", "silent")) as client:
+    with TestClient(create_app(project / "s.md", "silent", hosts=["testserver"])) as client:
         assert client.get("/api/peaks/0123456789abcdef").status_code == 404
         analysis = client.post("/api/analyse", json={"text": SCRIPT}).json()
         scene = analysis["scenes"][0]

@@ -28,4 +28,14 @@ the git history.
 - **An agent skill** (`skills/narrate/`) that teaches AI agents to make videos
   with narrate.
 
+### Security
+
+- **The studio and the service keep web pages out:** they answer only to
+  `localhost`, `127.0.0.1`, `[::1]` and their `--host` address, and refuse
+  changes sent from another site's page. A page open in your browser can no
+  longer read your project or start builds through them.
+- **`--allow-host`:** `narrate studio` and `narrate serve` answer to more host
+  names with it. A service on `0.0.0.0` whose clients call it by its
+  machine's name or address needs it.
+
 [Unreleased]: https://github.com/bricef/narrate/commits/main

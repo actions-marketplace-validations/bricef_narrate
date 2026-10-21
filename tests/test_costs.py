@@ -128,13 +128,15 @@ def test_prices_come_from_a_file(tmp_path):
 def test_a_job_is_priced_at_the_prices_it_ran_under(tmp_path, monkeypatch):
     monkeypatch.setenv("NARRATE_CACHE", str(tmp_path / "cache"))
     project = {"script": "a.md", "text": "---\nsize: 320x180\n---\n\nHello there.\n"}
-    with TestClient(create_app(tmp_path / "data", "silent", prices=Prices("USD", 0.3, 3600.0))) as client:
+    app = create_app(tmp_path / "data", "silent", prices=Prices("USD", 0.3, 3600.0), hosts=["testserver"])
+    with TestClient(app) as client:
         first = wait(client, client.post("/v1/jobs", json={"project": project}).json()["id"], "done")
     usage = first["usage"]
     assert usage["cpu_seconds"] > 0 and usage["cost"]["compute"] == pytest.approx(usage["cpu_seconds"], rel=1e-3)
     assert usage["cost"]["prices"]["cpu_per_hour"] == 3600.0
     # The prices change: the first job's cost doesn't
-    with TestClient(create_app(tmp_path / "data", "silent", prices=Prices("USD", 0.3, 0.0))) as client:
+    app = create_app(tmp_path / "data", "silent", prices=Prices("USD", 0.3, 0.0), hosts=["testserver"])
+    with TestClient(app) as client:
         second = wait(client, client.post("/v1/jobs", json={"project": project}).json()["id"], "done")
         assert second["usage"]["cost"]["compute"] == 0
         assert client.get(f"/v1/jobs/{first['id']}").json()["usage"]["cost"] == usage["cost"]
@@ -159,7 +161,7 @@ def test_usage_reports_by_day_and_by_job(tmp_path):
     b = job("2026-10-01", 50, 50.0, 0.025, 10.0)
     c = job("2026-10-03", 10, 10.0, 0.013, 5.0)
     store.db.close()
-    with TestClient(create_app(tmp_path / "data", "silent")) as client:
+    with TestClient(create_app(tmp_path / "data", "silent", hosts=["testserver"])) as client:
         days = client.get("/v1/usage", params={"by": "day"}).json()
         assert [(r["day"], r["jobs"], r["characters"], r["credits"]) for r in days["rows"]] == [
             ("2026-10-01", 2, 150, 150.0), ("2026-10-03", 1, 10, 10.0)]

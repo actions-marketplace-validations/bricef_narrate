@@ -96,7 +96,7 @@ def wait(client: TestClient, job_id: str, state: str, seconds: float = 60) -> di
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("NARRATE_CACHE", str(tmp_path / "cache"))
-    with TestClient(create_app(tmp_path / "data", "silent")) as c:
+    with TestClient(create_app(tmp_path / "data", "silent", hosts=["testserver"])) as c:
         yield c
 
 
@@ -207,7 +207,7 @@ def test_a_restart_fails_jobs_that_were_running_and_runs_queued_ones(tmp_path, m
     store.update(running["id"], state="running")
     queued = store.new_job("build", {"project": {"script": "b.md", "text": "Hello.\n"}, "options": {}})
     store.db.close()
-    with TestClient(create_app(tmp_path / "data", "silent")) as client:
+    with TestClient(create_app(tmp_path / "data", "silent", hosts=["testserver"])) as client:
         failed = client.get(f"/v1/jobs/{running['id']}").json()
         assert failed["state"] == "failed" and "interrupted" in failed["errors"][0]["message"]
         assert wait(client, queued["id"], "done")["outputs"]["video"].endswith("/b.mp4")

@@ -23,7 +23,7 @@ def test_the_live_page_is_the_builds_with_mermaid_from_the_studio():
 
 def test_the_studio_serves_narrates_own_mermaid(tmp_path):
     (tmp_path / "s.md").write_text("Hi.\n")
-    client = TestClient(create_app(tmp_path / "s.md", "silent"))
+    client = TestClient(create_app(tmp_path / "s.md", "silent", hosts=["testserver"]))
     served = client.get(f"/mermaid/{mermaid.MERMAID_VERSION}/mermaid.min.js")
     assert served.status_code == 200 and served.headers["content-type"].startswith("text/javascript")
     assert served.content == mermaid.ensure().read_bytes()

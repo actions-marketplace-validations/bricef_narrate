@@ -67,7 +67,7 @@ def test_the_analysis_counts_characters_per_scene(tmp_path):
 def test_the_endpoints(tmp_path, monkeypatch):
     monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
     (tmp_path / "s.md").write_text("Hello there.\n")
-    with TestClient(create_app(tmp_path / "s.md", "silent")) as client:
+    with TestClient(create_app(tmp_path / "s.md", "silent", hosts=["testserver"])) as client:
         assert client.post("/api/scenes/1/audio", json={"id": "stale"}).status_code == 409
         analysis = client.post("/api/analyse", json={"text": "Hello there.\n"}).json()
         track = client.post("/api/scenes/1/audio", json={"id": analysis["id"]}).json()
