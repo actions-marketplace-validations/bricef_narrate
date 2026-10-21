@@ -540,7 +540,7 @@ renders, so for builds that change only when you say so, pin a
 [release](https://github.com/bricef/narrate/releases):
 
 ```yaml
-        uses: bricef/narrate@v0.1.0
+        uses: bricef/narrate@v0.1.1
 ```
 
 | Input | Default | Meaning |

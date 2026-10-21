@@ -55,7 +55,7 @@ On Linux (tested on Ubuntu 24.04 and Debian 13):
 
 ```sh
 uv tool install --python 3.12 --with-executables-from playwright \
-    git+https://github.com/bricef/narrate@v0.1.0 # narrate, and Playwright's command
+    git+https://github.com/bricef/narrate@v0.1.1 # narrate, and Playwright's command
 playwright install --with-deps chromium          # headless Chromium; asks for sudo for its libraries
 sudo apt-get install -y fonts-dejavu-core        # the subtitle font
 narrate doctor                                   # checks the setup
@@ -67,7 +67,7 @@ On macOS, with [Homebrew](https://brew.sh/) installed:
 brew install uv ffmpeg-full                      # uv, and ffmpeg with subtitles and pitch
 brew install --cask font-dejavu                  # the subtitle font
 uv tool install --python 3.12 --with-executables-from playwright \
-    git+https://github.com/bricef/narrate@v0.1.0 # narrate, and Playwright's command
+    git+https://github.com/bricef/narrate@v0.1.1 # narrate, and Playwright's command
 playwright install chromium                      # headless Chromium
 narrate doctor                                   # checks the setup
 ```
@@ -138,7 +138,7 @@ alias narakeet-api-client='uv run --project ~/path/to/narrate narakeet-api-clien
 - **Docker:** `docker pull ghcr.io/bricef/narrate`.
 - **With uv:** run the `uv tool install` command again with the new
   release's tag, from [Releases](https://github.com/bricef/narrate/releases),
-  in place of `v0.1.0`. Then run `narrate doctor`. If it reports that
+  in place of `v0.1.1`. Then run `narrate doctor`. If it reports that
   Chromium is missing, run `playwright install chromium` again.
 - **From source:** `git pull && uv sync` in the checkout, then
   `uv run narrate doctor`. If it reports that Chromium is missing, run
