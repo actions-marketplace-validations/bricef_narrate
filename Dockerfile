@@ -6,6 +6,8 @@
 # The Kokoro model, music and synthesised speech are fetched or made on first
 # use under /cache, so a volume there keeps them between runs.
 # `docker build --target test .` runs the test suite against the image.
+# The licences of narrate and of the ffmpeg and mermaid.js it ships are in
+# /usr/share/doc/narrate.
 
 ARG PYTHON=3.12
 ARG DEBIAN=trixie
@@ -38,6 +40,29 @@ RUN ./configure --prefix=/opt/ffmpeg --enable-gpl \
 # The Debian packages that provide the libraries ffmpeg links to, for the final image
 RUN ldd /opt/ffmpeg/bin/ffmpeg | awk '$3 ~ /^\// {print $3}' | xargs readlink -f | xargs dpkg -S \
         | cut -d: -f1 | sort -u > /opt/ffmpeg/packages
+# ffmpeg's licences, and where its source and build configuration are: with
+# --enable-gpl the binary is under the GPL, which asks for both
+RUN mkdir /opt/ffmpeg/doc && cp LICENSE.md COPYING.* /opt/ffmpeg/doc/ \
+ && cp /opt/ffmpeg/packages /opt/ffmpeg/doc/debian-packages \
+ && printf '%s\n' \
+        "/usr/local/bin/ffmpeg is FFmpeg ${FFMPEG_VERSION}, built unmodified from the source tarball" \
+        "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz" \
+        "(SHA-256 ${FFMPEG_SHA256})." \
+        "" \
+        "It is configured with --enable-gpl, for x264 and rubberband, so it is under the" \
+        "GNU GPL version 2 or later. LICENSE.md and the COPYING files here come from" \
+        "that tarball." \
+        "" \
+        "The build configuration is the ffmpeg stage of the Dockerfile in" \
+        "https://github.com/bricef/narrate, and 'ffmpeg -buildconf' prints the options" \
+        "it was configured with." \
+        "" \
+        "The libraries it links to are the Debian packages in debian-packages: each" \
+        "one's licence is in /usr/share/doc/PACKAGE/copyright, and its source is in" \
+        "Debian's archive." \
+        "" \
+        "This software is based in part on the work of the Independent JPEG Group." \
+        > /opt/ffmpeg/doc/README
 
 # narrate and its Python dependencies in /opt/narrate, and Playwright's headless Chromium
 FROM ${REGISTRY}/python:${PYTHON}-slim-${DEBIAN} AS python
@@ -53,6 +78,12 @@ RUN PLAYWRIGHT_BROWSERS_PATH=/opt/playwright /opt/narrate/bin/playwright install
 # mermaid.js for render:mermaid, checked against narrate's pinned SHA-256
 RUN NARRATE_TOOLS=/tmp/tools /opt/narrate/bin/python -c \
         "import shutil; from narrate import mermaid; shutil.copy(mermaid.ensure(), '/opt/mermaid.min.js')"
+# and its licence, from the same release. The hash is the licence text's, so it
+# only needs updating if a new mermaid release changes that text.
+ARG MERMAID_LICENSE_SHA256=ec9fb67dcb25eccc416ed56e1aab819222c805a2a4bfe4cb19e7556bf2ffde80
+RUN /opt/narrate/bin/python -c "import urllib.request; from narrate.mermaid import MERMAID_VERSION as v; \
+        urllib.request.urlretrieve(f'https://cdn.jsdelivr.net/npm/mermaid@{v}/LICENSE', '/opt/mermaid-LICENSE')" \
+ && echo "${MERMAID_LICENSE_SHA256}  /opt/mermaid-LICENSE" | sha256sum -c -
 
 FROM ${REGISTRY}/python:${PYTHON}-slim-${DEBIAN} AS runtime
 # Headless Chromium's libraries (Playwright's list for Debian 13), fonts that
@@ -75,6 +106,10 @@ COPY --from=ffmpeg /opt/ffmpeg/bin/ffmpeg /usr/local/bin/ffmpeg
 COPY --from=python /opt/playwright /opt/playwright
 COPY --from=python /opt/narrate /opt/narrate
 COPY --from=python /opt/mermaid.min.js /opt/mermaid.min.js
+# narrate's licence, and those of the ffmpeg and mermaid.js it ships
+COPY LICENSE /usr/share/doc/narrate/
+COPY --from=ffmpeg /opt/ffmpeg/doc /usr/share/doc/narrate/ffmpeg
+COPY --from=python /opt/mermaid-LICENSE /usr/share/doc/narrate/mermaid/LICENSE
 # Everything narrate writes at run time goes under /cache (or /tmp), so any
 # user id works: pass --user to own the files it writes in /work
 ENV PATH=/opt/narrate/bin:$PATH \
