@@ -1,5 +1,8 @@
 # narrate
 
+[![Watch the video](https://img.youtube.com/vi/NyzvmIZcxBs/hqdefault.jpg)](https://youtu.be/NyzvmIZcxBs)
+
+
 narrate turns a Markdown script and a folder of pictures and clips into a
 narrated video, on your own computer. You write the scenes and the words; it
 generates the voice-over, lays out the pictures, slides and subtitles, and
