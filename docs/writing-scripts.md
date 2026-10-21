@@ -577,8 +577,8 @@ Five hundred and thirty-one pull requests merged. <mark name="fleet"/>A hundred 
     plain narration, a mark is narrate's own: the paragraph keeps its other
     markup.
   - **Names:** letters, digits, `-` and `_`, starting with a letter.
-  - **In the studio:** **Add mark** (Alt-M) puts one before the word at the
-    cursor, named after the word.
+  - **In the studio:** **Add mark** (Alt-M, or Option-M on a Mac) puts one
+    before the word at the cursor, named after the word.
 - **Timing:** times count from the page's start, which matters when it follows
   another picture in the scene.
 - **Not here:** pages in merged scenes (`narration-mode: merge`) get no cues.

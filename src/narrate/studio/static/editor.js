@@ -217,8 +217,17 @@ export function createEditor(parent, text, { onChange, onSave, onMark = () => {}
       labels,
       lintGutter(),
       EditorView.lineWrapping,
-      keymap.of([indentWithTab, { key: "Mod-s", preventDefault: true, run: () => { onSave(); return true; } },
-                 { key: "Alt-m", preventDefault: true, run: () => { onMark(); return true; } }]),
+      keymap.of([indentWithTab, { key: "Mod-s", preventDefault: true, run: () => { onSave(); return true; } }]),
+      // Alt-M, by the key rather than its character: on a Mac, Option-M types "µ", which a keymap's
+      // Alt-m never matches. keyCode is the M key in any layout; AltGr (Ctrl and Alt) is left to type.
+      EditorView.domEventHandlers({
+        keydown: (e) => {
+          if (e.keyCode !== 77 || !e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return false;
+          e.preventDefault();
+          onMark();
+          return true;
+        },
+      }),
       EditorView.updateListener.of((update) => {
         if (update.docChanged && !update.transactions.some((t) => t.annotation(fromDisk))) onChange(update);
         if (update.docChanged || update.selectionSet) {
