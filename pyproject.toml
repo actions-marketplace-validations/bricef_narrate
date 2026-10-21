@@ -10,6 +10,7 @@ keywords = ["markdown", "video", "narration", "text-to-speech", "voice-over", "s
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
+    "Operating System :: MacOS",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
@@ -50,7 +51,7 @@ dev = [
 ]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]  # the first to write PEP 639 licence metadata by default
 build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
