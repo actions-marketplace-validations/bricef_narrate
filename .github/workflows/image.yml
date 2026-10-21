@@ -18,10 +18,19 @@ on:
       - skills/**
       - action.yml
       - .github/workflows/image.yml
+  # Pull requests from forks that change the image or the action; this
+  # repository's own branches are built on push
+  pull_request:
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - action.yml
+      - .github/workflows/image.yml
   workflow_dispatch:
 
 jobs:
   image:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork
     runs-on: ubuntu-latest
     permissions:
       contents: read

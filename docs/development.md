@@ -12,6 +12,7 @@ them:
 | Recipe | Does |
 | --- | --- |
 | `just test [ARGS]` | run the test suite (`ARGS` go to pytest) |
+| `just lint [ARGS]` | check the code with ruff (`ARGS` go to `ruff check`, such as `--fix`) |
 | `just build SCRIPT [ARGS]` | render a script |
 | `just studio SCRIPT [ARGS]` | edit a script in narrate studio, opened in a browser |
 | `just demo` | render `examples/demo` with Kokoro and ElevenLabs into `out/` |
@@ -82,7 +83,7 @@ The `Dockerfile` has four stages:
    that download models or call ElevenLabs.
 
 ```sh
-just image          # docker build -t narrate:local .
+just image          # docker build --target runtime -t narrate:local .
 just image-test     # docker build --target test .
 ```
 
@@ -119,14 +120,25 @@ with Playwright, so neither needs Node.
 
 ## CI and releases
 
+`.github/workflows/checks.yml` runs on every pull request, forks' included,
+and on pushes to `main`. It takes a few minutes:
+- **Lint:** `ruff check`, as `just lint` runs it. The rules are in
+  `pyproject.toml`.
+- **Tests:** the test suite on the runner, with headless Chromium and the
+  DejaVu fonts, without the `kokoro`, `stt`, `conformance` and `elevenlabs`
+  tests. uv's packages and narrate's downloads are cached between runs.
+
 `.github/workflows/image.yml` runs on pushes that touch the code, tests,
-examples, Dockerfile or action:
+examples, Dockerfile or action. It also runs on pull requests from forks that
+change the Dockerfile, the action or the workflow:
 
 1. Runs the test suite in the image.
-2. Builds the image.
-3. Renders `examples/demo` through the action with that image, keeping the
+2. Builds the image's `runtime` stage, the one that's published.
+3. Builds a short script with it the way the README does: the folder at
+   `/work`, a new cache volume and the runner's own user.
+4. Renders `examples/demo` through the action with that image, keeping the
    video as the `demo-video` artifact.
-4. On `main` and on `v*` tags only: publishes the image to
+5. On `main` and on `v*` tags only: publishes the image to
    `ghcr.io/bricef/narrate`, then renders the demo again with the published
    image. That second render pulls it the way other repositories do.
 

@@ -1,0 +1,62 @@
+name: Checks
+
+# ruff, and the test suite on the runner without the tests that download models
+# or call ElevenLabs: a few minutes, where image.yml takes 4 to 17. It runs on
+# every pull request, forks included, since image.yml runs on pushes to this
+# repository's branches.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A new push to a pull request replaces its run
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: ruff
+        run: uv run --locked --only-group dev ruff check --output-format github
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - run: uv sync --locked
+
+      - name: Install headless Chromium and the fonts
+        run: |
+          uv run playwright install --with-deps --only-shell chromium
+          sudo apt-get install -y --no-install-recommends fonts-dejavu-core
+
+      # ffmpeg, mermaid.js and the music, which narrate fetches or makes on first use
+      - name: Cache narrate's downloads
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/narrate-tools
+          key: narrate-tools-${{ runner.os }}-${{ hashFiles('src/narrate/media.py', 'src/narrate/mermaid.py', 'src/narrate/music.py') }}
+
+      # As the image's test stage: no Kokoro or speech-to-text models, no Narakeet renders, no ElevenLabs
+      - name: Run the tests
+        env:
+          NARRATE_TOOLS: ${{ runner.temp }}/narrate-tools
+        run: uv run pytest -q -m "not kokoro and not elevenlabs and not conformance and not stt"
