@@ -5,6 +5,8 @@ Notable changes to narrate, newest first. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-21
+
 ### Added
 
 - **A major tag for the GitHub Action:** `uses: bricef/narrate@v0` follows the
@@ -24,6 +26,11 @@ Notable changes to narrate, newest first. The format follows
 - **The GitHub Action is named "narrate video",** so that it can be listed on
   the GitHub Marketplace, which refuses `narrate`: an organisation has that
   name. `uses: bricef/narrate@…` doesn't change.
+- **Dependencies:** Pillow 13 (narrate now needs it), Playwright 1.64 with
+  its newer headless Chromium, Starlette 1.8, NumPy 2.5.4 and certifi
+  2026.10.19. From a checkout or a uv install, run
+  `playwright install chromium` again after updating if `narrate doctor`
+  says Chromium is missing.
 
 ## [0.1.0] - 2026-10-21
 
@@ -109,5 +116,6 @@ and a `.env` sets only `ELEVENLABS_API_KEY`.
 - **Job outputs:** `narrate serve` serves only the files a job lists as its
   outputs, not the rest of the job's folder, and serves them sandboxed.
 
-[Unreleased]: https://github.com/bricef/narrate/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/bricef/narrate/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/bricef/narrate/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/bricef/narrate/releases/tag/v0.1.0
