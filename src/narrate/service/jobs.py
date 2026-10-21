@@ -267,15 +267,27 @@ class Runner:
         return found
 
     def output(self, job_id: str, name: str) -> Path | None:
-        """An output's file, by the name in its address; None if there's no such output."""
+        """An output's file, by the name in its address; None unless the job lists it (#93). Its path, links
+        resolved, must be inside the folder outputs of its kind are in, not elsewhere in the job's folder."""
+        job = self.store.job(job_id)
+        if job is None or name not in _listed(job["outputs"]):
+            return None
         folder = self.store.folder(job_id)
-        base = folder / "project" if name.startswith(GENERATED + "/") else folder / "out"
-        path = (base / name).resolve()
-        return path if path.is_relative_to(folder.resolve()) and path.is_file() else None
+        captured = name.startswith(GENERATED + "/")
+        base = (folder / "project" / GENERATED if captured else folder / "out").resolve()
+        path = (folder / "project" / name if captured else folder / "out" / name).resolve()
+        return path if path.is_relative_to(base) and path.is_file() else None
 
 
 def output_url(job_id: str, name: str) -> str:
     return f"/v1/jobs/{job_id}/outputs/{quote(name)}"
+
+
+def _listed(outputs: dict | None) -> set[str]:
+    """The names a job's outputs are served by, its captures' included."""
+    urls = [url for value in (outputs or {}).values()
+            for url in (value.values() if isinstance(value, dict) else [value])]
+    return {unquote(url.rsplit("/outputs/", 1)[1]) for url in urls}
 
 
 def _versions(folder: Path) -> dict[str, tuple]:

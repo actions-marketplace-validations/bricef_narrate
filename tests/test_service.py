@@ -200,6 +200,24 @@ def test_a_job_reads_no_env_file(client, tmp_path, monkeypatch):
     assert done["notes"] == []  # not read at all: a .env read would warn of NARRATE_FFMPEG
 
 
+def test_only_a_jobs_outputs_are_served(client):
+    """Not the rest of its folder, by a name that climbs out of its outputs or a link that leads out (#93)."""
+    files = {"hi.md": b"Hello there.\n", ".narrate/generated/web/sent.png": png("blue")}
+    job = client.post("/v1/jobs", json={"kind": "audio", "options": {"format": "wav"},
+                                        "project": {"script": "hi.md", "files": upload(client, files)}}).json()
+    done = wait(client, job["id"], "done")
+    assert client.get(done["outputs"]["audio"]).status_code == 200
+    outputs = f"/v1/jobs/{job['id']}/outputs"
+    for name in (".narrate/generated/%2e%2e/%2e%2e/hi.md", ".narrate/generated/%2e%2e/%2e%2e/%2e%2e/usage.json",
+                 "%2e%2e/usage.json", "%2e%2e/project/hi.md",
+                 ".narrate/generated/web/sent.png"):  # sent with the project, not taken by the job
+        assert client.get(f"{outputs}/{name}").status_code == 404, name
+    made = client.app.state.store.folder(job["id"]) / "out" / "hi.wav"
+    made.unlink()
+    made.symlink_to(made.parent.parent / "usage.json")
+    assert client.get(done["outputs"]["audio"]).status_code == 404
+
+
 def test_files_must_be_uploaded_first_and_match_their_hash(client):
     absent = sha(b"not uploaded")
     refused = client.post("/v1/jobs", json={"kind": "build", "project": {"script": "a.md", "files": {"a.md": absent}}})
