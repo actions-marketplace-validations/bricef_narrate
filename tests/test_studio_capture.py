@@ -71,8 +71,9 @@ def colour_of(path) -> tuple[int, ...]:
     return tuple(int(v) for v in np.asarray(Image.open(path).convert("RGB"))[50, 50])
 
 
-def test_capture_then_retake_a_web_page(tmp_path, site, page):  # noqa: F811
+def test_capture_then_retake_a_web_page(tmp_path, site, page, monkeypatch):  # noqa: F811
     source, url = site
+    monkeypatch.setenv("NARRATE_ALLOW_LOCAL_NETWORK", "1")  # the site is on this machine; the studio's builds inherit it
     project = tmp_path / "project"
     project.mkdir()
     script = project / "s.md"

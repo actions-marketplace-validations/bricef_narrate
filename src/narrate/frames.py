@@ -23,6 +23,8 @@ from pygments.style import Style
 from pygments.token import Comment, Generic, Keyword, Name, Number, Operator, String
 from pygments.util import ClassNotFound
 
+from .network import Failure, Guard, Unreachable
+
 OBJECT_POSITION = {
     "center": "50% 50%", "top-left": "0 0", "left": "0 50%", "right": "100% 50%",
     "top": "50% 0", "bottom": "50% 100%",
@@ -223,12 +225,19 @@ def frame_html(spec: FrameSpec, width: int, height: int, url=file_uri) -> str:
 
 
 class FrameRenderer:
-    """One headless Chromium page reused for every frame of a build."""
+    """One headless Chromium page reused for every frame of a build.
 
-    def __init__(self, width: int, height: int, workdir: Path):
+    Pages reach only public addresses unless `local_network` (network.py).
+    What each page tried to reach and couldn't is kept in `failures`, by page."""
+
+    def __init__(self, width: int, height: int, workdir: Path, local_network: bool = False):
         self.width, self.height, self.workdir = width, height, workdir
+        self.local_network = local_network
+        self.failures: dict[str, list[Failure]] = {}
         self._count = 0
         self._pw = self._browser = self._page = None
+        self._guard: Guard | None = None
+        self._last = "a page"  # the page loaded last, which anything asked for since is put down to
         self._pages: dict[int, Any] = {}  # pages for render blocks, by device scale
 
     def __enter__(self) -> FrameRenderer:
@@ -239,9 +248,13 @@ class FrameRenderer:
         self._pw = sync_playwright().start()
         try:
             # Pages are file:// URLs that load project images, CSS and fonts from disk
-            self._browser = launch_chromium(self._pw, ["--allow-file-access-from-files"])
+            args = ["--allow-file-access-from-files"]
+            if not self.local_network:
+                self._guard = Guard().__enter__()
+                args += self._guard.chromium_args()
+            self._browser = launch_chromium(self._pw, args)
         except Exception:
-            self._pw.stop()
+            self.__exit__()
             raise
         self._page = self._browser.new_page(
             viewport={"width": self.width, "height": self.height}, device_scale_factor=1
@@ -253,11 +266,14 @@ class FrameRenderer:
             self._browser.close()
         if self._pw:
             self._pw.stop()
+        if self._guard:
+            self._guard.__exit__()
 
     def render(self, spec: FrameSpec, out: Path) -> Path:
         self._load(self._page, frame_html(spec, self.width, self.height))
         self._page.evaluate(_SHRINK_JS)
         self._page.screenshot(path=str(out), omit_background=spec.over_video, type="png")
+        self._check("a slide")
         return out
 
     def screenshot(self, page_html: str, out: Path, *, scale: int = 1, script: str | None = None,
@@ -270,13 +286,16 @@ class FrameRenderer:
         result = page.evaluate(script, arg) if script else None
         page.evaluate("document.fonts.ready.then(() => true)")
         page.screenshot(path=str(out), type="png")
+        self._check("a render block")
         return result
 
     def evaluate(self, page_html: str, script: str, arg: Any = None) -> Any:
         """Load a page and run `script` on it, without capturing anything."""
         page = self._render_page(1)
         self._load(page, page_html)
-        return page.evaluate(script, arg)
+        result = page.evaluate(script, arg)
+        self._check("a render block")
+        return result
 
     @contextmanager
     def page(self, path: Path, viewport: tuple[int, int], scale: float = 1.0, init_script: str | None = None):
@@ -284,6 +303,7 @@ class FrameRenderer:
 
         Time in the page moves only when the caller advances it, so timers,
         requestAnimationFrame and Date are deterministic (see pages.py)."""
+        self._check(self._last)
         context = self._browser.new_context(viewport={"width": viewport[0], "height": viewport[1]},
                                             device_scale_factor=scale)
         try:
@@ -297,19 +317,34 @@ class FrameRenderer:
             yield page
         finally:
             context.close()
+            self._check(path.name)
 
     @contextmanager
-    def web(self, viewport: tuple[int, int], scale: float, color_scheme: str = "light",
+    def web(self, url: str, viewport: tuple[int, int], scale: float, color_scheme: str = "light",
             credentials: dict[str, str] | None = None):
-        """A fresh page for capturing a live web page (render:web): its own viewport,
-        pixel density, colour scheme and Basic-auth credentials, no cookies, real time."""
+        """A fresh page for capturing a live web page (render:web) at `url`: its own viewport,
+        pixel density, colour scheme and Basic-auth credentials, no cookies, real time.
+
+        Raises network.Unreachable when the page itself couldn't be reached: refused as a local
+        address, or not found."""
+        from playwright.sync_api import Error
+
+        self._check(self._last)
         context = self._browser.new_context(
             viewport={"width": viewport[0], "height": viewport[1]}, device_scale_factor=scale,
             color_scheme=color_scheme, http_credentials=credentials)
         try:
             yield context.new_page()
+        except Error as e:
+            # Chromium says only that the proxy failed it; the proxy knows why. Nothing else
+            # loads before the page, so what failed is the page, or where it redirected
+            failed = self._check(url)
+            if "ERR_SOCKS_CONNECTION_FAILED" in str(e) and failed:
+                raise Unreachable(next((f for f in failed if f.local), failed[0])) from None
+            raise
         finally:
             context.close()
+            self._check(url)
 
     def _render_page(self, scale: int):
         if scale not in self._pages:
@@ -318,8 +353,19 @@ class FrameRenderer:
         return self._pages[scale]
 
     def _load(self, page, page_html: str) -> None:
+        self._check(self._last)
         self._count += 1
         page_path = self.workdir / f"frame-{self._count:04d}.html"
         page_path.write_text(page_html, encoding="utf-8")
         page.goto(page_path.as_uri(), wait_until="load")
         page.evaluate("document.fonts.ready.then(() => true)")
+
+    def _check(self, page: str) -> list[Failure]:
+        """What pages couldn't reach since the last check (network.py), kept under `page`."""
+        failed = self._guard.take() if self._guard else []
+        for failure in failed:
+            kept = self.failures.setdefault(page, [])
+            if failure not in kept:
+                kept.append(failure)
+        self._last = page
+        return failed

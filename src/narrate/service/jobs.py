@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote, unquote
 
+from .. import network
 from .. import project as zips
 from ..child import Child
 from . import options as job_options
@@ -44,12 +45,15 @@ def view(job: dict) -> dict:
 
 
 class Runner:
-    """Runs jobs `workers` at a time, with `engine` unless a job asks for another."""
+    """Runs jobs `workers` at a time, with `engine` unless a job asks for another. Their pages reach only
+    public addresses unless `local_network`: the service's choice, never a job's (network.py)."""
 
-    def __init__(self, store: Store, engine: str = "kokoro", workers: int = 1, prices: Prices | None = None):
+    def __init__(self, store: Store, engine: str = "kokoro", workers: int = 1, prices: Prices | None = None,
+                 local_network: bool = False):
         self.store = store
         self.engine = engine
         self.prices = prices
+        self.local_network = local_network
         self.workers = max(1, workers)
         self.queue: asyncio.Queue[str] = asyncio.Queue()
         self.children: dict[str, Child] = {}
@@ -172,7 +176,9 @@ class Runner:
         captures = folder / "project" / GENERATED
         before = _versions(captures)
         cwd = folder / "project" if (folder / "project").is_dir() else folder
-        child = Child(args, cwd=cwd, on_progress=lambda p: self._set(job_id, progress=p))
+        # Set either way: the service's flag decides for its jobs, not its own environment
+        child = Child(args, cwd=cwd, on_progress=lambda p: self._set(job_id, progress=p),
+                      env={network.ENV: "1" if self.local_network else "0"})
         self.children[job_id] = child
         try:
             outcome = await child.run()

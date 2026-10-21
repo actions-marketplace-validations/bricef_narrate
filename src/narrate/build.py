@@ -24,7 +24,7 @@ from typing import Any, Callable, Collection
 
 import numpy as np
 
-from . import media, motion, music, pages, render, subtitles, voicemap
+from . import media, motion, music, network, pages, render, subtitles, voicemap
 from .config import (
     BUILTIN_MUSIC, FPS, XFADE, ConfigError, Settings, SubtitleConfig, parse_pitch, parse_transition, parse_color, parse_number, parse_size, parse_speed,
     OverlaySpec, parse_overlay, parse_time, parse_volume, settings_from_header, subtitles_with_mode,
@@ -214,10 +214,13 @@ def apply_gain(samples: np.ndarray, volume: float | str) -> np.ndarray:
 class Builder:
     def __init__(self, script: Script, synth: Synth, *, log: Callable[[str], None] | None = None,
                  jobs: int | None = None, regenerate: bool = False, measure_pages: bool = True,
-                 scenes: Collection[int] | None = None, subtitles: str | None = None, transcript: bool = False):
+                 scenes: Collection[int] | None = None, subtitles: str | None = None, transcript: bool = False,
+                 local_network: bool = False):
         self.script = script
         self.measure_pages = measure_pages  # load HTML scenes to time them (the studio's previews don't)
         self.regenerate = regenerate  # make stored render outputs (render:web) again
+        # Let captured pages reach this machine and private networks, not just public addresses (#93)
+        self.local_network = local_network or network.allowed_by_environment()
         self.rendered: dict[str, int] = {}  # render blocks drawn afresh by this build, by renderer (#81)
         self.synth = synth
         # Encodes run in a thread pool alongside narration; x264 threads each one too
@@ -275,7 +278,8 @@ class Builder:
             return self._frames
         if self._probe is None:
             self._probe_dir = Path(tempfile.mkdtemp(prefix="narrate-pages-"))
-            self._probe = FrameRenderer(self.settings.width, self.settings.height, self._probe_dir).__enter__()
+            self._probe = FrameRenderer(self.settings.width, self.settings.height, self._probe_dir,
+                                        self.local_network).__enter__()
         return self._probe
 
     # -- helpers -------------------------------------------------------------
@@ -756,7 +760,8 @@ class Builder:
         out_frame = 0  # in what's rendered
         placed: list[tuple[ScenePlan, int, int, int]] = []  # each scene: where in the output, how long, where in the whole
         # Scene k's segments encode in the pool while scene k+1 is narrated
-        with ThreadPoolExecutor(self.jobs) as pool, FrameRenderer(s.width, s.height, work) as renderer:
+        with ThreadPoolExecutor(self.jobs) as pool, FrameRenderer(s.width, s.height, work,
+                                                                  self.local_network) as renderer:
             self._frames = renderer
             self._render_blocks(renderer)
             for plan, rendered in self._planned(work):
@@ -785,6 +790,8 @@ class Builder:
             video_layers = self._video_overlays(placed, renderer, work)
             scene_segments = [[f.result() for f in futures] for futures in pending]
             self._frames = None
+        self.notes.update(network.note(page, f.target) for page, failed in renderer.failures.items()
+                          for f in failed if f.local)
 
         total = out_frame / FPS
         audio = np.concatenate(audio_parts)
@@ -1062,7 +1069,8 @@ class Builder:
                 requests.append((text, voice, speed))
                 return np.zeros(1, dtype=np.float32)
 
-        shadow = Builder(dataclasses.replace(self.script, warnings=[]), Recorder(), log=lambda _: None, jobs=1)
+        shadow = Builder(dataclasses.replace(self.script, warnings=[]), Recorder(), log=lambda _: None, jobs=1,
+                         local_network=self.local_network)
         scenes = [scene for scene in self.script.scenes if self.selected is None or scene.index in self.selected]
         try:
             for _ in shadow.plans(scenes, work):
