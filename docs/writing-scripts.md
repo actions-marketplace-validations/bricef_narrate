@@ -482,6 +482,11 @@ https://example.com
 - **Privacy:** the page opens with no cookies or saved logins. Credentials come
   only from the environment variable that `auth` names; the secret never goes
   in the script or the saved note.
+- **Public pages only:** a build reaches public addresses, not this machine
+  or a private network. To capture your own dev server, at
+  `http://localhost:3000` say, build with `--allow-local-network`
+  ([Build a video](building.md#build-a-video)). Without it, the build stops
+  and names the address.
 - `narrate check` validates the settings without fetching anything.
 
 ## Show animated HTML scenes
@@ -535,6 +540,10 @@ Then its subtitle, as this paragraph begins.
 - **Limits:** a page's own sound, and `<video>` or `<audio>` inside it, aren't
   captured or kept in time. Keep its files local; anything fetched from the
   network slows capture and ties the build to the network.
+- **Local addresses:** a page can't load anything from this machine or a
+  private network: frames, fetches, pictures, scripts and sockets are all
+  refused, and the build notes each address. `--allow-local-network` allows
+  them, as for `render:web`.
 - HTML scenes are narrate's own; Narakeet would read the line as narration.
 
 ### Time a page to the narration
@@ -657,6 +666,7 @@ through wherever the page is transparent.
 - **Speed:** a page that never changes is captured once. A moving one, like a
   ticker, is captured frame by frame, at about twice real time, as HTML scenes
   are. Keep its files local; anything fetched from the network slows capture.
+  Like an HTML scene, it can't reach this machine or a private network.
 - Audio builds ignore overlays. Overlays are narrate's own; Narakeet would
   read the line as narration.
 

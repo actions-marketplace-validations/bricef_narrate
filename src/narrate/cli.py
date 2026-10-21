@@ -125,7 +125,7 @@ def _build(args: argparse.Namespace, path: Path) -> int:
     synth = make_synth(args.tts, args.tts_model)
     log(f"speech: {synth.name}" + (f" ({synth.model})" if hasattr(synth, "model") else ""))
     builder = Builder(script, synth, log=log, jobs=args.jobs, regenerate=args.regenerate, scenes=args.scenes,
-                      subtitles=args.subtitles, transcript=args.transcript)
+                      subtitles=args.subtitles, transcript=args.transcript, local_network=args.allow_local_network)
     result = builder.build(out, workdir=Path(args.keep_work) if args.keep_work else None)
     _report(script, result.notes)
     _write_usage(args.usage, started, synth, rendered=builder.rendered, video_seconds=round(result.duration, 3))
@@ -381,7 +381,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
         print(f"error: {e}", file=sys.stderr)
         return 2
     serve(Path(args.data) if args.data else default_root(), args.host, args.port, args.tts, args.workers, prices,
-          args.allow_host)
+          args.allow_host, args.allow_local_network)
     return 0
 
 
@@ -481,6 +481,10 @@ def parser() -> argparse.ArgumentParser:
     build.add_argument("--keep-work", metavar="DIR", help="keep intermediate files in DIR")
     build.add_argument("--regenerate", action="store_true",
                        help="take web captures (render:web) again instead of reusing the stored ones")
+    build.add_argument("--allow-local-network", action="store_true",
+                       help="let captured pages reach this machine and private networks, as render:web of "
+                            "http://localhost:3000 needs (default: public addresses only; or "
+                            "$NARRATE_ALLOW_LOCAL_NETWORK=1)")
     build.add_argument("-j", "--jobs", type=int, help="parallel encodes (default: up to 4, or $NARRATE_JOBS)")
     build.add_argument("-q", "--quiet", action="store_true", help="print only warnings and errors")
     build.set_defaults(func=cmd_build)
@@ -540,6 +544,9 @@ def parser() -> argparse.ArgumentParser:
     serve.add_argument("--prices", metavar="FILE",
                        help="what speech and CPU time cost, to price each job: a YAML file with currency, "
                             "elevenlabs_per_1000_credits and cpu_per_hour")
+    serve.add_argument("--allow-local-network", action="store_true",
+                       help="let build jobs' pages reach this machine, the service included, and private "
+                            "networks (default: public addresses only, whatever a job asks)")
     serve.set_defaults(func=cmd_serve)
 
     frames = sub.add_parser("frames", help="a contact sheet of a video's frames, to review it without watching it")

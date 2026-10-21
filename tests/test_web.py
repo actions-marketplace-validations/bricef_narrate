@@ -79,7 +79,8 @@ def build(tmp_path: Path, block: str, regenerate: bool = False, name: str = "s")
     script = tmp_path / f"{name}.md"
     script.write_text(f"---\nsize: 320x180\n---\n\n{block}\n\n(duration: 1)\n")
     out = tmp_path / f"{name}.mp4"
-    Builder(parse_file(script), SilentSynth(), log=lambda _: None, regenerate=regenerate).build(out)
+    # The site stands in for one on the web, but it's on this machine: allowed (test_network.py)
+    Builder(parse_file(script), SilentSynth(), log=lambda _: None, regenerate=regenerate, local_network=True).build(out)
     return out
 
 

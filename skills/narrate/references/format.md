@@ -210,6 +210,8 @@ flowchart LR
   just a URL. Settings: `url`, `viewport`, `scale` (default 2), `color-scheme` (`light`, `dark`),
   `hide` (CSS selectors), `css`, `scroll-to` (text), `selector` (one element), `wait` (`load`,
   `networkidle`, or ms), `auth` (an environment variable holding `user:password`).
+- **Public addresses only:** pages a build captures can't reach this machine or a private network.
+  A dev server at `http://localhost:3000` needs `narrate build --allow-local-network`.
 
 ## 10. HTML scenes
 

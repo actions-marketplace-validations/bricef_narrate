@@ -190,6 +190,18 @@ can send requests to it too, so it checks where each request comes from (#93):
 - **No CORS:** it sends no CORS headers, so other sites' pages can't read its
   answers.
 
+A job's own pages run on the same machine, in the build's Chromium, so they
+could read the service too, or another client's jobs. They reach only public
+addresses (#93):
+- **Every connection is checked:** Chromium sends each one through a proxy
+  in the build, which resolves the name itself and connects only to a public
+  address it resolved. A name that resolves to a local address, a redirect
+  to one, and a page's own frames, fetches, pictures and sockets are all
+  refused. Files from the project load as before.
+- **The operator decides:** `narrate serve --allow-local-network` lets every
+  build job reach local and private addresses. A job can't ask for it, and
+  the service sets its jobs' `NARRATE_ALLOW_LOCAL_NETWORK` itself.
+
 ## Narakeet compatibility
 
 Not planned. Narakeet's flow maps onto this API, so a small adapter could be
@@ -205,9 +217,10 @@ Separate work, sketched here so the internal version doesn't close it off:
 - **Keys:** bearer tokens, scoped, stored hashed, each with limits:
   concurrent jobs, minutes per day, longest video, largest project.
 - **Isolation:** every job in its own container (not root, read-only image,
-  scratch on tmpfs). The only way out is an egress proxy that refuses
-  private, link-local and metadata addresses, so `render:web` can't reach
-  internal services. For untrusted users, gVisor or a microVM per job.
+  scratch on tmpfs). Captured pages already reach only public addresses
+  ([Isolation](#isolation)); the container's only way out would be an egress
+  proxy that does the same for everything else. For untrusted users, gVisor
+  or a microVM per job.
 - **Captured pages:** only project files may load, enforced in `pages.py`.
 - **Paying for speech:** keys brought per job, or the service's key with
   quotas per user.

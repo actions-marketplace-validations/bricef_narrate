@@ -61,10 +61,11 @@ async def _body(request: Request) -> dict:
 
 
 def create_app(root: Path, engine: str = "kokoro", workers: int = 1, prices: Prices | None = None,
-               hosts: Iterable[str] = LOCAL) -> Starlette:
-    """The service, keeping its data in `root` and answering to the host names in `hosts` only (#93)."""
+               hosts: Iterable[str] = LOCAL, local_network: bool = False) -> Starlette:
+    """The service, keeping its data in `root` and answering to the host names in `hosts` only (#93). Its
+    builds' pages reach only public addresses, unless `local_network`."""
     store = Store(root)
-    runner = Runner(store, engine, workers, prices)
+    runner = Runner(store, engine, workers, prices, local_network)
 
     async def index(request: Request) -> Response:
         return JSONResponse({"service": "narrate", "api": "/v1", "openapi": "/v1/openapi.json",
@@ -278,7 +279,7 @@ def server(app: Starlette, host: str, port: int):
 
 
 def serve(root: Path, host: str, port: int, engine: str = "kokoro", workers: int = 1,
-          prices: Prices | None = None, allow: Iterable[str] = ()) -> None:
+          prices: Prices | None = None, allow: Iterable[str] = (), local_network: bool = False) -> None:
     url = f"http://{'127.0.0.1' if host in ('0.0.0.0', '::') else host}:{port}/v1"
     print(f"narrate service at {url}, keeping its data in {root} (Ctrl-C to stop)", flush=True)
-    server(create_app(root, engine, workers, prices, allowed(host, allow)), host, port).run()
+    server(create_app(root, engine, workers, prices, allowed(host, allow), local_network), host, port).run()

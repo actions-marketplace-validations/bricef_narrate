@@ -213,27 +213,56 @@ def test_a_restart_fails_jobs_that_were_running_and_runs_queued_ones(tmp_path, m
         assert wait(client, queued["id"], "done")["outputs"]["video"].endswith("/b.mp4")
 
 
-def test_web_captures_come_back_as_outputs(client, tmp_path):
+@pytest.fixture
+def site(tmp_path):
+    """A web page on this machine, and what was asked of it."""
     root = tmp_path / "site"
     root.mkdir()
     (root / "page.html").write_text("<!doctype html><style>body { background: #00f }</style>")
+    asked: list[str] = []
 
     class Quiet(http.server.SimpleHTTPRequestHandler):
+        def do_GET(self):
+            asked.append(self.path)
+            super().do_GET()
+
         def log_message(self, *args):
             pass
 
-    site = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Quiet, directory=str(root)))
-    threading.Thread(target=site.serve_forever, daemon=True).start()
-    try:
-        text = f"---\nsize: 320x180\n---\n\n```render:web\nhttp://127.0.0.1:{site.server_address[1]}/page.html\n```\n\nA page.\n"
-        job = client.post("/v1/jobs", json={"project": {"script": "web.md", "text": text}}).json()
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Quiet, directory=str(root)))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{server.server_address[1]}/page.html", asked
+    server.shutdown()
+
+
+def web_project(url: str) -> dict:
+    return {"script": "web.md", "text": f"---\nsize: 320x180\n---\n\n```render:web\n{url}\n```\n\nA page.\n"}
+
+
+def test_web_captures_come_back_as_outputs(tmp_path, monkeypatch, site):
+    monkeypatch.setenv("NARRATE_CACHE", str(tmp_path / "cache"))
+    url, _ = site
+    # The site is on this machine, which only the service's own --allow-local-network lets jobs reach
+    with TestClient(create_app(tmp_path / "data", "silent", hosts=["testserver"], local_network=True)) as client:
+        job = client.post("/v1/jobs", json={"project": web_project(url)}).json()
         done = wait(client, job["id"], "done")
-    finally:
-        site.shutdown()
-    [(path, address)] = [(p, a) for p, a in done["outputs"]["captures"].items() if p.endswith(".png")]
-    assert path.startswith(".narrate/generated/web/")
-    picture = Image.open(io.BytesIO(client.get(address).content)).convert("RGB")
+        [(path, address)] = [(p, a) for p, a in done["outputs"]["captures"].items() if p.endswith(".png")]
+        assert path.startswith(".narrate/generated/web/")
+        picture = Image.open(io.BytesIO(client.get(address).content)).convert("RGB")
     assert picture.getpixel((10, 10)) == pytest.approx((0, 0, 255), abs=10)
+
+
+def test_a_job_cant_let_its_pages_reach_local_addresses(client, monkeypatch, site):
+    url, asked = site
+    refused = client.post("/v1/jobs", json={"project": web_project(url), "options": {"allow_local_network": True}})
+    assert refused.status_code == 400 and "allow_local_network" in refused.json()["error"]
+    # Nor does the service's own environment decide for its jobs: only its flag does
+    monkeypatch.setenv("NARRATE_ALLOW_LOCAL_NETWORK", "1")
+    job = client.post("/v1/jobs", json={"project": web_project(url)}).json()
+    failed = wait(client, job["id"], "failed")
+    [error] = failed["errors"]
+    assert "is a local address" in error["message"] and "--allow-local-network" in error["message"]
+    assert asked == []
 
 
 def test_every_option_is_a_flag_the_cli_takes():

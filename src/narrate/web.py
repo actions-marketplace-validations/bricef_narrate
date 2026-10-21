@@ -7,7 +7,8 @@ later builds, offline too, until `narrate build --regenerate` takes it again.
 The page loads in a fresh browser context: no cookies or stored logins, the
 requested viewport, pixel density and colour scheme, and Basic-auth
 credentials only from an environment variable named in the script, never the
-secret itself.
+secret itself. Like every page a build captures, it reaches only public
+addresses unless the build allows local ones (network.py).
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from .config import ConfigError, parse_size
+from .network import Unreachable
 from .render import Context, Renderer, RenderError, register
 from .script import Render
 
@@ -87,7 +89,7 @@ class Web(Renderer):
             credentials = {"username": user, "password": password}
         wait = str(s.get("wait", "load")).lower()
         try:
-            with ctx.frames.web(viewport, float(s.get("scale", 2)), str(s.get("color-scheme", "light")).lower(),
+            with ctx.frames.web(url, viewport, float(s.get("scale", 2)), str(s.get("color-scheme", "light")).lower(),
                                 credentials) as page:
                 response = page.goto(url, wait_until="networkidle" if wait == "networkidle" else "load",
                                      timeout=TIMEOUT)
@@ -114,5 +116,7 @@ class Web(Renderer):
                     target.screenshot(path=str(out), timeout=10_000)
                 else:
                     page.screenshot(path=str(out))
+        except Unreachable as e:
+            raise RenderError(f"render:web: couldn't capture {url}: {e}") from None
         except Error as e:
             raise RenderError(f"render:web: couldn't capture {url}: {str(e).splitlines()[0]}") from None
