@@ -43,6 +43,10 @@ and not a vulnerability:
   `NARRATE_ALLOW_LOCAL_NETWORK`, it lets the pages a build captures reach
   this machine and private networks. Only give it to builds whose scripts you
   trust.
+- **A `.env` can set the ElevenLabs key.** narrate reads
+  `ELEVENLABS_API_KEY` from a `.env` where it runs or beside the script, when
+  it isn't set already. So a project that isn't yours can choose the key a
+  build uses, unless you set your own.
 
 What does matter, for example:
 
@@ -55,6 +59,12 @@ What does matter, for example:
   `--allow-local-network`, or a `narrate serve` job that turns it on for
   itself. Builds send every connection through a proxy that resolves names
   itself and refuses addresses that aren't public. A way past it is a
+  vulnerability.
+- **Settings from a project:** a project that isn't yours, such as a
+  downloaded folder or a ZIP, setting anything else in the environment of
+  narrate or the programs it runs. A `.env` sets only `ELEVENLABS_API_KEY`,
+  a ZIP's hidden files aren't unpacked, and `narrate serve`'s jobs read no
+  `.env`, so a job takes no settings from its project. A way past these is a
   vulnerability.
 - **Crossing into localhost:** a web page open in your browser that makes a
   studio or service on localhost act for it, or read what they answer. Both

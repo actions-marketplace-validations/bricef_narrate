@@ -481,7 +481,8 @@ https://example.com
     every build.
 - **Privacy:** the page opens with no cookies or saved logins. Credentials come
   only from the environment variable that `auth` names; the secret never goes
-  in the script or the saved note.
+  in the script or the saved note. Set that variable in the environment: a
+  `.env` sets only `ELEVENLABS_API_KEY`.
 - **Public pages only:** a build reaches public addresses, not this machine
   or a private network. To capture your own dev server, at
   `http://localhost:3000` say, build with `--allow-local-network`
@@ -1057,7 +1058,9 @@ narrate build project.zip --source videos/intro.md   # when it holds several scr
 ```
 
 narrate finds the script inside the archive when there is only one; otherwise
-name it with `--source`.
+name it with `--source`. Hidden files in it, such as `.env`, `.git` and
+`.DS_Store`, are left out when it's unpacked, apart from narrate's own
+`.narrate/` folders.
 
 ## Differences from Narakeet
 

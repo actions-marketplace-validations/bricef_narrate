@@ -55,5 +55,16 @@ the git history.
 - **No framing by other sites:** the studio and the service send
   `frame-ancestors 'self'` and `X-Frame-Options`. Project files and the
   service's outputs are served sandboxed.
+- **`.env` sets only `ELEVENLABS_API_KEY`:** narrate ignores any other
+  variable in a `.env`, and warns, naming it. Set the others in the
+  environment.
+- **Projects bring no settings:** a ZIP's hidden files (`.env`, `.git`) are
+  left out when it's unpacked, apart from `.narrate/`, as are those of a
+  project `narakeet-api-client` downloads from GitHub. `narrate serve`
+  refuses hidden files inside `.narrate/` too. Its jobs and checks read no
+  `.env`: they run with the service's own environment.
+- **`NARRATE_DOTENV=0`** stops narrate reading `.env` at all.
+- **Job outputs:** `narrate serve` serves only the files a job lists as its
+  outputs, not the rest of the job's folder.
 
 [Unreleased]: https://github.com/bricef/narrate/commits/main

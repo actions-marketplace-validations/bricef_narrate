@@ -396,6 +396,10 @@ skipped. When subtitles are on, `.srt` and `.vtt` files come with it.
 
    Or set `ELEVENLABS_API_KEY` in the environment, which wins over `.env`.
    Keep `.env` out of version control.
+
+   `.env` sets only `ELEVENLABS_API_KEY`. A project's folder may not be
+   yours, so narrate ignores any other variable there and warns, naming it.
+   Set the others in the environment.
 3. Build. With a key set, `--tts auto` uses ElevenLabs; `--tts kokoro` still
    picks Kokoro.
 
@@ -561,8 +565,8 @@ narakeet-api-client --repository-type github --repository owner/repo --source vi
 
 - The output is `result.mp4` (`--output` changes it); `--project-type audio`
   writes `result.mp3`.
-- **`github`:** only the files under the script's folder are downloaded.
-  `--github-sha` picks a commit.
+- **`github`:** only the files under the script's folder are downloaded,
+  apart from hidden ones (`.env`, `.git`). `--github-sha` picks a commit.
 - **Narakeet-only flags:** `--api-key` is accepted and ignored.
 - **narrate's own flags:** `--tts` picks the engine. It runs quietly;
   `--verbose` shows progress.
@@ -597,6 +601,8 @@ docker run -p 8788:8788 -v narrate-data:/data -v narrate-cache:/cache -e ELEVENL
 - **Speech:** jobs use Kokoro unless they ask for another engine, or you
   start it with `--tts`. With `"tts": "elevenlabs"`, a job uses the service's
   own `ELEVENLABS_API_KEY`, from its environment or a `.env` where it starts.
+  Jobs read no `.env` of their own, so a project can't set anything for its
+  job.
 - **Workers:** `--workers` jobs run at once (default 1). A build already uses
   every core.
 - **Its data:** uploaded files, each job's project and outputs, and the job
@@ -606,7 +612,8 @@ docker run -p 8788:8788 -v narrate-data:/data -v narrate-cache:/cache -e ELEVENL
 **A project** is the script and its files, each uploaded once and named by its
 SHA-256. A rebuild after an edit uploads only what changed. Send the whole
 project folder: HTML scenes load files narrate can't see in the script.
-Hidden files (`.env`, `.git`) are refused, apart from `.narrate/`.
+Hidden files (`.env`, `.git`) are refused, apart from `.narrate/`. A ZIP's
+hidden files are left out when it's unpacked.
 
 ```sh
 api=http://127.0.0.1:8788/v1
@@ -841,3 +848,7 @@ takes `--keep-work`. `narrate COMMAND --help` lists every option.
 | `NARRATE_MERMAID_JS` | narrate's own | the mermaid.js to use for `render:mermaid` |
 | `NARRATE_TOOLS` | `~/.cache/narrate` | where downloads go |
 | `NARRATE_CACHE` | `~/.cache/narrate` | where synthesised speech and transcripts are cached |
+| `NARRATE_DOTENV` | `1` | `0` stops narrate reading `.env`; `narrate serve` sets it for its jobs |
+
+Only `ELEVENLABS_API_KEY` is also read from `.env`. Set the others in the
+environment.
