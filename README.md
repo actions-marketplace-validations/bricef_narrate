@@ -47,15 +47,58 @@ docker pull ghcr.io/bricef/narrate
 
 It runs natively on Intel and AMD processors and on Macs with Apple chips.
 
+### With uv
+
+[uv](https://docs.astral.sh/uv/getting-started/installation/) installs
+narrate's commands, `narrate` and `narakeet-api-client`, without a checkout.
+On Linux (tested on Ubuntu 24.04 and Debian 13):
+
+```sh
+uv tool install --python 3.12 --with-executables-from playwright \
+    git+https://github.com/bricef/narrate@v0.1.0 # narrate, and Playwright's command
+playwright install --with-deps chromium          # headless Chromium; asks for sudo for its libraries
+sudo apt-get install -y fonts-dejavu-core        # the subtitle font
+narrate doctor                                   # checks the setup
+```
+
+On macOS, with [Homebrew](https://brew.sh/) installed:
+
+```sh
+brew install uv ffmpeg-full                      # uv, and ffmpeg with subtitles and pitch
+brew install --cask font-dejavu                  # the subtitle font
+uv tool install --python 3.12 --with-executables-from playwright \
+    git+https://github.com/bricef/narrate@v0.1.0 # narrate, and Playwright's command
+playwright install chromium                      # headless Chromium
+narrate doctor                                   # checks the setup
+```
+
+- **Python 3.12** is the version narrate is tested with. Without
+  `--python 3.12`, uv may choose a newer one that some of narrate's packages
+  don't support yet.
+- **Chromium:** `--with-executables-from playwright` installs Playwright's
+  command too, which downloads the headless Chromium narrate uses. Without
+  sudo, see [Troubleshoot](docs/building.md#troubleshoot) for its libraries.
+- **ffmpeg:** on Linux, narrate downloads its own on the first build. On
+  macOS it uses Homebrew's `ffmpeg-full`, as the plain `ffmpeg` lacks the
+  subtitle and pitch filters narrate needs.
+- **The Kokoro voice model** downloads on the first build.
+- **Commands:** uv puts them in `~/.local/bin`. If your shell can't find
+  them, `uv tool update-shell` adds that folder to your `PATH`.
+- **Package versions:** uv installs the newest releases of the Python
+  packages narrate depends on, not the exact versions narrate is tested
+  with. If something doesn't work, try a checkout (below), which installs
+  those.
+
 ### From source
 
-On Linux (tested on Ubuntu 24.04 and Debian 13), with
+A checkout is for working on narrate, or for running the exact package
+versions its tests use. On Linux (tested on Ubuntu 24.04 and Debian 13), with
 [uv](https://docs.astral.sh/uv/getting-started/installation/) installed:
 
 ```sh
 git clone https://github.com/bricef/narrate.git
 cd narrate
-uv sync                                          # Python and narrate's packages
+uv sync                                          # Python 3.12 and narrate's packages
 uv run playwright install --with-deps chromium   # headless Chromium; asks for sudo for its libraries
 sudo apt-get install -y fonts-dejavu-core        # the subtitle font
 uv run narrate doctor                            # checks the setup
@@ -72,7 +115,7 @@ brew install uv ffmpeg-full                      # uv, and ffmpeg with subtitles
 brew install --cask font-dejavu                  # the subtitle font
 git clone https://github.com/bricef/narrate.git
 cd narrate
-uv sync                                          # Python and narrate's packages
+uv sync                                          # Python 3.12 and narrate's packages
 uv run playwright install chromium               # headless Chromium
 uv run narrate doctor                            # checks the setup
 ```
@@ -93,6 +136,10 @@ alias narakeet-api-client='uv run --project ~/path/to/narrate narakeet-api-clien
 ### Update
 
 - **Docker:** `docker pull ghcr.io/bricef/narrate`.
+- **With uv:** run the `uv tool install` command again with the new
+  release's tag, from [Releases](https://github.com/bricef/narrate/releases),
+  in place of `v0.1.0`. Then run `narrate doctor`. If it reports that
+  Chromium is missing, run `playwright install chromium` again.
 - **From source:** `git pull && uv sync` in the checkout, then
   `uv run narrate doctor`. If it reports that Chromium is missing, run
   `uv run playwright install chromium` again.

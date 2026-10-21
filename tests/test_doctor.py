@@ -14,6 +14,53 @@ def test_explains_a_missing_browser():
     assert "playwright install chromium" in explain_browser_error(msg)
 
 
+MISSING_BROWSER = "BrowserType.launch: Executable doesn't exist at /x/chrome-headless-shell"
+
+
+def fake_install(monkeypatch, tmp_path, tool: bool, checkout: bool):
+    """narrate run from an environment in tmp_path/env, a uv tool's or not, with a checkout beside it or not."""
+    env, source = tmp_path / "env", tmp_path / "source"
+    (env / "bin").mkdir(parents=True)
+    (env / "bin" / "playwright").write_text("#!/bin/sh\n")
+    (env / "bin" / "playwright").chmod(0o755)
+    if tool:
+        (env / "uv-receipt.toml").write_text("[tool]\n")
+    source.mkdir()
+    if checkout:
+        (source / "uv.lock").write_text("")
+    monkeypatch.setattr(sys, "prefix", str(env))
+    monkeypatch.setattr(doctor, "CHECKOUT", source)
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    monkeypatch.chdir(tmp_path)
+    return env, source
+
+
+def test_a_uv_tool_install_runs_its_own_playwright(monkeypatch, tmp_path):
+    """`uv tool install` has no checkout to `uv run` in: Chromium comes from the tool's own playwright."""
+    env, _ = fake_install(monkeypatch, tmp_path, tool=True, checkout=False)
+    assert explain_browser_error(MISSING_BROWSER).endswith(f"Fix: {env}/bin/playwright install chromium")
+    # --with-executables-from playwright puts it on PATH, as a link to the tool's own
+    (tmp_path / "bin").mkdir()
+    (tmp_path / "bin" / "playwright").symlink_to(env / "bin" / "playwright")
+    monkeypatch.setenv("PATH", f"{tmp_path / 'bin'}:/usr/bin:/bin")
+    assert explain_browser_error(MISSING_BROWSER).endswith("Fix: playwright install chromium")
+    assert "Fix: playwright install-deps chromium" in explain_browser_error("error while loading shared libraries")
+
+
+def test_a_uv_tool_install_of_a_checkout_runs_its_own_playwright(monkeypatch, tmp_path):
+    env, _ = fake_install(monkeypatch, tmp_path, tool=True, checkout=True)
+    assert explain_browser_error(MISSING_BROWSER).endswith(f"Fix: {env}/bin/playwright install chromium")
+
+
+def test_a_checkout_runs_playwright_with_uv(monkeypatch, tmp_path):
+    _, source = fake_install(monkeypatch, tmp_path, tool=False, checkout=True)
+    monkeypatch.chdir(source)
+    assert explain_browser_error(MISSING_BROWSER).endswith("Fix: uv run playwright install chromium")
+    # Elsewhere, as the README's alias runs it
+    monkeypatch.chdir(tmp_path)
+    assert explain_browser_error(MISSING_BROWSER).endswith(f"Fix: uv run --project {source} playwright install chromium")
+
+
 def test_explains_missing_libraries_and_names_them():
     msg = ("BrowserType.launch: Target page, context or browser has been closed\n"
            "/x/chrome-headless-shell: error while loading shared libraries: libatk-1.0.so.0: cannot open shared object file")

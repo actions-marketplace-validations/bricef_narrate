@@ -10,6 +10,7 @@ docs/writing-scripts.md itself.
 import re
 import shutil
 import textwrap
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -112,3 +113,16 @@ def test_links_resolve(doc):
         assert path.exists(), f"{doc.name}: {target}"
         if anchor:
             assert anchor in anchors(path), f"{doc.name}: {target}"
+
+
+def test_the_docs_pin_this_release():
+    """The README installs, and the action example runs, the version in pyproject.toml, and the
+    changelog's newest release is that version: a release PR changes the four together."""
+    version = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
+    readme, building = (ROOT / "README.md").read_text(), (ROOT / "docs/building.md").read_text()
+    installs = re.findall(r"git\+https://github\.com/bricef/narrate@(\S+)", readme)
+    assert installs and set(installs) == {f"v{version}"}
+    assert re.findall(r"uses: bricef/narrate@(\S+)", building) == [f"v{version}"]
+    assert re.findall(r"image: ghcr\.io/bricef/narrate:(\S+)", building) == [version]
+    releases = re.findall(r"^## \[(\d[^\]]*)\]", (ROOT / "CHANGELOG.md").read_text(), re.M)
+    assert releases and releases[0] == version
