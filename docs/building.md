@@ -759,10 +759,12 @@ narrate fetches some files on first use and caches synthesised speech:
 Start with `narrate doctor`. It checks ffmpeg, Chromium, fonts, the voice
 models, the cache and the ElevenLabs key, and prints a fix for each problem.
 
-- **"Chromium is not installed for Playwright":** run
-  `uv run playwright install chromium`.
+- **"Chromium is not installed for Playwright":** run the fix doctor
+  prints. That's `uv run playwright install chromium` in a checkout, and
+  `playwright install chromium` after `uv tool install`.
 - **"Chromium can't start: system libraries are missing":**
-  - With root, run `uv run playwright install-deps chromium`.
+  - With root, run the fix doctor prints, such as
+    `uv run playwright install-deps chromium`.
   - Without root, use the Docker image, or extract the libraries yourself
     (Ubuntu 24.04 and Debian 13 package names):
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -16,9 +18,35 @@ class SetupError(Exception):
     """Something outside the script is missing; the message says how to fix it."""
 
 
-BROWSER_INSTALL = "uv run playwright install chromium"
-BROWSER_DEPS = ("uv run playwright install-deps chromium (needs root); without root, see "
-                "docs/building.md, Troubleshoot")
+CHECKOUT = Path(__file__).resolve().parents[2]  # src/narrate/doctor.py's checkout, when it runs from one
+
+
+def playwright_command() -> str:
+    """How to run the Playwright narrate uses, which installs the Chromium it needs.
+
+    In a checkout (uv.lock beside the package) that's `uv run playwright`, in the checkout. Anywhere
+    else, such as a `uv tool install`, it's the playwright in narrate's own environment: by name when
+    that's the one on PATH (as `--with-executables-from playwright` puts it), else by its path."""
+    tool = (Path(sys.prefix) / "uv-receipt.toml").is_file()  # uv tool install, even of a checkout
+    if (CHECKOUT / "uv.lock").is_file() and not tool:
+        if Path.cwd().resolve().is_relative_to(CHECKOUT):
+            return "uv run playwright"
+        return f"uv run --project {shlex.quote(str(CHECKOUT))} playwright"
+    own = Path(sys.prefix) / "bin" / "playwright"
+    on_path = shutil.which("playwright")
+    if on_path and Path(on_path).resolve() == own.resolve():
+        return "playwright"
+    return shlex.quote(str(own))
+
+
+def browser_install() -> str:
+    return f"{playwright_command()} install chromium"
+
+
+def browser_deps() -> str:
+    return (f"{playwright_command()} install-deps chromium (needs root); without root, see "
+            "docs/building.md, Troubleshoot")
+
 
 def font_dirs() -> list[Path]:
     """Where fonts are installed, on Linux, macOS (Homebrew's font casks use ~/Library/Fonts) and Windows."""
@@ -31,12 +59,12 @@ def font_dirs() -> list[Path]:
 def explain_browser_error(message: str) -> str:
     """Turn a Playwright launch failure into a one-line fix."""
     if "Executable doesn't exist" in message or "playwright install" in message.lower():
-        return f"Chromium is not installed for Playwright. Fix: {BROWSER_INSTALL}"
+        return f"Chromium is not installed for Playwright. Fix: {browser_install()}"
     if "shared librar" in message or "missing dependencies" in message.lower():
         missing = sorted({part.split(":")[0].strip() for part in message.split("\n")
                           if ".so" in part and "error while loading" in part})
         detail = f" ({', '.join(missing)})" if missing else ""
-        return f"Chromium can't start: system libraries are missing{detail}. Fix: {BROWSER_DEPS}"
+        return f"Chromium can't start: system libraries are missing{detail}. Fix: {browser_deps()}"
     first = message.strip().splitlines()[0] if message.strip() else "unknown error"
     return f"Chromium failed to start: {first}"
 
