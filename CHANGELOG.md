@@ -37,5 +37,15 @@ the git history.
 - **`--allow-host`:** `narrate studio` and `narrate serve` answer to more host
   names with it. A service on `0.0.0.0` whose clients call it by its
   machine's name or address needs it.
+- **Captured pages reach only public addresses:** `render:web` pages, HTML
+  scenes, overlays and slides, and everything they load, can't reach this
+  machine, a private network or a link-local address, such as a studio, a
+  service, a router or a cloud's metadata address. A host name that resolves
+  to a local address is refused too. A refused `render:web` capture stops the
+  build, naming the address; anything else refused is noted.
+- **`--allow-local-network`:** `narrate build` lets pages reach local
+  addresses with it, or with `NARRATE_ALLOW_LOCAL_NETWORK=1`, to capture your
+  own dev server. `narrate serve` takes it for all its build jobs; a job can't
+  turn it on itself.
 
 [Unreleased]: https://github.com/bricef/narrate/commits/main

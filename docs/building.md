@@ -75,6 +75,9 @@ The studio is a web app for writing a script, served from your computer.
     - **Capture now** or **Retake capture** renders that scene with
       `--regenerate`, which takes the page afresh and keeps the new capture.
     - The preview then shows the new capture.
+    - A page on this machine, such as your dev server, needs the studio
+      started with `NARRATE_ALLOW_LOCAL_NETWORK=1`
+      ([Build a video](#build-a-video)).
   - **Overlays** lie over the frame as they will in the video, and scrub and
     play like HTML scenes.
     - A scene's overlay runs on the scene's clock, with its cues.
@@ -237,6 +240,20 @@ narrate build project.zip                 # a ZIP of the script and its files
   without an ElevenLabs key, so you can see what a build would spend before
   setting one up: it reads the speech cache and estimates the rest, without
   calling ElevenLabs.
+- **Local addresses:** the pages a build captures reach only public
+  addresses. That's `render:web` pages, HTML scenes, overlays and slides, and
+  everything they load. So a script can't put what's on this machine or your
+  network in its video: the studio, a router's page, or a cloud's metadata
+  address.
+  - **Your own dev server:** `--allow-local-network` lets pages reach this
+    machine and private networks, so `render:web` can capture
+    `http://localhost:3000`. `NARRATE_ALLOW_LOCAL_NETWORK=1` does the same,
+    and reaches the studio's builds when you start the studio with it.
+  - **Without it:** a `render:web` capture of a local address stops the
+    build, naming the address. Anything else a page asks of one is refused,
+    and the build notes it.
+  - **Stored captures** are reused as before: only taking one afresh needs
+    the address.
 - **Intermediate files** are deleted afterwards; `--keep-work DIR` keeps them
   for inspection.
 - **First build:** the Kokoro voice model downloads (about 350 MB), and from
@@ -563,6 +580,11 @@ docker run -p 8788:8788 -v narrate-data:/data -v narrate-cache:/cache -e ELEVENL
 - **Browsers:** a request that changes something, sent from another site's
   page, gets 403. Programs send no `Origin` header, so this doesn't affect
   them.
+- **Local addresses:** jobs' pages reach only public addresses, so a job
+  can't capture the service, other clients' jobs, or anything else on your
+  network. `--allow-local-network` lets every build job reach them, the
+  service included. A job can't ask for it, and `NARRATE_ALLOW_LOCAL_NETWORK`
+  doesn't reach jobs.
 - **Speech:** jobs use Kokoro unless they ask for another engine, or you
   start it with `--tts`. With `"tts": "elevenlabs"`, a job uses the service's
   own `ELEVENLABS_API_KEY`, from its environment or a `.env` where it starts.
@@ -778,8 +800,8 @@ models, the cache and the ElevenLabs key, and prints a fix for each problem.
 | Command | Does |
 | --- | --- |
 | `narrate studio SCRIPT [--open]` | edit the script in a web app (`--tts` for its engine; `--host`, `--port` to serve elsewhere; `--allow-host` for each other name it's opened by) |
-| `narrate serve` | serve narrate over HTTP for your own programs (`--host`, `--port`, `--allow-host`, `--data`, `--workers`, `--tts`, `--prices`) |
-| `narrate build SCRIPT [-o OUT.mp4]` | render a video (`SCRIPT` may be a `.zip`; `--source` picks the script inside; `--scenes 3-5` builds just those; `--subtitles MODE` and `--transcript` choose the extra outputs; `--regenerate` retakes web captures; `--usage FILE` records what it spent) |
+| `narrate serve` | serve narrate over HTTP for your own programs (`--host`, `--port`, `--allow-host`, `--data`, `--workers`, `--tts`, `--prices`; `--allow-local-network` lets build jobs' pages reach local addresses) |
+| `narrate build SCRIPT [-o OUT.mp4]` | render a video (`SCRIPT` may be a `.zip`; `--source` picks the script inside; `--scenes 3-5` builds just those; `--subtitles MODE` and `--transcript` choose the extra outputs; `--regenerate` retakes web captures; `--allow-local-network` lets pages reach this machine and private networks; `--usage FILE` records what it spent) |
 | `narrate audio SCRIPT [-o OUT]` | render the narration only (also takes `--subtitles`, `--transcript` and `--usage`) |
 | `narrate hear VIDEO [--script SCRIPT]` | what speech-to-text hears, and where it differs from the script (`--json`, `--usage`) |
 | `narrate frames VIDEO [--script SCRIPT]` | a contact sheet of the video's frames (`--at`, `--every`, `--count`, `-o`, `--usage`) |
@@ -803,6 +825,7 @@ takes `--keep-work`. `narrate COMMAND --help` lists every option.
 | `NARRATE_ELEVENLABS_CONCURRENCY` | 2 | ElevenLabs requests at once |
 | `NARRATE_KOKORO_WORKERS` | up to 4 | Kokoro sessions at once |
 | `NARRATE_JOBS` | up to 4 | encodes at once, like `--jobs` |
+| `NARRATE_ALLOW_LOCAL_NETWORK` | none | `1` lets captured pages reach this machine and private networks, like `--allow-local-network` (not for `narrate serve`'s jobs) |
 | `NARRATE_STT_MODEL` | `small` | faster-whisper model for transcribing recordings |
 | `NARRATE_MUSIC_DIR` | none | recordings to use instead of the built-in music |
 | `NARRATE_FFMPEG` | narrate's own on Linux; on macOS, Homebrew's `ffmpeg-full` or the one on `PATH` | the ffmpeg to use |

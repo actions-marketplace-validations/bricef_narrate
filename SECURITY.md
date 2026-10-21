@@ -34,10 +34,15 @@ and not a vulnerability:
   localhost by default: keep them there, or on a private network you trust.
   Web pages in your browser are kept out (see "Crossing into localhost"
   below).
-- **Scripts reach the network.** `render:web` fetches the pages a script
-  names. HTML scenes and overlays can load from the network while they're
-  captured; [#84](https://github.com/bricef/narrate/issues/84) tracks
+- **Scripts reach the internet.** `render:web` fetches the pages a script
+  names. HTML scenes and overlays can load from public addresses while
+  they're captured; [#84](https://github.com/bricef/narrate/issues/84) tracks
   limiting them to the project's files.
+- **`--allow-local-network` lets pages reach local addresses.** Given to
+  `narrate build`, or `narrate serve`, or set as
+  `NARRATE_ALLOW_LOCAL_NETWORK`, it lets the pages a build captures reach
+  this machine and private networks. Only give it to builds whose scripts you
+  trust.
 
 What does matter, for example:
 
@@ -45,6 +50,12 @@ What does matter, for example:
   service, that reads or writes files outside its folder.
 - **Captured pages:** an HTML scene, an overlay or a `render:web` capture
   that reads local files it shouldn't, or gets out of headless Chromium.
+- **Reaching local addresses:** a page captured in a build that reaches
+  this machine, a private network or a link-local address, without
+  `--allow-local-network`, or a `narrate serve` job that turns it on for
+  itself. Builds send every connection through a proxy that resolves names
+  itself and refuses addresses that aren't public. A way past it is a
+  vulnerability.
 - **Crossing into localhost:** a web page open in your browser that makes a
   studio or service on localhost act for it, or read what they answer. Both
   defend against this. They answer only to their own host names
