@@ -2,12 +2,17 @@ name: Image
 
 # Builds the container image for amd64 and arm64, each on its own runner, runs
 # the test suite inside it and renders examples/demo through the action with it
-# (the videos are kept as artifacts). Pushes to main and v* tags then publish
-# both platforms as one image, ghcr.io/bricef/narrate.
+# (the videos are kept as artifacts). Pushes to main and release tags then
+# publish both platforms as one image, ghcr.io/bricef/narrate, and a release
+# moves its major tag, v0 for v0.2.0, once the image has passed.
 on:
   push:
     branches: ["**"]
-    tags: ["v*"]
+    # Releases and pre-releases (v0.2.0, v0.3.0-rc.1), not the major tags this
+    # workflow moves (v0)
+    tags:
+      - v[0-9]+.[0-9]+.[0-9]+
+      - v[0-9]+.[0-9]+.[0-9]+-*
     paths:
       - Dockerfile
       - .dockerignore
@@ -155,6 +160,14 @@ jobs:
     outputs:
       digest: ${{ steps.index.outputs.digest }}
     steps:
+      - uses: actions/checkout@v7
+
+      # Only the newest release of a series moves its tags, 0 and 0.2 for
+      # v0.2.0, so re-running an older release's workflow leaves them alone
+      - id: release
+        name: Which tags move
+        run: python3 scripts/release_tags.py newest "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+
       - uses: actions/download-artifact@v8
         with:
           path: ${{ runner.temp }}/digests
@@ -176,12 +189,15 @@ jobs:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: index
         with:
           images: ghcr.io/${{ github.repository }}
-          # Only main moves latest, not v* tags too
+          # Only main moves latest, not release tags too. metadata-action
+          # makes 0 for {{major}} on 0.x, though its README suggests turning
+          # that off; a pre-release makes only its own version, 0.3.0-rc.1.
           flavor: latest=false
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ steps.release.outputs.newest-minor }}
+            type=semver,pattern={{major}},enable=${{ steps.release.outputs.newest-major }}
             type=sha
 
       - id: index
@@ -221,3 +237,22 @@ jobs:
           source-path: examples/demo/demo.md
           output: out/demo.mp4
           tts: kokoro
+
+  # Moves the release's major tag, v0 for v0.2.0, so that `uses: bricef/narrate@v0`
+  # runs it, with the image 0. Only the newest release of a series moves it, and
+  # one at a time, so it never goes back.
+  major-tag:
+    needs: published
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    concurrency: major-tag
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Move the major tag
+        env:
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: python3 scripts/release_tags.py move "$GITHUB_REF_NAME" "$GITHUB_SHA"

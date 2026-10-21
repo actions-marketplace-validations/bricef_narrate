@@ -161,7 +161,8 @@ macOS:
   time goes on unpacking 60 of them. Headless Chromium is cached as well.
 
 `.github/workflows/image.yml` runs on pushes that touch the code, tests,
-examples, Dockerfile or action. It also runs on pull requests from forks that
+examples, Dockerfile or action, and on release tags. It also runs on pull
+requests from forks that
 change the Dockerfile, the action or the workflow. It builds the image for
 `linux/amd64` on `ubuntu-latest` and for `linux/arm64` on `ubuntu-24.04-arm`,
 each natively on its own runner, and on each:
@@ -174,11 +175,12 @@ each natively on its own runner, and on each:
    video as the `demo-video-amd64` or `demo-video-arm64` artifact.
 
 Other branches and pull requests stop there, and publish nothing. On `main`
-and on `v*` tags, each platform's job also pushes its image, untagged. Once
-both have passed, the `publish` job tags them together as one image,
+and on release tags, each platform's job also pushes its image, untagged.
+Once both have passed, the `publish` job tags them together as one image,
 `ghcr.io/bricef/narrate`, and Docker pulls the platform it runs on. The
 `published` job then renders the demo with that image on both platforms,
-pulling it the way other repositories do.
+pulling it the way other repositories do. On a release, the `major-tag` job
+then moves the action's major tag to it, as [Releases](#releases) explains.
 
 Each platform has its own build cache in GitHub's Actions cache, and the two
 build at the same time. Only `main` writes the cache, and other branches read
@@ -193,15 +195,23 @@ compiles it on every push, until it is merged.
 | Push | Tags |
 | --- | --- |
 | `main` | `latest` and `sha-<commit>` |
-| tag `v1.2.3` | `1.2.3`, `1.2` and `sha-<commit>` |
+| tag `v1.2.3` | `1.2.3`, `1.2`, `1` and `sha-<commit>` |
+| tag `v1.3.0-rc.1` | `1.3.0-rc.1` and `sha-<commit>` |
 
-To release:
+- **`1.2` and `1` move only for the newest release of their series:** a fix
+  for an older series, `v1.1.4` after `v1.2.3`, moves `1.1` but not `1`, and
+  re-running an older release's workflow moves neither.
+  `scripts/release_tags.py` decides, from the tags on GitHub.
+- **Other tags start nothing:** the major tags, such as `v1`, don't run the
+  workflow.
+
+### Releases
 
 1. **A pull request** that sets `version` in `pyproject.toml`, turns
    `CHANGELOG.md`'s Unreleased section into the release's, and points the
-   docs at the new tag: the README's `uv tool install` and the action example
-   in [building.md](building.md#build-in-github-actions). A test checks the
-   four agree.
+   docs at the new tag: the README's `uv tool install` and the pinned action
+   example in [building.md](building.md#build-in-github-actions). A test
+   checks the four agree.
 2. **Tag** the merged commit on `main`, and push the tag:
 
    ```sh
@@ -209,8 +219,21 @@ To release:
    git push origin v1.2.3
    ```
 
-Workflows can then pin both parts: `uses: bricef/narrate@v1.2.3`, with
-`image: ghcr.io/bricef/narrate:1.2.3`.
+3. **The workflow does the rest:** it publishes the image as `1.2.3`, `1.2`
+   and `1`, checks it, and then moves the major tag, `v1`, to the release.
+
+Workflows that use `bricef/narrate@v1` then build with the new release and
+its image, `1`. Those that pin `@v1.2.3` keep the image `1.2.3`.
+
+- **`v1` only moves forward:** to the newest 1.x release, once its image has
+  passed. A pre-release, a fix to an older series, or a re-run of an older
+  release's workflow leaves it where it is.
+- **A pre-release,** such as `v1.3.0-rc.1`, publishes only its own image tag
+  and moves nothing: a rehearsal of the release.
+- **To see what the job would do,** run
+  `python3 scripts/release_tags.py move v1.2.3 v1.2.3 --dry-run` in a
+  checkout. Without `--dry-run`, it moves `v1` by hand, should the
+  `major-tag` job fail.
 
 ## How a build works
 
@@ -303,6 +326,8 @@ Some choices worth knowing when changing behaviour:
   - `vendor.sh`, which rebuilds the studio's CodeMirror and fake clock bundles
     from the versions pinned in `scripts/codemirror/` and
     `scripts/fake-timers/`. It needs Node, through `mise exec node@24 --` for
-    example, and is only for updating them.
+    example, and is only for updating them;
+  - `release_tags.py`, which decides which tags a release moves, and moves
+    its major tag ([Releases](#releases)).
 - `Dockerfile`, `action.yml` and `.github/workflows/image.yml`: the image, the
   GitHub Action and CI.
