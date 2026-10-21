@@ -171,10 +171,12 @@ both have passed, the `publish` job tags them together as one image,
 pulling it the way other repositories do.
 
 Each platform has its own build cache in GitHub's Actions cache, and the two
-build at the same time. A warm run takes about 6 minutes on each, most of it
-the tests, or 1 to 2 when nothing in the image has changed. A cold one, after
-a change to the ffmpeg build or a week without builds, takes about 13 minutes
-on amd64 and 10 on arm64, most of it compiling ffmpeg.
+build at the same time. Only `main` writes the cache, and other branches read
+it. A warm run takes about 6 minutes on each, most of it the tests, or 1 to 2
+when nothing in the image has changed. A cold one, after a change to the
+ffmpeg build or a week without builds, takes about 13 minutes on amd64 and 10
+on arm64, most of it compiling ffmpeg. A branch that changes the ffmpeg build
+compiles it on every push, until it is merged.
 
 **Image tags:**
 

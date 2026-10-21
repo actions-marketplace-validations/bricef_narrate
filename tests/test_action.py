@@ -80,6 +80,8 @@ def test_image_is_published_only_from_main_and_tags():
     assert push["if"] == "steps.meta.outcome == 'success'"
     assert meta["if"] == main_or_tags
     assert workflow["jobs"]["publish"]["if"] == main_or_tags
+    tags = next(s for s in workflow["jobs"]["publish"]["steps"] if s.get("id") == "meta")
+    assert tags["with"]["flavor"] == "latest=false"  # only main moves latest, not v* tags
 
 
 def test_image_is_built_and_published_for_amd64_and_arm64():
@@ -94,6 +96,11 @@ def test_image_is_built_and_published_for_amd64_and_arm64():
     for build in builds:
         assert build["with"]["platforms"] == "linux/${{ matrix.arch }}"
         assert build["with"]["cache-from"] == "type=gha,scope=${{ matrix.arch }}"
+    # Only main writes the cache, from the test stage's build, which covers every stage
+    [writes] = [b for b in builds if "cache-to" in b["with"]]
+    assert writes["with"]["target"] == "test"
+    assert writes["with"]["cache-to"] == ("${{ github.ref == 'refs/heads/main' && "
+                                          "format('type=gha,mode=max,scope={0}', matrix.arch) || '' }}")
     push = next(s for s in builds if s.get("id") == "push")
     assert "push-by-digest=true" in push["with"]["outputs"]
     publish = workflow["jobs"]["publish"]
