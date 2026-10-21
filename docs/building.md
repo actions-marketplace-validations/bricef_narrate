@@ -670,7 +670,7 @@ narrate fetches some files on first use and caches synthesised speech:
 | What | Where | Size |
 | --- | --- | --- |
 | Kokoro voice model | `~/.cache/narrate/models/` | about 350 MB |
-| ffmpeg (from a source checkout) | `~/.cache/narrate/ffmpeg/` | 170 MB (a 150 MB download) |
+| ffmpeg (from a source checkout, on Linux only) | `~/.cache/narrate/ffmpeg/` | 170 MB (a 150 MB download) |
 | Speech-to-text model, for subtitles on recordings | `~/.cache/narrate/stt/` | about 460 MB |
 | Built-in music | `~/.cache/narrate/music/` | a few MB |
 | mermaid.js, for diagrams | `~/.cache/narrate/mermaid/` | about 5 MB |
@@ -716,7 +716,7 @@ narrate fetches some files on first use and caches synthesised speech:
 ## Troubleshoot
 
 Start with `narrate doctor`. It checks ffmpeg, Chromium, fonts, the voice
-models and the ElevenLabs key, and prints a fix for each problem.
+models, the cache and the ElevenLabs key, and prints a fix for each problem.
 
 - **"Chromium is not installed for Playwright":** run
   `uv run playwright install chromium`.
@@ -748,15 +748,29 @@ models and the ElevenLabs key, and prints a fix for each problem.
   ([Pick voices](#pick-voices)).
 - **"file not found":** paths are relative to the script's folder, and in
   Docker everything must be inside the mounted folder.
-- **PermissionError under `/cache` in Docker:** the cache volume was filled by
-  another user. Run with the same `--user` as before, or start a new volume.
+- **"narrate can't write to …":** another user filled part of the cache, for
+  example a Docker build without `--user`. `narrate build` stops before it
+  starts, and the message ends with the command that gives the folders back
+  to you. For the Docker volume:
+
+  ```sh
+  docker run --rm --user 0 -v narrate-cache:/cache --entrypoint chown \
+      ghcr.io/bricef/narrate -R "$(id -u):$(id -g)" /cache
+  ```
+
 - **Text shows as boxes:** the font lacks those characters. Install a font that
   has them, or name one in a theme with `@font-face`.
-- **Another ffmpeg:** narrate uses its own build, because older versions crash
-  on some transitions. `NARRATE_FFMPEG=/path/to/ffmpeg` overrides it. It needs
-  libx264, libass, librubberband (for pitch and emphasis) and the `xfade`
-  filter, which `narrate doctor` checks. Audio exports also need libmp3lame
-  (MP3) and libopus (OGG and Opus).
+- **"no ffmpeg on PATH, and narrate has no ffmpeg of its own":** narrate
+  downloads its own ffmpeg on Linux only. On macOS, run
+  `brew install ffmpeg-full`, which narrate finds without being told.
+  Homebrew's plain `ffmpeg` lacks libass and rubberband. Elsewhere, narrate
+  uses the ffmpeg on `PATH`.
+- **Another ffmpeg:** narrate uses its own build on Linux, because older
+  versions crash on some transitions. `NARRATE_FFMPEG=/path/to/ffmpeg`
+  overrides it. It needs ffmpeg 9.0 or later with libx264, libass,
+  librubberband (for pitch and emphasis) and the `xfade` filter, which
+  `narrate doctor` checks. Audio exports also need libmp3lame (MP3) and
+  libopus (OGG and Opus).
 
 ## Command reference
 
