@@ -116,14 +116,15 @@ def test_links_resolve(doc):
 
 
 def test_the_docs_pin_this_release():
-    """The README installs, and the pinned action example runs, the version in pyproject.toml, and the
-    changelog's newest release is that version: a release PR changes the four together. The
-    action example follows that version's major tag, and needs no image: the action picks it."""
+    """The README installs, and the pinned action examples (README and building.md) run, the version in
+    pyproject.toml, and the changelog's newest release is that version: a release PR changes them
+    together. The action examples follow that version's major tag, and need no image: the action picks it."""
     version = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
     readme, building = (ROOT / "README.md").read_text(), (ROOT / "docs/building.md").read_text()
     installs = re.findall(r"git\+https://github\.com/bricef/narrate@(\S+)", readme)
     assert installs and set(installs) == {f"v{version}"}
-    assert re.findall(r"uses: bricef/narrate@(\S+)", building) == [f"v{version.split('.')[0]}", f"v{version}"]
-    assert "image:" not in re.search(r"```yaml\n(.*?)```", building[building.index("## Build in GitHub"):], re.S)[1]
+    for doc in (readme, building):
+        assert re.findall(r"uses: bricef/narrate@(\S+)", doc) == [f"v{version.split('.')[0]}", f"v{version}"]
+        assert "image:" not in re.search(r"```yaml\n(.*?)```", doc[doc.index("## Build in GitHub"):], re.S)[1]
     releases = re.findall(r"^## \[(\d[^\]]*)\]", (ROOT / "CHANGELOG.md").read_text(), re.M)
     assert releases and releases[0] == version
