@@ -770,7 +770,7 @@ What Narakeet produces, and what a local tool should produce for parity:
 
 | Output | Notes |
 | --- | --- |
-| Video | MP4 (`result.mp4` by default in the CLI). Codecs are unstated; H.264 + AAC is the safe assumption [inf]. |
+| Video | MP4 (`result.mp4` by default in Narakeet's command-line client). Codecs are unstated; H.264 + AAC is the safe assumption [inf]. |
 | Poster | A JPG frame chosen by `poster-time`. |
 | Subtitles | `.srt` and `.vtt` for the `external` and `embed` modes. |
 | Duration | Seconds, rounded up (the API's `durationInSeconds`). |
