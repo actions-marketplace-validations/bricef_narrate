@@ -770,7 +770,7 @@ What Narakeet produces, and what a local tool should produce for parity:
 
 | Output | Notes |
 | --- | --- |
-| Video | MP4 (`result.mp4` by default in the CLI). Codecs are unstated; H.264 + AAC is the safe assumption [inf]. |
+| Video | MP4 (`result.mp4` by default in Narakeet's command-line client). Codecs are unstated; H.264 + AAC is the safe assumption [inf]. |
 | Poster | A JPG frame chosen by `poster-time`. |
 | Subtitles | `.srt` and `.vtt` for the `external` and `embed` modes. |
 | Duration | Seconds, rounded up (the API's `durationInSeconds`). |
@@ -783,10 +783,8 @@ The `target` profiles:
 | `online` | slightly more compression, for upload to YouTube and similar | at the start (faststart) |
 | `self-hosted` | the smallest files, for HTML5 and in-app playback, not for re-transcoding | at the start (faststart) |
 
-Narakeet's own interfaces (for reference if the local CLI should mirror them):
+Narakeet's own interfaces, for reference:
 
-- **CLI:** `narakeet-api-client --repository-type local-dir|local-zip|zip-url|github
-  --repository <path|url|owner/repo> --source <script path> [--output file.mp4]`.
 - **REST:** upload a ZIP to a presigned URL, `POST /video/build {repositoryType,
   repository, source}`, then poll the status URL for `finished`, `percent`,
   `succeeded`, `result`, `poster`, `message` and `durationInSeconds`.

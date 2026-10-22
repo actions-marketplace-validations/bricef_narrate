@@ -42,7 +42,6 @@ Source = "https://github.com/bricef/narrate"
 
 [project.scripts]
 narrate = "narrate.cli:main"
-narakeet-api-client = "narrate.narakeet_cli:main"
 
 [dependency-groups]
 dev = [
