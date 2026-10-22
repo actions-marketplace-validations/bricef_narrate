@@ -1,0 +1,84 @@
+<!doctype html>
+<!-- The repository's social preview (GitHub: Settings → General → Social preview).
+     1280×640, with everything important inside an 80 px border, as GitHub's
+     template advises. The look is the introduction video's (examples/intro).
+     It needs the DejaVu fonts. Render it from the repository's root with:
+       uv run playwright screenshot --viewport-size "1280, 640" docs/assets/social-preview.html docs/assets/social-preview.png -->
+
+<meta charset="utf-8">
+<style>
+  :root {
+    --bg: #0e1116; --panel: #161b22; --line: #2a313c; --fg: #e6edf3; --mute: #8b949e;
+    --amber: #f5a524; --teal: #4fd1c5;
+    --sans: "DejaVu Sans", "Noto Sans", sans-serif;
+    --mono: "DejaVu Sans Mono", "Noto Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1280px; height: 640px; overflow: hidden; background: var(--bg); color: var(--fg); font-family: var(--sans); }
+  /* The safe area: 80 px in from every edge */
+  .safe { position: absolute; inset: 80px; display: flex; align-items: center; justify-content: space-between; }
+
+  .words { display: flex; flex-direction: column; }
+  .name { font-family: var(--mono); font-size: 112px; font-weight: 700; letter-spacing: -.02em; line-height: 1; display: flex; align-items: center; }
+  .caret { width: 14px; height: 104px; margin-left: 8px; background: var(--amber); }
+  .tag { font-size: 34px; margin-top: 26px; display: flex; gap: 20px; }
+  .tag span:nth-child(3) { color: var(--amber); }
+  .what { font-size: 23px; color: var(--mute); margin-top: 22px; line-height: 1.4; }
+  .url { font-family: var(--mono); font-size: 23px; color: var(--mute); margin-top: 40px; }
+  .url b { color: var(--fg); font-weight: 400; }
+
+  /* Script in, video out */
+  .flow { position: relative; width: 520px; height: 480px; }
+  .script { position: absolute; left: 0; top: 26px; width: 290px; padding: 20px 24px;
+            background: var(--panel); border: 2px solid var(--line); border-radius: 16px;
+            font-family: var(--mono); font-size: 17px; line-height: 1.6; color: var(--mute); }
+  .script .file { color: var(--fg); margin-bottom: 8px; font-size: 15px; letter-spacing: .02em; }
+  .script .k { color: var(--teal); }
+  .script .said { color: var(--fg); }
+  .arrow { position: absolute; left: 92px; top: 272px; z-index: 1; }
+  .video { position: absolute; right: 8px; bottom: 26px; width: 320px; height: 180px; border-radius: 14px; overflow: hidden;
+           border: 2px solid var(--line);
+           background: linear-gradient(180deg, #1d2a44 0%, #5b3a64 55%, #c56b5a 100%); }
+  .sun { position: absolute; left: 50%; top: 92px; width: 70px; height: 70px; margin-left: -35px; border-radius: 50%;
+         background: #ffd29a; box-shadow: 0 0 60px 26px rgba(255, 190, 120, .35); }
+  .hill { position: absolute; left: -10%; right: -10%; bottom: -40px; height: 110px; border-radius: 50%; background: #2a1f3a; }
+  .caption { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); white-space: nowrap;
+             background: rgba(0, 0, 0, .78); color: #fff; font-size: 14px; padding: 4px 9px; border-radius: 3px; }
+  .play { position: absolute; left: 14px; top: 12px; display: flex; align-items: center; gap: 8px;
+          font-family: var(--mono); font-size: 13px; color: #fff; }
+  .play i { width: 0; height: 0; border-left: 12px solid var(--amber); border-top: 7px solid transparent; border-bottom: 7px solid transparent; }
+  .wave { position: absolute; right: 14px; top: 13px; display: flex; gap: 3px; align-items: center; height: 14px; }
+  .wave b { width: 3px; background: var(--amber); border-radius: 1px; }
+</style>
+<body>
+  <div class="safe">
+    <div class="words">
+      <div class="name"><span>narrate</span><span class="caret"></span></div>
+      <div class="tag"><span>Write it.</span><span>Build it.</span><span>Watch it.</span></div>
+      <div class="what">Narrated videos from a Markdown script,<br>made on your own computer.</div>
+      <div class="url">github.com/<b>bricef/narrate</b></div>
+    </div>
+    <div class="flow">
+      <div class="script">
+        <div class="file">script.md</div>
+        <div>---</div>
+        <div><span class="k">voice:</span> Amy</div>
+        <div>---</div>
+        <div>![](sunrise.png)</div>
+        <div class="said">A new day starts</div>
+        <div class="said">with a sunrise.</div>
+      </div>
+      <svg class="arrow" width="96" height="104" viewBox="0 0 96 104" fill="none">
+        <path d="M10 6 C 10 56, 30 84, 80 86" stroke="#f5a524" stroke-width="5" stroke-linecap="round"/>
+        <path d="M68 74 L 84 86 L 68 98" stroke="#f5a524" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div class="video">
+        <div class="sun"></div>
+        <div class="hill"></div>
+        <div class="play"><i></i>0:04</div>
+        <div class="wave"><b style="height:6px"></b><b style="height:12px"></b><b style="height:9px"></b><b style="height:14px"></b><b style="height:7px"></b><b style="height:11px"></b><b style="height:5px"></b></div>
+        <div class="caption">A new day starts with a sunrise.</div>
+      </div>
+    </div>
+  </div>
+</body>
