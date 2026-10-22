@@ -783,10 +783,8 @@ The `target` profiles:
 | `online` | slightly more compression, for upload to YouTube and similar | at the start (faststart) |
 | `self-hosted` | the smallest files, for HTML5 and in-app playback, not for re-transcoding | at the start (faststart) |
 
-Narakeet's own interfaces (for reference if the local CLI should mirror them):
+Narakeet's own interfaces, for reference:
 
-- **CLI:** `narakeet-api-client --repository-type local-dir|local-zip|zip-url|github
-  --repository <path|url|owner/repo> --source <script path> [--output file.mp4]`.
 - **REST:** upload a ZIP to a presigned URL, `POST /video/build {repositoryType,
   repository, source}`, then poll the status URL for `finished`, `percent`,
   `succeeded`, `result`, `poster`, `message` and `durationInSeconds`.

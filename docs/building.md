@@ -16,7 +16,6 @@ makes `narrate` work in any folder.
 - [Pick voices](#pick-voices)
 - [Build in Docker](#build-in-docker)
 - [Build in GitHub Actions](#build-in-github-actions)
-- [Use Narakeet's command line](#use-narakeets-command-line)
 - [Serve narrate over HTTP](#serve-narrate-over-http)
 - [Manage downloads and caches](#manage-downloads-and-caches)
 - [Make builds faster](#make-builds-faster)
@@ -487,8 +486,7 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -v narrate-cache:/cac
 - **ElevenLabs:** keep the key in a `.env` in the mounted folder, or pass
   `-e ELEVENLABS_API_KEY`.
 - **Other commands** work the same way: put `check script.md`, `audio
-  script.md` or `doctor` after the image name. For `narakeet-api-client`, add
-  `--entrypoint narakeet-api-client`.
+  script.md` or `doctor` after the image name.
 - **Fonts:** the image covers Latin, Greek and Cyrillic, plus emoji. For other
   scripts, build an image on top of it:
 
@@ -569,28 +567,6 @@ are on, and `transcript-file` when a transcript is asked for.
 - The voice model and synthesised speech are cached between runs, so
   unchanged paragraphs cost nothing.
 - Paths must be inside the repository checkout.
-
-## Use Narakeet's command line
-
-`narakeet-api-client` takes the flags of Narakeet's own command-line client,
-so existing build scripts can point at narrate unchanged. It builds locally;
-nothing is uploaded.
-
-```sh
-narakeet-api-client --repository-type local-dir --repository my-project --source script.md
-narakeet-api-client --repository-type local-zip --repository project.zip --source script.md
-narakeet-api-client --repository-type zip-url --repository https://example.com/v1.zip --source script.md
-narakeet-api-client --repository-type github --repository owner/repo --source videos/intro.md \
-    --github-token "$GITHUB_TOKEN"
-```
-
-- The output is `result.mp4` (`--output` changes it); `--project-type audio`
-  writes `result.mp3`.
-- **`github`:** only the files under the script's folder are downloaded,
-  apart from hidden ones (`.env`, `.git`). `--github-sha` picks a commit.
-- **Narakeet-only flags:** `--api-key` is accepted and ignored.
-- **narrate's own flags:** `--tts` picks the engine. It runs quietly;
-  `--verbose` shows progress.
 
 ## Serve narrate over HTTP
 
@@ -850,7 +826,6 @@ models, the cache and the ElevenLabs key, and prints a fix for each problem.
 | `narrate models` | download the voice, speech-to-text, ffmpeg and mermaid.js files now |
 | `narrate doctor` | check the setup |
 | `narrate cache [--prune …]` | show or prune the speech and render caches |
-| `narakeet-api-client …` | Narakeet's command-line client, building locally |
 
 `build` and `audio` take `--tts`, `--tts-model`, `--jobs` and `-q`; `build` also
 takes `--keep-work`. `narrate COMMAND --help` lists every option.

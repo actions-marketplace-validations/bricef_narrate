@@ -49,9 +49,9 @@ It runs natively on Intel and AMD processors and on Macs with Apple chips.
 
 ### With uv
 
-[uv](https://docs.astral.sh/uv/getting-started/installation/) installs
-narrate's commands, `narrate` and `narakeet-api-client`, without a checkout.
-On Linux (tested on Ubuntu 24.04 and Debian 13):
+[uv](https://docs.astral.sh/uv/getting-started/installation/) installs the
+`narrate` command without a checkout. On Linux (tested on Ubuntu 24.04 and
+Debian 13):
 
 ```sh
 uv tool install --python 3.12 --with-executables-from playwright \
@@ -125,12 +125,11 @@ subtitle and pitch filters narrate needs. narrate downloads the Kokoro voice
 model on the first build.
 
 narrate runs inside the checkout's environment. To use it in your own folders,
-as the rest of the docs do, add aliases to your shell profile (`~/.bashrc` or
+as the rest of the docs do, add an alias to your shell profile (`~/.bashrc` or
 `~/.zshrc`), with the path to your checkout:
 
 ```sh
 alias narrate='uv run --project ~/path/to/narrate narrate'
-alias narakeet-api-client='uv run --project ~/path/to/narrate narakeet-api-client'
 ```
 
 ### Update
@@ -198,8 +197,7 @@ shows voices, pauses, slides, a clip with a callout, and code.
 - **[Writing scripts](docs/writing-scripts.md):** how to narrate, show
   pictures and clips, add slides, subtitles, music, transitions and callouts.
 - **[Building videos](docs/building.md):** speech engines and voices,
-  ElevenLabs, Docker, GitHub Actions, Narakeet's command line, caches and
-  troubleshooting.
+  ElevenLabs, Docker, GitHub Actions, caches and troubleshooting.
 - **[Format specification](docs/spec/narakeet-markdown.md):** every rule and
   default of the script format, and how narrate settles what Narakeet leaves
   open.

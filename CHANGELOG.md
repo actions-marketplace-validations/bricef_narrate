@@ -5,6 +5,12 @@ Notable changes to narrate, newest first. The format follows
 
 ## [Unreleased]
 
+### Removed
+
+- **`narakeet-api-client`:** narrate reads Narakeet's script format, but it
+  doesn't imitate Narakeet's command-line client. Use `narrate build`, or
+  `narrate audio` for audio projects.
+
 ## [0.1.1] - 2026-10-21
 
 ### Added

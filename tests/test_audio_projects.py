@@ -5,7 +5,6 @@ from PIL import Image
 from narrate import media
 from narrate.build import Builder, BuildError
 from narrate.cli import main
-from narrate.narakeet_cli import main as narakeet
 from narrate.script import parse_file
 from narrate.tts import SAMPLE_RATE, SilentSynth
 
@@ -54,10 +53,9 @@ def test_unknown_format_is_refused(script, tmp_path):
         Builder(parse_file(script), SilentSynth(), log=lambda _: None).build_audio(tmp_path / "out.xyz")
 
 
-def test_audio_command_and_narakeet_audio_projects(script, tmp_path, monkeypatch):
+def test_audio_command(script, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     assert main(["audio", str(script), "--tts", "silent", "-q"]) == 0
     assert (tmp_path / "s.mp3").exists()
-    assert narakeet(["--repository-type", "local-dir", "--repository", str(tmp_path), "--source", "s.md",
-                     "--project-type", "audio", "--tts", "silent"]) == 0
+    assert main(["audio", str(script), "--tts", "silent", "-q", "-o", str(tmp_path / "result.mp3")]) == 0
     assert media.probe(tmp_path / "result.mp3").has_audio

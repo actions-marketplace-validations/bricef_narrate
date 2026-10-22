@@ -274,7 +274,6 @@ Some choices worth knowing when changing behaviour:
 
 - `src/narrate/`:
   - `cli.py`: the `narrate` command.
-  - `narakeet_cli.py`: `narakeet-api-client`.
   - `script.py`: the parser.
   - `config.py`: header values.
   - `build.py`: timing, rendering and mixing.
