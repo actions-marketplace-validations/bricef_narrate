@@ -23,6 +23,15 @@ def test_action_has_a_name_the_marketplace_accepts():
     assert action()["name"] == "narrate video"
 
 
+def test_docs_list_every_input():
+    """The README (which the Marketplace page shows) and building.md each list the action's inputs."""
+    for doc in ("README.md", "docs/building.md"):
+        text = (ROOT / doc).read_text()
+        section = text[text.index("## Build in GitHub Actions"):]
+        section = section[:section.index("\n## ")]
+        assert re.findall(r"^\| `([a-z-]+)` \|", section, re.M) == list(action()["inputs"]), doc
+
+
 def test_action_mirrors_narakeets_outputs():
     a = action()
     assert a["runs"]["using"] == "composite"

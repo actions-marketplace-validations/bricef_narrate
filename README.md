@@ -32,7 +32,8 @@ affiliated with or endorsed by Narakeet.
   in or as files.
 - **Ways to run it:** a command line, a web studio for writing scripts
   (`narrate studio script.md`), an HTTP API for your own programs
-  (`narrate serve`), a Docker image and a GitHub Action.
+  (`narrate serve`), a Docker image and a
+  [GitHub Action](#build-in-github-actions).
 
 ## Install
 
@@ -188,6 +189,67 @@ alias narrate='uv run --project ~/path/to/narrate narrate'
 For a longer example, build the demo in a checkout:
 `uv run narrate build examples/demo/demo.md -o out/demo.mp4`. Its script
 shows voices, pauses, slides, a clip with a callout, and code.
+
+## Build in GitHub Actions
+
+narrate is also a GitHub Action,
+[narrate video](https://github.com/marketplace/actions/narrate-video). It
+builds a video on the runner, in narrate's Docker image, so there's nothing
+to install. This workflow, saved as `.github/workflows/video.yml`, builds
+`videos/intro.md` on every push and keeps the video and its poster as a
+workflow artifact:
+
+```yaml
+name: Video
+on: push
+jobs:
+  video:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read          # to pull the narrate image
+    steps:
+      - uses: actions/checkout@v7
+      - id: video
+        uses: bricef/narrate@v0
+        with:
+          source-path: videos/intro.md
+          output: out/intro.mp4
+          elevenlabs-api-key: ${{ secrets.ELEVENLABS_API_KEY }}   # optional
+      - uses: actions/upload-artifact@v7
+        with:
+          name: intro
+          path: |
+            ${{ steps.video.outputs.video-file }}
+            ${{ steps.video.outputs.poster-file }}
+```
+
+Without an ElevenLabs key, it speaks with Kokoro, on the runner. The voice
+model and synthesised speech are cached between runs, so unchanged paragraphs
+cost nothing.
+
+`@v0` follows narrate's 0.x releases. Before 1.0 a release may change how a
+script renders, so for builds that change only when you say so, pin a
+[release](https://github.com/bricef/narrate/releases):
+
+```yaml
+        uses: bricef/narrate@v0.1.1
+```
+
+| Input | Default | Meaning |
+| --- | --- | --- |
+| `source-path` | (required) | the script, or a `.zip` project, in the repository |
+| `output` | `narrate/result.mp4` | where to write the video; the poster and subtitles go next to it |
+| `tts` | `auto` | the speech engine: `auto` (ElevenLabs when a key is given, else Kokoro), `kokoro`, `elevenlabs` or `silent` |
+| `elevenlabs-api-key` | none | an ElevenLabs key, from a secret |
+| `subtitles` | none | the subtitles for this build: `none`, `external`, `embed`, `overlay`, `overlay-background` or `tiktok` (the script decides when empty) |
+| `transcript` | `false` | `true` also writes what's spoken as plain text |
+| `image` | the release's | the narrate image to build with, such as `ghcr.io/bricef/narrate:latest` |
+
+Outputs: `video-file`, `poster-file`, `srt-file` and `vtt-file` when subtitles
+are on, and `transcript-file` when a transcript is asked for. Paths must be
+inside the repository checkout. [Building videos](docs/building.md#build-in-github-actions)
+says more, such as how the action picks its image.
 
 ## Documentation
 
