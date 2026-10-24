@@ -70,3 +70,16 @@ def test_files_from_before_engine_folders_are_listed(root):
     legacy.parent.mkdir(parents=True)
     np.save(legacy, np.zeros(10, dtype=np.float32))
     assert [e.engine for e in cache.entries()] == ["legacy"]
+
+
+def test_cache_hit_succeeds_when_utime_fails(root, monkeypatch):
+    path = entry(root, "kokoro", "unowned", 400, 50)
+    original_mtime = path.stat().st_mtime
+
+    def fail_utime(p):
+        raise PermissionError("Permission denied on unowned file")
+
+    monkeypatch.setattr(os, "utime", fail_utime)
+    loaded = SynthCache.load(path)
+    assert loaded is not None
+    assert path.stat().st_mtime == original_mtime

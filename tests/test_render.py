@@ -154,3 +154,23 @@ def test_the_scenes_theme_is_part_of_the_cache_key(tmp_path, monkeypatch):
     build(tmp_path, "---\nsize: 320x180\n---\n\n```render:placeholder\nx\n```\n\n---\n\n(theme: light)\n\n"
                     "(canvas: navy)\n\n```render:placeholder\nx\n```\n")
     assert seen == [("default", None), ("light", "#000080")]
+
+
+def test_cached_render_output_succeeds_when_touch_fails(monkeypatch, tmp_path):
+    from narrate.render import output, location, Context
+
+    ctx = Context(320, 180, "default", None)
+    m = block("```render:placeholder\nx\n```\n")
+    cached_file = location(m.render, ctx)
+    cached_file.parent.mkdir(parents=True, exist_ok=True)
+    cached_file.write_bytes(b"dummy png content")
+    original_mtime = cached_file.stat().st_mtime
+
+    def fail_touch(self):
+        raise PermissionError("Permission denied on unowned render cache file")
+
+    monkeypatch.setattr(Path, "touch", fail_touch)
+    path = output(m, ctx)
+    assert path == cached_file
+    assert path.stat().st_mtime == original_mtime
+
