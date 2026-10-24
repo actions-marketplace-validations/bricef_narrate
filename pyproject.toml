@@ -30,7 +30,7 @@ dependencies = [
     "playwright>=1.64.0",
     "pygments>=2.21.0",
     "pyyaml>=6",
-    "starlette>=1.8.0",
+    "starlette>=1.9.0",
     "uvicorn>=0.54",
 ]
 
@@ -45,7 +45,7 @@ narrate = "narrate.cli:main"
 
 [dependency-groups]
 dev = [
-    "httpx2>=2.13",
+    "httpx2>=2.16.0",
     "pytest>=8",
     "ruff>=0.17.1",
 ]
