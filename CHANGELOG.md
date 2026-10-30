@@ -12,6 +12,11 @@ Notable changes to narrate, newest first. The format follows
   `narrate audio` for audio projects. Its downloads of ZIP URLs and GitHub
   folders went with it: fetch the project first, then build it.
 
+### Fixed
+
+- **The studio scrubs HTML scenes in Safari:** its preview's clock fakes
+  only the timers the browser has, and WebKit has no `requestIdleCallback`.
+
 ## [0.1.1] - 2026-10-21
 
 ### Added
