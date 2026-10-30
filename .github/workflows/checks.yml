@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@v7
 
       # Each job has its own uv cache: this one installs only the dev group
-      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: astral-sh/setup-uv@v10.3.2
         with:
           python-version: "3.12"
           enable-cache: true
@@ -38,7 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: astral-sh/setup-uv@v10.3.2
         with:
           python-version: "3.12"
           enable-cache: true
@@ -71,7 +71,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: astral-sh/setup-uv@v10.3.2
         with:
           python-version: "3.12"
           enable-cache: true
@@ -88,16 +88,17 @@ jobs:
 
       - run: uv sync --locked
 
-      # Chromium's version comes with Playwright's, in uv.lock
-      - name: Cache headless Chromium
+      # The browsers' versions come with Playwright's, in uv.lock
+      - name: Cache headless Chromium and WebKit
         uses: actions/cache@v6
         with:
           path: ~/Library/Caches/ms-playwright
-          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('uv.lock') }}
+          key: playwright-webkit-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('uv.lock') }}
 
-      # macOS has the libraries Chromium needs: no --with-deps
-      - name: Install headless Chromium
-        run: uv run playwright install --only-shell chromium
+      # macOS has the libraries both need: no --with-deps. WebKit, Safari's engine, runs the
+      # studio's scrub test (#114); Linux would need GStreamer and more for it, so only macOS has it.
+      - name: Install headless Chromium and WebKit
+        run: uv run playwright install --only-shell chromium webkit
 
       # mermaid.js and the music; ffmpeg is Homebrew's
       - name: Cache narrate's downloads

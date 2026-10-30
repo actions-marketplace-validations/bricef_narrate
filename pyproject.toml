@@ -27,10 +27,10 @@ dependencies = [
     "markdown-it-py>=4.2.0",
     "numpy>=2.5.4",
     "pillow>=13.0.0",
-    "playwright>=1.64.0",
+    "playwright>=1.64.1",
     "pygments>=2.21.0",
     "pyyaml>=6",
-    "starlette>=1.8.0",
+    "starlette>=1.10.0",
     "uvicorn>=0.54",
 ]
 
@@ -45,13 +45,13 @@ narrate = "narrate.cli:main"
 
 [dependency-groups]
 dev = [
-    "httpx2>=2.13",
+    "httpx2>=2.16.0",
     "pytest>=8",
-    "ruff>=0.17.1",
+    "ruff>=0.17.2",
 ]
 
 [build-system]
-requires = ["hatchling>=1.27"]  # the first to write PEP 639 licence metadata by default
+requires = ["hatchling>=1.32.4"]  # the first to write PEP 639 licence metadata by default
 build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]

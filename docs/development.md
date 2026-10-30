@@ -139,7 +139,9 @@ The managed ffmpeg for source checkouts is pinned separately, in
 own code is plain ES modules, loaded as they are; change a file and reload
 the page. `tests/test_studio.py` covers the server with Starlette's test
 client, and `tests/test_studio_e2e.py` drives the app in headless Chromium
-with Playwright, so neither needs Node.
+with Playwright, so neither needs Node. `tests/test_studio_scrub.py` checks
+scrubbing in WebKit, Safari's engine, as well, when Playwright's WebKit is
+installed (`uv run playwright install webkit`); otherwise it skips that run.
 
 ## CI and releases
 
@@ -158,7 +160,8 @@ macOS:
   minutes, as fast as the runner happens to be: 2 to 3 to install from
   Homebrew, and 8 to 10 for the tests, which run slower there than on Linux.
   Homebrew's packages aren't cached: they are ready-built, and most of the
-  time goes on unpacking 60 of them. Headless Chromium is cached as well.
+  time goes on unpacking 60 of them. Headless Chromium is cached as well,
+  with WebKit, which only this job installs, for the studio's scrub test.
 
 `.github/workflows/image.yml` runs on pushes that touch the code, tests,
 examples, Dockerfile or action, and on release tags. It also runs on pull
