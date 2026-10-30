@@ -20,7 +20,7 @@ from narrate.studio.preview import Files, frame, page_html
 from narrate.studio.server import create_app
 from narrate.tts import SilentSynth
 
-from test_studio_e2e import running  # noqa: F401 - the browser fixture
+from test_studio_e2e import running
 
 # Something on every clock a page can use: a CSS animation (green, 100 px a second), a script moving a
 # box on requestAnimationFrame's time (magenta, 100 px a second), a timer revealing a box at 1.5 s
