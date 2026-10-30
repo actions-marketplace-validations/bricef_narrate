@@ -183,12 +183,13 @@ def test_scrubbing_shows_each_moment_as_a_build_captures_it(project, scrub_page)
         page.locator(".tl-scene").first.click()  # the timeline has the keys: Home, ± a frame, ± a second
         page.keyboard.press("Home")
         expect(page.get_by_test_id("page-frame")).to_be_visible()
-        inner = next(f for f in page.frames if "/anim.html" in f.url)
 
         def at(frame_index: int):
             expect(page.locator(".preview iframe")).to_have_count(1)
             expect(page.frame_locator(".preview iframe").locator("html")).to_have_attribute(
                 "data-narrate-frame", str(frame_index), timeout=10000)
+            # Only once the page has loaded is it sure to be among page.frames: a visible iframe may not be there yet
+            inner = next(f for f in page.frames if "/anim.html" in f.url)
             seen, wanted = inner.evaluate(PREVIEWED), built(video, frame_index, project)
             assert seen["css"] == pytest.approx(wanted["css"], abs=2), frame_index
             assert seen["raf"] == pytest.approx(wanted["raf"], abs=2), frame_index
